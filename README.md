@@ -1,20 +1,12 @@
-GtkRadiant
+id Tech 3 Radiant
 ==========
 
-![logo](https://icculus.org/gtkradiant/images/logo-radiant.png)
-
-GtkRadiant is an open-source, cross-platform level editor for id Tech based games. It comes with some map compilers and data authoring tools.
-
-Downloads
----------
-
-Ready-to-use GtkRadiant packages are available on the [Downloads page](http://icculus.org/gtkradiant/downloads.html) on GtkRadiant's website. Some [installation instruction](https://icculus.org/gtkradiant/installation.html) may be useful.
+id Tech 3 Radiant is an open-source, cross-platform level editor for id Tech based games. It comes with some map compilers and data authoring tools.
 
 Useful links
 ------------
 
-- [GtkRadiant website](https://icculus.org/gtkradiant/)
-- [Documentation](https://icculus.org/gtkradiant/documentation.html)
+- [id Tech 3 Radiant website](https://idtech3.com/radiant/)
 
 Supported games
 ---------------
@@ -28,8 +20,6 @@ You can find more complete instructions to build on Windows [here](https://iccul
 
 The Linux version is developed and distributed via Flatpak. See [GtkRadiant on Flathub](https://flathub.org/apps/io.github.TTimo.GtkRadiant).
 
-Building locally on Arch is the only setup that's likely to work as it's my daily driver. Ubuntu, Fedora etc. you are on your own. See the Flatpak SDK section below.
-
 ```sh
 # ArchLinux
 pacman -S git scons libxml2 gtk2 freeglut gtkglext subversion libjpeg-turbo
@@ -37,10 +27,10 @@ pacman -S git scons libxml2 gtk2 freeglut gtkglext subversion libjpeg-turbo
 
 ```sh
 # get the source
-git clone "https://github.com/TTimo/GtkRadiant.git"
+git clone "https://github.com/timfox/idTech3Radiant.git"
 
 # enter the source tree
-cd GtkRadiant
+cd radiant
 
 # build everything
 scons
@@ -79,13 +69,3 @@ Here is what you can do for debugging:
 flatpak run --command=sh --devel io.github.TTimo.GtkRadiant
 gdb /app/gtkradiant/radiant.bin
 ```
-
-Getting in touch
-----------------
-
-The [#radiant channel at QuakeNet](https://webchat.quakenet.org/?channels=radiant) is the official GtkRadiant IRC channel. Come and chat about level design, development or bugs, you're welcome. Bugs can be submitted on the [GitHub issue tracker](https://github.com/TTimo/GtkRadiant/issues).
-
-Legal
------
-
-GtkRadiant source code is copyrighted by [id Software, Inc](http://idsoftware.com/) and various contributors and protected by the [General Public License v2](GPL).
