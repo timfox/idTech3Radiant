@@ -33,8 +33,10 @@ typedef bool qboolean;
 #define qtrue true
 #define qfalse false
 #else
-typedef enum { qfalse, qtrue } qboolean;
-typedef qboolean bool; // some code uses bool directly ..
+#include <stdbool.h>
+typedef bool qboolean;
+#define qtrue true
+#define qfalse false
 #endif
 
 typedef unsigned char byte;

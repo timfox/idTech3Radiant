@@ -17,6 +17,12 @@ foreach(kind RUNTIME LIBRARY ARCHIVE)
 	set(CMAKE_${kind}_OUTPUT_DIRECTORY "${RADIANT_OUTPUT_ROOT}")
 endforeach()
 
+# Local fallback libdir for vendored GtkGLExt/GLU/Xmu (when not installed system-wide)
+set(GTK_LOCAL_LIBDIR "${CMAKE_SOURCE_DIR}/build-deps/gtkglext-root/usr/lib/x86_64-linux-gnu")
+if(EXISTS "${GTK_LOCAL_LIBDIR}")
+	link_directories(${GTK_LOCAL_LIBDIR})
+endif()
+
 find_package(PkgConfig)
 
 set(GTK_INCLUDE_DIRS "" CACHE STRING "GTK include dirs (when pkg-config is unavailable)")
@@ -49,6 +55,7 @@ else()
 endif()
 
 find_package(OpenGL REQUIRED)
+find_package(X11 REQUIRED)
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(PNG REQUIRED)
@@ -136,7 +143,7 @@ target_include_directories(splines PUBLIC ${RADIANT_INCLUDE_DIRS})
 target_compile_definitions(splines PUBLIC ${RADIANT_COMMON_DEFINES})
 
 add_library(synapse STATIC libs/synapse/synapse.cpp)
-target_include_directories(synapse PUBLIC ${RADIANT_INCLUDE_DIRS})
+target_include_directories(synapse PUBLIC ${RADIANT_INCLUDE_DIRS} ${GTK_INCLUDE_DIRS} ${LIBXML2_INCLUDE_DIR})
 target_compile_definitions(synapse PUBLIC ${RADIANT_COMMON_DEFINES})
 
 add_library(quake3-common STATIC
@@ -151,16 +158,16 @@ add_library(quake3-common STATIC
 	tools/quake3/common/unzip.c
 	tools/quake3/common/vfs.c
 )
-target_include_directories(quake3-common PUBLIC ${RADIANT_INCLUDE_DIRS})
+target_include_directories(quake3-common PUBLIC ${RADIANT_INCLUDE_DIRS} ${GTK_INCLUDE_DIRS} ${LIBXML2_INCLUDE_DIR})
 target_compile_definitions(quake3-common PUBLIC ${RADIANT_COMMON_DEFINES})
 target_link_libraries(quake3-common PUBLIC ZLIB::ZLIB PNG::PNG JPEG::JPEG)
 
 add_library(radiant_core INTERFACE)
-target_include_directories(radiant_core INTERFACE ${RADIANT_INCLUDE_DIRS} ${GTK_INCLUDE_DIRS})
+target_include_directories(radiant_core INTERFACE ${RADIANT_INCLUDE_DIRS} ${GTK_INCLUDE_DIRS} ${LIBXML2_INCLUDE_DIR})
 target_compile_definitions(radiant_core INTERFACE ${RADIANT_COMMON_DEFINES})
 target_link_libraries(radiant_core INTERFACE
 	cmdlib ddslib l_net mathlib md5lib picomodel splines synapse quake3-common
-	ZLIB::ZLIB PNG::PNG JPEG::JPEG LibXml2::LibXml2 Threads::Threads
+	ZLIB::ZLIB PNG::PNG JPEG::JPEG LibXml2::LibXml2 Threads::Threads X11::X11
 )
 
 if(RADIANT_BUILD_Q3MAP2)

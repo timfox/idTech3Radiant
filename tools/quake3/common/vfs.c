@@ -42,6 +42,7 @@
 //
 
 #include <stdio.h>
+#include <limits.h>
 
 #if defined( __linux__ ) || defined( __BSD__ ) || defined( __APPLE__ )
 #include <dirent.h>
@@ -57,6 +58,10 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
 
 #include "cmdlib.h"
 #include "mathlib.h"

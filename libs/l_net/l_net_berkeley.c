@@ -45,8 +45,22 @@
 #include <netinet/tcp.h>
 #include <errno.h>
 #include <netdb.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <sys/param.h>
+#ifndef HAVE_GETHOSTNAME_PROTO
+int gethostname( char *name, size_t len );
+#endif
 #define SOCKET_ERROR -1
 #define INVALID_SOCKET -1
+
+/* Provide BSD-style aliases when building in strict C modes */
+#ifndef u_short
+typedef unsigned short u_short;
+#endif
+#ifndef u_long
+typedef unsigned long u_long;
+#endif
 
 extern void WinPrint( char *str, ... );
 
@@ -82,7 +96,9 @@ static char my_tcpip_address[NET_NAMELEN];
 
 #define DEFAULTnet_hostport 26000
 
+#ifndef MAXHOSTNAMELEN
 #define MAXHOSTNAMELEN      256
+#endif
 
 static int net_acceptsocket = -1;       // socket for fielding new connections
 static int net_controlsocket;

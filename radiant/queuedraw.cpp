@@ -77,7 +77,7 @@ void QueueDraw(){
 	guint32 i, k;
 	face_t *face;
 	winding_t *w;
-	int j, nDrawMode = g_pParentWnd->GetCamera().draw_mode;
+	int j, nDrawMode = g_pParentWnd->GetCamWnd()->Camera()->draw_mode;
 
 	if ( notex_faces->len ) {
 		qglDisable( GL_TEXTURE_2D );

@@ -19,6 +19,11 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+// Ensure POSIX prototypes for sleep/nanosleep
+#if !defined(_POSIX_C_SOURCE)
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 // cmdlib.c
 // TTimo 09/30/2000
 // from an intial copy of common/cmdlib.c
@@ -33,6 +38,7 @@
 #include "inout.h"
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <time.h>
 
 #ifdef _WIN32
 #include <direct.h>
@@ -1084,6 +1090,9 @@ void Sys_Sleep( int n ){
 	Sleep( n );
 #endif
 #if defined( __linux__ ) || defined( __BSD__ ) || defined( __APPLE__ )
-	usleep( n * 1000 );
+	struct timespec ts;
+	ts.tv_sec = n / 1000;
+	ts.tv_nsec = (long)( ( n % 1000 ) * 1000000L );
+	nanosleep( &ts, NULL );
 #endif
 }

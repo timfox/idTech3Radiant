@@ -54,11 +54,16 @@
 	#include <unistd.h>
 	#include <pwd.h>
 	#include <limits.h>
+	#include <strings.h>
 #endif
 
 #ifdef WIN32
 	#include <windows.h>
 #endif
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 
 /* general */
@@ -82,6 +87,15 @@
 
 #include <stddef.h>
 #include <stdlib.h>
+
+/* Forward declarations for common helpers */
+char *ExpandArg( const char *path );
+char *ExpandPath( const char *path );
+int   LoadFile( const char *filename, void **bufferptr );
+void *safe_malloc( size_t size );
+void *safe_malloc_info( size_t size, char* info );
+void  Error( const char *error, ... );
+int   Q_filelength( FILE *f );
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))

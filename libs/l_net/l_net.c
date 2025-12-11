@@ -33,6 +33,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <stdlib.h>
+#include <strings.h>
 #include "l_net.h"
 #include "l_net_wins.h"
 

@@ -532,7 +532,7 @@ int lwGetTags( picoMemStream_t *fp, int cksize, lwTagList *tlist ){
 
 	bp = buf;
 	for ( i = 0; i < ntags; i++ )
-		tlist->tag[ i + tlist->offset ] = sgetS0( &bp );
+		tlist->tag[ i + tlist->offset ] = sgetS0( (unsigned char **)&bp );
 
 	_pico_free( buf );
 	return 1;
