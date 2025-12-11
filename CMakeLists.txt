@@ -9,6 +9,7 @@ option(RADIANT_BUILD_BSPC "Build the bspc tool (id Tech 2 bsp compiler)" OFF)
 option(RADIANT_BUILD_PLUGINS "Build core editor plugins" ON)
 option(RADIANT_BUILD_CONTRIB "Build contrib plugins (bobtoolz, gensurf, etc.)" ON)
 option(RADIANT_BUILD_QT "Build Qt-based Radiant" OFF)
+option(RADIANT_USE_ENGINE_RENDERER_VK "Link and expose the engine Vulkan renderer inside Qt Radiant (WYSIWYG viewport groundwork)" OFF)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -234,6 +235,7 @@ if(RADIANT_BUILD_QT)
 	set(QT_SOURCES
 		qt/main_qt.cpp
 		qt/qt_env.cpp
+		qt/vk_viewport.cpp
 	)
 
 	add_executable(${QT_TARGET} ${QT_SOURCES})
@@ -244,6 +246,46 @@ if(RADIANT_BUILD_QT)
 	elseif(Qt5_FOUND)
 		target_link_libraries(${QT_TARGET} PRIVATE Qt5::Widgets)
 		target_compile_definitions(${QT_TARGET} PRIVATE QT_NO_KEYWORDS)
+	endif()
+
+	if(RADIANT_USE_ENGINE_RENDERER_VK)
+		# Engine root defaults to the parent of the Radiant submodule
+		set(ENGINE_ROOT "${CMAKE_SOURCE_DIR}/.." CACHE PATH "Path to the engine source root (idtech3)")
+
+		find_library(ENGINE_RENDERER_VK_LIB
+			NAMES idtech3_renderer_vk idtech3_vulkan_x86_64 idtech3_vulkan
+			HINTS
+				"${ENGINE_ROOT}/build"
+				"${ENGINE_ROOT}/build/Release"
+				"${ENGINE_ROOT}/build/Debug"
+				"${ENGINE_ROOT}/build/bin"
+		)
+
+		find_path(ENGINE_RENDERER_INCLUDE
+			NAMES tr_public.h
+			HINTS
+				"${ENGINE_ROOT}/src/renderercommon"
+				"${ENGINE_ROOT}/src"
+		)
+
+		if(NOT ENGINE_RENDERER_VK_LIB OR NOT ENGINE_RENDERER_INCLUDE)
+			message(FATAL_ERROR "RADIANT_USE_ENGINE_RENDERER_VK=ON but engine renderer Vulkan library or headers were not found. Set ENGINE_ROOT or ENGINE_RENDERER_VK_LIB/ENGINE_RENDERER_INCLUDE.")
+		endif()
+
+		find_package(Vulkan REQUIRED)
+
+		target_include_directories(${QT_TARGET} PRIVATE
+			${ENGINE_RENDERER_INCLUDE}
+			${ENGINE_ROOT}/src
+			${ENGINE_ROOT}/src/renderercommon
+		)
+
+		target_link_libraries(${QT_TARGET} PRIVATE
+			${ENGINE_RENDERER_VK_LIB}
+			Vulkan::Vulkan
+		)
+
+		target_compile_definitions(${QT_TARGET} PRIVATE RADIANT_USE_ENGINE_RENDERER_VK)
 	endif()
 
 	# Output alongside other install binaries

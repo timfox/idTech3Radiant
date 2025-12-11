@@ -4,6 +4,9 @@
 #include <QMainWindow>
 #include <QTextStream>
 #include <QFile>
+#include <QVBoxLayout>
+
+#include "vk_viewport.h"
 
 #include "qt_env.h"
 
@@ -24,15 +27,27 @@ int main(int argc, char* argv[]) {
 	QMainWindow window;
 	window.setWindowTitle(QStringLiteral("Radiant Qt (prototype)"));
 
-	auto *label = new QLabel(QStringLiteral(
-		"Radiant Qt prototype — UI TBD\n"
+	auto *central = new QWidget();
+	auto *layout = new QVBoxLayout(central);
+	layout->setContentsMargins(0, 0, 0, 0);
+
+	auto *info = new QLabel(QStringLiteral(
+		"Radiant Qt prototype\n"
 		"app: %1\n"
 		"temp: %2\n"
 		"games: %3").arg(env.appPath, env.tempPath, env.gamesPath));
-	label->setAlignment(Qt::AlignCenter);
-	window.setCentralWidget(label);
+	info->setAlignment(Qt::AlignLeft);
+	info->setMargin(8);
 
-	window.resize(800, 600);
+	// Hook up the engine Vulkan renderer (if present) for a future WYSIWYG PBR viewport.
+	QString rendererHint = env.appPath + QStringLiteral("/../build/idtech3_vulkan_x86_64.so");
+	auto *viewport = new VkViewportWidget(rendererHint);
+
+	layout->addWidget(info, /*stretch*/0);
+	layout->addWidget(viewport, /*stretch*/1);
+
+	window.setCentralWidget(central);
+	window.resize(1280, 720);
 	window.show();
 
 	return app.exec();
