@@ -16,6 +16,20 @@ GtkRadiant provides level editing support for [Quake](https://en.wikipedia.org/w
 How to build
 ------------
 
+### CMake (cross-platform)
+
+Requirements: GTK2 + GtkGLExt, OpenGL, libxml2, zlib, libpng, libjpeg, glib (pkg-config helps on Linux/macOS; on Windows provide `GTK_INCLUDE_DIRS`/`GTK_LIBRARIES` manually if pkg-config is unavailable).
+
+```sh
+# from repo root
+cmake -S . -B build/radiant -DBUILD_RADIANT=ON
+cmake --build build/radiant --target radiant q3map2 q3data -j"$(nproc)"
+```
+
+Outputs land in `build/radiant/install/` (plugins in `install/modules/`).
+
+### SCons (legacy)
+
 You can find more complete instructions to build on Windows [here](https://icculus.org/gtkradiant/documentation/windows_compile_guide/) and to build on Mac OS [here](apple/README.md).
 
 The Linux version is developed and distributed via Flatpak. See [GtkRadiant on Flathub](https://flathub.org/apps/io.github.TTimo.GtkRadiant).
