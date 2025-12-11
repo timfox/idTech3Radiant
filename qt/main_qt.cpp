@@ -1,53 +1,37 @@
 // Minimal Qt entrypoint for Radiant Qt prototype.
 #include <QApplication>
-#include <QLabel>
-#include <QMainWindow>
 #include <QTextStream>
 #include <QFile>
-#include <QVBoxLayout>
-
-#include "vk_viewport.h"
+#include <QPalette>
+#include <QStyleFactory>
 
 #include "qt_env.h"
+#include "main_window.h"
 
 int main(int argc, char* argv[]) {
 	QApplication app(argc, argv);
 
+	// Maya/UE-style dark theme
+	QApplication::setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
+	QPalette dark;
+	dark.setColor(QPalette::Window, QColor(37, 37, 38));
+	dark.setColor(QPalette::WindowText, Qt::white);
+	dark.setColor(QPalette::Base, QColor(30, 30, 30));
+	dark.setColor(QPalette::AlternateBase, QColor(45, 45, 48));
+	dark.setColor(QPalette::ToolTipBase, Qt::white);
+	dark.setColor(QPalette::ToolTipText, Qt::white);
+	dark.setColor(QPalette::Text, Qt::white);
+	dark.setColor(QPalette::Button, QColor(45, 45, 48));
+	dark.setColor(QPalette::ButtonText, Qt::white);
+	dark.setColor(QPalette::BrightText, Qt::red);
+	dark.setColor(QPalette::Link, QColor(90, 160, 255));
+	dark.setColor(QPalette::Highlight, QColor(90, 160, 255));
+	dark.setColor(QPalette::HighlightedText, Qt::black);
+	app.setPalette(dark);
+
 	const QtRadiantEnv env = InitQtRadiantEnv();
 
-	// Basic log line to prove we can touch shared paths.
-	QFile logFile(env.logFile);
-	if ( logFile.open(QIODevice::Append | QIODevice::Text) ) {
-		QTextStream ts(&logFile);
-		ts << "Radiant Qt started (appPath=" << env.appPath
-		   << ", tempPath=" << env.tempPath
-		   << ", gamesPath=" << env.gamesPath << ")\n";
-	}
-
-	QMainWindow window;
-	window.setWindowTitle(QStringLiteral("Radiant Qt (prototype)"));
-
-	auto *central = new QWidget();
-	auto *layout = new QVBoxLayout(central);
-	layout->setContentsMargins(0, 0, 0, 0);
-
-	auto *info = new QLabel(QStringLiteral(
-		"Radiant Qt prototype\n"
-		"app: %1\n"
-		"temp: %2\n"
-		"games: %3").arg(env.appPath, env.tempPath, env.gamesPath));
-	info->setAlignment(Qt::AlignLeft);
-	info->setMargin(8);
-
-	// Hook up the engine Vulkan renderer (if present) for a future WYSIWYG PBR viewport.
-	QString rendererHint = env.appPath + QStringLiteral("/../build/idtech3_vulkan_x86_64.so");
-	auto *viewport = new VkViewportWidget(rendererHint);
-
-	layout->addWidget(info, /*stretch*/0);
-	layout->addWidget(viewport, /*stretch*/1);
-
-	window.setCentralWidget(central);
-	window.resize(1280, 720);
+	RadiantMainWindow window(env);
 	window.show();
 
 	return app.exec();

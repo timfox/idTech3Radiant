@@ -236,9 +236,13 @@ if(RADIANT_BUILD_QT)
 		qt/main_qt.cpp
 		qt/qt_env.cpp
 		qt/vk_viewport.cpp
+		qt/main_window.cpp
+		qt/renderer_bridge.cpp
+		qt/renderer_import.cpp
 	)
 
 	add_executable(${QT_TARGET} ${QT_SOURCES})
+	set_target_properties(${QT_TARGET} PROPERTIES AUTOMOC ON)
 
 	if(Qt6_FOUND)
 		target_link_libraries(${QT_TARGET} PRIVATE Qt6::Widgets)
