@@ -37,6 +37,7 @@
 #include <gtk/gtk.h>
 #include <gtk/gtkgl.h>
 #include <glib/gi18n.h>
+#include <glib/gstdio.h>
 #include "stdafx.h"
 #include <assert.h>
 #include <sys/types.h>
@@ -114,6 +115,49 @@ static void create_splash() {
 		gtk_main_iteration();
 }
 #endif
+
+static void MigrateLegacyRadiantPrefs( const CString& legacyPath, const CString& newPath ){
+	if ( !g_file_test( legacyPath.GetBuffer(), G_FILE_TEST_IS_DIR ) ) {
+		return;
+	}
+
+	GDir *dir = g_dir_open( legacyPath.GetBuffer(), 0, NULL );
+	if ( dir == NULL ) {
+		return;
+	}
+
+	const gchar *name = NULL;
+	while ( ( name = g_dir_read_name( dir ) ) != NULL )
+	{
+		// consider only prefs/log files; skip hidden entries
+		if ( name[0] == '.' ) {
+			continue;
+		}
+		if ( !( g_str_has_suffix( name, ".pref" ) || g_str_has_suffix( name, ".log" ) ) ) {
+			continue;
+		}
+
+		CString dst = newPath;
+		dst += name;
+		if ( g_file_test( dst.GetBuffer(), G_FILE_TEST_EXISTS ) ) {
+			continue; // preserve newer files already in place
+		}
+
+		CString src = legacyPath;
+		src += name;
+
+		gchar *contents = NULL;
+		gsize length = 0;
+		if ( g_file_get_contents( src.GetBuffer(), &contents, &length, NULL ) ) {
+			if ( g_file_set_contents( dst.GetBuffer(), contents, length, NULL ) ) {
+				Sys_Printf( "Migrated legacy file '%s' -> '%s'\n", src.GetBuffer(), dst.GetBuffer() );
+			}
+			g_free( contents );
+		}
+	}
+
+	g_dir_close( dir );
+}
 
 // =============================================================================
 // Loki stuff
@@ -508,9 +552,16 @@ int mainRadiant( int argc, char* argv[] ) {
 	}
 	g_strTempPath += "/.radiant/";
 	Q_mkdir( g_strTempPath.GetBuffer(), 0775 );
-	g_strTempPath += RADIANT_VERSION;
-	Q_mkdir( g_strTempPath.GetBuffer(), 0775 );
+
+	// Preserve old versioned location for migration, but keep new data unversioned.
+	CString legacyTempPath = g_strTempPath;
+	legacyTempPath += RADIANT_VERSION;
+	AddSlash( legacyTempPath );
+
 	AddSlash( g_strTempPath );
+
+	// Migrate key prefs/logs forward if we are moving from a versioned folder.
+	MigrateLegacyRadiantPrefs( legacyTempPath, g_strTempPath );
 
 	loki_init_datapath( argv[0] );
 	g_strAppPath = datapath;

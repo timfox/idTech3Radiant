@@ -8,6 +8,7 @@ option(RADIANT_BUILD_Q3DATA "Build the q3data asset tool" ON)
 option(RADIANT_BUILD_BSPC "Build the bspc tool (id Tech 2 bsp compiler)" OFF)
 option(RADIANT_BUILD_PLUGINS "Build core editor plugins" ON)
 option(RADIANT_BUILD_CONTRIB "Build contrib plugins (bobtoolz, gensurf, etc.)" ON)
+option(RADIANT_BUILD_QT "Build Qt-based Radiant" OFF)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -61,6 +62,17 @@ find_package(ZLIB REQUIRED)
 find_package(PNG REQUIRED)
 find_package(JPEG REQUIRED)
 find_package(LibXml2 REQUIRED)
+
+# Optional Qt UI (Qt6 preferred, Qt5 fallback)
+if(RADIANT_BUILD_QT)
+	find_package(Qt6 COMPONENTS Widgets QUIET)
+	if(NOT Qt6_FOUND)
+		find_package(Qt5 COMPONENTS Widgets QUIET)
+	endif()
+	if(NOT (Qt6_FOUND OR Qt5_FOUND))
+		message(FATAL_ERROR "RADIANT_BUILD_QT=ON but neither Qt6 nor Qt5 Widgets found")
+	endif()
+endif()
 
 set(RADIANT_GL_LIBS OpenGL::GL)
 if(TARGET OpenGL::GLU)
@@ -215,6 +227,29 @@ if(RADIANT_BUILD_EDITOR)
 	add_executable(radiant ${RADIANT_SOURCES})
 	target_include_directories(radiant PRIVATE ${RADIANT_INCLUDE_DIRS} ${GTK_INCLUDE_DIRS})
 	target_link_libraries(radiant PRIVATE radiant_core ${GTK_LIBRARIES} ${RADIANT_GL_LIBS})
+endif()
+
+if(RADIANT_BUILD_QT)
+	set(QT_TARGET radiant_qt)
+	set(QT_SOURCES
+		qt/main_qt.cpp
+		qt/qt_env.cpp
+	)
+
+	add_executable(${QT_TARGET} ${QT_SOURCES})
+
+	if(Qt6_FOUND)
+		target_link_libraries(${QT_TARGET} PRIVATE Qt6::Widgets)
+		target_compile_definitions(${QT_TARGET} PRIVATE QT_NO_KEYWORDS)
+	elseif(Qt5_FOUND)
+		target_link_libraries(${QT_TARGET} PRIVATE Qt5::Widgets)
+		target_compile_definitions(${QT_TARGET} PRIVATE QT_NO_KEYWORDS)
+	endif()
+
+	# Output alongside other install binaries
+	set_target_properties(${QT_TARGET} PROPERTIES
+		RUNTIME_OUTPUT_DIRECTORY "${RADIANT_OUTPUT_ROOT}"
+	)
 endif()
 
 function(radiant_add_plugin plugin_name plugin_dir)

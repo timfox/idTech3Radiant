@@ -1089,14 +1089,15 @@ void DoMapInfo(){
 
 	while ( entitymap )
 	{
-		entry = (map_t*)entitymap->data;
+		GSList* link = entitymap;
+		entry = (map_t*)link->data;
 		char tmp[16];
 		sprintf( tmp, "%d", entry->count );
 		GtkTreeIter iter;
 		gtk_list_store_append( GTK_LIST_STORE( store ), &iter );
 		gtk_list_store_set( GTK_LIST_STORE( store ), &iter, 0, entry->name, 1, tmp, -1 );
+		entitymap = g_slist_delete_link( entitymap, link );
 		free( entry );
-		entitymap = g_slist_remove( entitymap, entry );
 	}
 
 	g_object_unref( G_OBJECT( store ) );
