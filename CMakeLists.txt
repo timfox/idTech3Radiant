@@ -248,6 +248,36 @@ if(RADIANT_BUILD_QT)
 		qt/main_window.cpp
 		qt/renderer_bridge.cpp
 		qt/renderer_import.cpp
+		qt/color_picker_dialog.cpp
+		qt/keybind_editor.cpp
+		qt/autosave_manager.cpp
+		qt/model_browser.cpp
+		qt/gizmo.cpp
+		qt/clipping_tool.cpp
+		qt/polygon_tool.cpp
+		qt/vertex_tool.cpp
+		qt/audio_browser.cpp
+		qt/audio_player.cpp
+		qt/merge_tool.cpp
+		qt/uv_tool.cpp
+		qt/autocaulk_tool.cpp
+		qt/extrusion_tool.cpp
+		qt/texture_paint_tool.cpp
+		qt/patch_thicken_tool.cpp
+		qt/csg_tool.cpp
+		qt/entity_walker.cpp
+		qt/brush_resize_tool.cpp
+		qt/shader_editor.cpp
+		qt/texture_paste_tool.cpp
+		qt/mess_template.cpp
+		qt/mess_manager.cpp
+		qt/mess_dialog.cpp
+		qt/texture_extractor.cpp
+		qt/texture_extraction_dialog.cpp
+		qt/surface_inspector.cpp
+		qt/selection_sets.cpp
+		qt/preferences_dialog.cpp
+		qt/hotbox_widget.cpp
 	)
 
 	add_executable(${QT_TARGET} ${QT_SOURCES})
@@ -259,6 +289,18 @@ if(RADIANT_BUILD_QT)
 	elseif(Qt5_FOUND)
 		target_link_libraries(${QT_TARGET} PRIVATE Qt5::Widgets)
 		target_compile_definitions(${QT_TARGET} PRIVATE QT_NO_KEYWORDS)
+	endif()
+	
+	# Optional OpenAL support for audio playback
+	option(RADIANT_USE_OPENAL "Enable OpenAL audio support" OFF)
+	if(RADIANT_USE_OPENAL)
+		find_package(OpenAL QUIET)
+		if(OpenAL_FOUND)
+			target_link_libraries(${QT_TARGET} PRIVATE OpenAL::OpenAL)
+			target_compile_definitions(${QT_TARGET} PRIVATE HAVE_OPENAL)
+		else()
+			message(STATUS "OpenAL not found - audio playback will be disabled")
+		endif()
 	endif()
 
 	if(RADIANT_USE_ENGINE_RENDERER_VK)

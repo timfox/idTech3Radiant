@@ -2,6 +2,7 @@
 #include <QApplication>
 #include <QTextStream>
 #include <QFile>
+#include <QFileInfo>
 #include <QPalette>
 #include <QStyleFactory>
 
@@ -18,7 +19,7 @@ int main(int argc, char* argv[]) {
 
 	QApplication app(argc, argv);
 
-	// Maya/UE-style dark theme
+	// Dark theme
 	QApplication::setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
 	QPalette dark;
 	dark.setColor(QPalette::Window, QColor(37, 37, 38));
@@ -39,6 +40,33 @@ int main(int argc, char* argv[]) {
 	const QtRadiantEnv env = InitQtRadiantEnv();
 
 	RadiantMainWindow window(env);
+	
+	// Check for command line map file argument
+	// Support: radiant_qt mapfile.map
+	// Also support: radiant_qt --map mapfile.map
+	QString mapFile;
+	for (int i = 1; i < argc; ++i) {
+		QString arg = QString::fromLocal8Bit(argv[i]);
+		if (arg == QStringLiteral("--map") && i + 1 < argc) {
+			mapFile = QString::fromLocal8Bit(argv[++i]);
+			break;
+		} else if (arg.endsWith(QStringLiteral(".map"), Qt::CaseInsensitive)) {
+			mapFile = arg;
+			break;
+		}
+	}
+	
+	// Load map if provided
+	if (!mapFile.isEmpty()) {
+		QFileInfo fileInfo(mapFile);
+		if (fileInfo.exists() && fileInfo.isFile()) {
+			// Load the map file
+			window.loadMap(mapFile);
+		} else {
+			QTextStream(stderr) << "Warning: Map file not found: " << mapFile << "\n";
+		}
+	}
+	
 	window.show();
 
 	return app.exec();
