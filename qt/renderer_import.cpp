@@ -24,6 +24,17 @@
 #include <vulkan/vulkan_xcb.h>
 #endif
 
+#if defined(Q_OS_UNIX)
+// Try to include Wayland headers if available
+#if __has_include(<wayland-client.h>)
+#include <wayland-client.h>
+#include <vulkan/vulkan_wayland.h>
+#define HAVE_WAYLAND 1
+#else
+#define HAVE_WAYLAND 0
+#endif
+#endif
+
 // Basic logging sink to a Qt-side log file.
 static void Qt_R_Printf( printParm_t, const char *fmt, ... ){
 	char buffer[2048];
@@ -149,6 +160,17 @@ static void Qt_FS_FreeFile( void *buf ) {
 	if ( buf ) free(buf);
 }
 
+static void Qt_FS_WriteFile( const char *name, const void *buffer, int size ){
+	if ( !name || !buffer || size <= 0 ) {
+		return;
+	}
+	QFile f(QString::fromUtf8(name));
+	if ( f.open(QIODevice::WriteOnly) ) {
+		f.write(static_cast<const char*>(buffer), size);
+		f.close();
+	}
+}
+
 static qboolean Qt_FS_FileExists( const char * ) {
 	return qfalse;
 }
@@ -254,7 +276,9 @@ static void Qt_Cmd_ExecuteText( cbufExec_t, const char * ) {}
 static quintptr g_winId = 0;
 
 void SetVkSurfaceWindow(quintptr winId){
-	g_winId = winId;
+	if ( g_winId == 0 ) {
+		g_winId = winId;
+	}
 }
 
 static qboolean Qt_VK_CreateSurface( VkInstance instance, VkSurfaceKHR *pSurface ){
@@ -262,7 +286,39 @@ static qboolean Qt_VK_CreateSurface( VkInstance instance, VkSurfaceKHR *pSurface
 		return qfalse;
 	}
 
-	// XCB path
+	// Try Wayland first (preferred for modern systems)
+#if HAVE_WAYLAND
+	wl_display* display = nullptr;
+	wl_surface* wlSurf = nullptr;
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0) && RADIANT_HAVE_QNATIVE_INTERFACE
+	if ( auto wayland = QNativeInterface::QWaylandApplication::instance() ) {
+		display = reinterpret_cast<wl_display*>( wayland->display() );
+		wlSurf = reinterpret_cast<wl_surface*>( wayland->surface() );
+	}
+#endif
+
+	if ( display && wlSurf ) {
+		VkWaylandSurfaceCreateInfoKHR info{};
+		info.sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
+		info.pNext = nullptr;
+		info.flags = 0;
+		info.display = display;
+		info.surface = wlSurf;
+
+		auto fpCreateWaylandSurfaceKHR = reinterpret_cast<PFN_vkCreateWaylandSurfaceKHR>(
+			vkGetInstanceProcAddr( instance, "vkCreateWaylandSurfaceKHR" ) );
+
+		if ( fpCreateWaylandSurfaceKHR ) {
+			VkResult res = fpCreateWaylandSurfaceKHR( instance, &info, nullptr, pSurface );
+			if ( res == VK_SUCCESS ) {
+				return qtrue;
+			}
+		}
+	}
+#endif
+
+	// Fallback to XCB
 	xcb_connection_t* conn = nullptr;
 	xcb_window_t xcbWin = static_cast<xcb_window_t>(g_winId);
 
@@ -275,10 +331,6 @@ static qboolean Qt_VK_CreateSurface( VkInstance instance, VkSurfaceKHR *pSurface
 	if ( native ) {
 		conn = reinterpret_cast<xcb_connection_t*>( native->nativeResourceForIntegration("connection") );
 	}
-#else
-	Q_UNUSED(instance);
-	Q_UNUSED(pSurface);
-	return qfalse;
 #endif
 
 	if ( !conn ) {
@@ -334,7 +386,7 @@ refimport_t MakeQtRefImport(const QString& logPath){
 	imp.FS_FileExists = Qt_FS_FileExists;
 	imp.FS_ListFiles = Qt_FS_ListFiles;
 	imp.FS_FreeFileList = Qt_FS_FreeFileList;
-	imp.FS_WriteFile = nullptr;
+	imp.FS_WriteFile = Qt_FS_WriteFile;
 
 	// Minimal cvar/cmd plumbing (placeholder)
 	imp.Cvar_Get = Qt_Cvar_Get;

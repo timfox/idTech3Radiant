@@ -3,6 +3,7 @@
 #include <QString>
 #include <QWidget>
 #include <QElapsedTimer>
+#include <QVector3D>
 
 #ifdef RADIANT_USE_ENGINE_RENDERER_VK
 #include "tr_public.h"
@@ -29,11 +30,17 @@ public:
 	QString status() const { return m_status; }
 	QString rendererPath() const { return m_rendererPath; }
 	QString viewName() const;
+	bool hasSelection() const { return m_hasSelection; }
+	QVector3D selectionPosition() const { return m_selection; }
+
+Q_SIGNALS:
+	void selectionChanged(const QVector3D& pos);
 
 protected:
 	void paintEvent(QPaintEvent* event) override;
 	void mousePressEvent(QMouseEvent* event) override;
 	void mouseMoveEvent(QMouseEvent* event) override;
+	void mouseReleaseEvent(QMouseEvent* event) override;
 	void wheelEvent(QWheelEvent* event) override;
 
 private:
@@ -44,6 +51,8 @@ private:
 	QString m_status;
 	bool m_loaded{false};
 	QString m_mapPath;
+	bool m_hasSelection{false};
+	QVector3D m_selection{0.0f, 0.0f, 0.0f};
 
 	// Simple camera state for orbit/fly preview
 	QPoint m_lastPos;
@@ -54,6 +63,11 @@ private:
 	float m_panY{0.0f};
 	QString m_cameraInfo;
 	ViewType m_viewType{ViewType::Perspective};
+
+	// Selection/manipulation state
+	bool m_isDragging{false};
+	QPoint m_dragStartPos;
+	QVector3D m_dragStartSelection;
 
 	QElapsedTimer m_frameTimer;
 	qint64 m_lastFrameMs{0};

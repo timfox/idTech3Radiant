@@ -34,24 +34,33 @@ set(GLIB_LIBRARIES "" CACHE STRING "GLib libs (when pkg-config is unavailable)")
 set(GDKPIXBUF_LIBRARIES "" CACHE STRING "GdkPixbuf libs (when pkg-config is unavailable)")
 
 if(PKG_CONFIG_FOUND)
-	pkg_check_modules(GTK2 REQUIRED gtk+-2.0)
-	pkg_check_modules(GTKGLEXT REQUIRED gtkglext-1.0)
-	pkg_check_modules(GLIB REQUIRED glib-2.0)
-	pkg_check_modules(GDKPIXBUF REQUIRED gdk-pixbuf-2.0)
+	pkg_check_modules(GTK2 gtk+-2.0)
+	pkg_check_modules(GTKGLEXT gtkglext-1.0)
+	pkg_check_modules(GLIB glib-2.0)
+	pkg_check_modules(GDKPIXBUF gdk-pixbuf-2.0)
 
-	list(APPEND GTK_INCLUDE_DIRS
-		${GTK2_INCLUDE_DIRS}
-		${GTKGLEXT_INCLUDE_DIRS}
-		${GLIB_INCLUDE_DIRS}
-		${GDKPIXBUF_INCLUDE_DIRS}
-	)
+	if(GTK2_FOUND AND GLIB_FOUND AND GDKPIXBUF_FOUND)
+		list(APPEND GTK_INCLUDE_DIRS
+			${GTK2_INCLUDE_DIRS}
+			${GLIB_INCLUDE_DIRS}
+			${GDKPIXBUF_INCLUDE_DIRS}
+		)
 
-	list(APPEND GTK_LIBRARIES
-		${GTK2_LIBRARIES}
-		${GLIB_LIBRARIES}
-		${GDKPIXBUF_LIBRARIES}
-		${GTKGLEXT_LIBRARIES}
-	)
+		list(APPEND GTK_LIBRARIES
+			${GTK2_LIBRARIES}
+			${GLIB_LIBRARIES}
+			${GDKPIXBUF_LIBRARIES}
+		)
+
+		if(GTKGLEXT_FOUND)
+			list(APPEND GTK_INCLUDE_DIRS ${GTKGLEXT_INCLUDE_DIRS})
+			list(APPEND GTK_LIBRARIES ${GTKGLEXT_LIBRARIES})
+		else()
+			message(STATUS "gtkglext-1.0 not found; GTK editor will not be available")
+		endif()
+	else()
+		message(STATUS "GTK2/GLib/GdkPixbuf not found; GTK editor will not be available")
+	endif()
 else()
 	message(STATUS "pkg-config not found; set GTK_INCLUDE_DIRS/GTK_LIBRARIES manually (needed for the editor and GUI-dependent tools)")
 endif()
@@ -217,7 +226,7 @@ if(RADIANT_BUILD_BSPC)
 	endif()
 endif()
 
-if(RADIANT_BUILD_EDITOR)
+if(RADIANT_BUILD_EDITOR AND GTK2_FOUND AND GLIB_FOUND AND GDKPIXBUF_FOUND)
 	file(GLOB RADIANT_SOURCES CONFIGURE_DEPENDS
 		radiant/*.cpp
 		radiant/*.c
