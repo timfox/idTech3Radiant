@@ -4,6 +4,10 @@
 #include <QWidget>
 #include <QElapsedTimer>
 
+#ifdef RADIANT_USE_ENGINE_RENDERER_VK
+#include "tr_public.h"
+#endif
+
 // Vulkan renderer host placeholder for Qt Radiant.
 // Future work: wire the real engine renderer when RADIANT_USE_ENGINE_RENDERER_VK is enabled.
 class VkViewportWidget final : public QWidget {

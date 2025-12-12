@@ -29,8 +29,8 @@ RadiantMainWindow::RadiantMainWindow(const QtRadiantEnv& env, QWidget* parent)
 void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 	setWindowTitle(QStringLiteral("Radiant Qt (prototype)"));
 
-	// Central viewport stack
-	QString rendererHint = env.appPath + QStringLiteral("/../build/idtech3_vulkan_x86_64.so");
+	// Central viewport stack; try to locate renderer relative to install dir
+	QString rendererHint = env.appPath + QStringLiteral("/../../idtech3_vulkan_x86_64.so");
 	auto *viewport = new VkViewportWidget(rendererHint, this);
 	setCentralWidget(viewport);
 

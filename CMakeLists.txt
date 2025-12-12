@@ -281,6 +281,7 @@ if(RADIANT_BUILD_QT)
 		target_include_directories(${QT_TARGET} PRIVATE
 			${ENGINE_RENDERER_INCLUDE}
 			${ENGINE_ROOT}/src
+			${ENGINE_ROOT}/src/qcommon
 			${ENGINE_ROOT}/src/renderercommon
 		)
 
@@ -289,7 +290,7 @@ if(RADIANT_BUILD_QT)
 			Vulkan::Vulkan
 		)
 
-		target_compile_definitions(${QT_TARGET} PRIVATE RADIANT_USE_ENGINE_RENDERER_VK)
+		target_compile_definitions(${QT_TARGET} PRIVATE RADIANT_USE_ENGINE_RENDERER_VK USE_RENDERER_DLOPEN)
 	endif()
 
 	# Output alongside other install binaries

@@ -6,9 +6,16 @@
 #include <QTextStream>
 #include <QElapsedTimer>
 #include <QGuiApplication>
+#include <QDir>
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-#include <qpa/qplatformnativeinterface.h>
-#include <QNativeInterface>
+#  if __has_include(<QtGui/qnativeinterface.h>)
+#    include <QtGui/qnativeinterface.h>
+#    define RADIANT_HAVE_QNATIVE_INTERFACE 1
+#  else
+#    define RADIANT_HAVE_QNATIVE_INTERFACE 0
+#  endif
+#else
+#  define RADIANT_HAVE_QNATIVE_INTERFACE 0
 #endif
 
 #if defined(Q_OS_UNIX)
@@ -17,7 +24,7 @@
 #endif
 
 // Basic logging sink to a Qt-side log file.
-static void Qt_R_Printf( const char *fmt, ... ){
+static void Qt_R_Printf( printParm_t, const char *fmt, ... ){
 	char buffer[2048];
 	va_list argptr;
 	va_start( argptr, fmt );
@@ -32,21 +39,36 @@ static void Qt_R_Printf( const char *fmt, ... ){
 }
 
 // Minimal stub implementations
-static void *Qt_Z_Malloc( int size, memtag_t, qboolean, int ) {
-	return calloc(1, size);
-}
-
-static void Qt_Z_Free( void *ptr ) {
-	free(ptr);
-}
-
-static void Qt_Sys_Error( const char *fmt, ... ) {
+static void Qt_Sys_Error( errorParm_t, const char *fmt, ... ) {
 	char buffer[2048];
 	va_list argptr;
 	va_start( argptr, fmt );
 	vsnprintf( buffer, sizeof(buffer), fmt, argptr );
 	va_end( argptr );
 	fprintf(stderr, "Renderer error: %s\n", buffer);
+}
+
+static void* Qt_Malloc( int bytes ){
+	return calloc(1, static_cast<size_t>(bytes));
+}
+
+static void Qt_Free( void *ptr ){
+	free(ptr);
+}
+
+static void Qt_FreeAll( void ){
+}
+
+static void* Qt_Hunk_Alloc( int size, ha_pref ){
+	return Qt_Malloc(size);
+}
+
+static void* Qt_Hunk_AllocateTempMemory( int size ){
+	return Qt_Malloc(size);
+}
+
+static void Qt_Hunk_FreeTempMemory( void *block ){
+	Qt_Free(block);
 }
 
 static int Qt_Milliseconds(){
@@ -108,7 +130,7 @@ static char** Qt_FS_ListFiles( const char *name, const char *extension, int *num
 	if ( !numfilesfound ) {
 		return nullptr;
 	}
-	QDir dir(QString::fromUtf8(name));
+	QDir dir(QString::fromUtf8(name ? name : ""));
 	QStringList filters;
 	if ( extension && extension[0] ) {
 		filters << QStringLiteral("*.") + QString::fromUtf8(extension);
@@ -139,6 +161,36 @@ static void Qt_FS_FreeFileList( char **filelist ){
 }
 
 // ----------------------
+// Cvar / Cmd stubs (minimal; enough to let renderer init)
+// ----------------------
+static cvar_t g_dummyCvar;
+static cvar_t* Qt_Cvar_Get( const char *name, const char *value, int flags ){
+	memset(&g_dummyCvar, 0, sizeof(g_dummyCvar));
+	g_dummyCvar.name = const_cast<char*>(name ? name : "");
+	g_dummyCvar.string = const_cast<char*>(value ? value : "");
+	g_dummyCvar.flags = flags;
+	return &g_dummyCvar;
+}
+static void Qt_Cvar_Set( const char *, const char * ) {}
+static void Qt_Cvar_SetValue( const char *, float ) {}
+static void Qt_Cvar_CheckRange( cvar_t *, const char *, const char *, cvarValidator_t ) {}
+static void Qt_Cvar_SetDescription( cvar_t *, const char * ) {}
+static void Qt_Cvar_SetGroup( cvar_t *, cvarGroup_t ) {}
+static int  Qt_Cvar_CheckGroup( cvarGroup_t ){ return 0; }
+static void Qt_Cvar_ResetGroup( cvarGroup_t, qboolean ) {}
+static void Qt_Cvar_VariableStringBuffer( const char *, char *buffer, int bufsize ){
+	if ( buffer && bufsize > 0 ) buffer[0] = '\0';
+}
+static const char *Qt_Cvar_VariableString( const char * ){ return ""; }
+static int  Qt_Cvar_VariableIntegerValue( const char * ){ return 0; }
+
+static void Qt_Cmd_AddCommand( const char *, void(*)(void) ) {}
+static void Qt_Cmd_RemoveCommand( const char * ) {}
+static int  Qt_Cmd_Argc( void ){ return 0; }
+static const char *Qt_Cmd_Argv( int ){ return ""; }
+static void Qt_Cmd_ExecuteText( cbufExec_t, const char * ) {}
+
+// ----------------------
 // Vulkan surface support (X11 only for now)
 // ----------------------
 
@@ -154,26 +206,33 @@ static qboolean Qt_VK_CreateSurface( VkInstance instance, VkSurfaceKHR *pSurface
 		return qfalse;
 	}
 
-	auto *native = QGuiApplication::platformNativeInterface();
-	if ( !native ) {
-		return qfalse;
-	}
-
 	// XCB path
 	xcb_connection_t* conn = nullptr;
 	xcb_window_t xcbWin = static_cast<xcb_window_t>(g_winId);
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0) && RADIANT_HAVE_QNATIVE_INTERFACE
 	if ( auto x11 = QNativeInterface::QX11Application::instance() ) {
 		conn = reinterpret_cast<xcb_connection_t*>( x11->connection() );
 	}
+#elif QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+	auto *native = QGuiApplication::platformNativeInterface();
+	if ( native ) {
+		conn = reinterpret_cast<xcb_connection_t*>( native->nativeResourceForIntegration("connection") );
+	}
+#else
+	Q_UNUSED(instance);
+	Q_UNUSED(pSurface);
+	return qfalse;
 #endif
 
 	if ( !conn ) {
 		return qfalse;
 	}
 
-	VkXcbSurfaceCreateInfoKHR info{ VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR };
+	VkXcbSurfaceCreateInfoKHR info{};
+	info.sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
+	info.pNext = nullptr;
+	info.flags = 0;
 	info.connection = conn;
 	info.window = xcbWin;
 
@@ -193,32 +252,58 @@ static qboolean Qt_VK_CreateSurface( VkInstance, VkSurfaceKHR * ){ return qfalse
 #endif
 
 refimport_t MakeQtRefImport(const QString& logPath){
-	refimport_t ri {};
+	Q_UNUSED(logPath);
 
-	ri.Printf = Qt_R_Printf;
-	ri.Error = Qt_Sys_Error;
+	refimport_t imp {};
 
-	ri.Milliseconds = Qt_Milliseconds;
-	ri.Microseconds = Qt_Microseconds;
+	imp.Printf = Qt_R_Printf;
+	imp.Error = Qt_Sys_Error;
 
-	ri.Z_Malloc = Qt_Z_Malloc;
-	ri.Free = Qt_Z_Free;
+	imp.Milliseconds = Qt_Milliseconds;
+	imp.Microseconds = Qt_Microseconds;
+
+	// Memory hooks (simple heap-backed versions)
+	imp.Hunk_Alloc = Qt_Hunk_Alloc;
+	imp.Hunk_AllocateTempMemory = Qt_Hunk_AllocateTempMemory;
+	imp.Hunk_FreeTempMemory = Qt_Hunk_FreeTempMemory;
+	imp.Malloc = Qt_Malloc;
+	imp.Free = Qt_Free;
+	imp.FreeAll = Qt_FreeAll;
 
 	// File helpers (still basic; real VFS integration TBD)
-	ri.FS_ReadFile = Qt_FS_ReadFile;
-	ri.FS_FreeFile = Qt_FS_FreeFile;
-	ri.FS_FileExists = Qt_FS_FileExists;
-	ri.FS_ListFiles = Qt_FS_ListFiles;
-	ri.FS_FreeFileList = Qt_FS_FreeFileList;
-	ri.FS_WriteFile = nullptr;
+	imp.FS_ReadFile = Qt_FS_ReadFile;
+	imp.FS_FreeFile = Qt_FS_FreeFile;
+	imp.FS_FileExists = Qt_FS_FileExists;
+	imp.FS_ListFiles = Qt_FS_ListFiles;
+	imp.FS_FreeFileList = Qt_FS_FreeFileList;
+	imp.FS_WriteFile = nullptr;
+
+	// Minimal cvar/cmd plumbing (placeholder)
+	imp.Cvar_Get = Qt_Cvar_Get;
+	imp.Cvar_Set = Qt_Cvar_Set;
+	imp.Cvar_SetValue = Qt_Cvar_SetValue;
+	imp.Cvar_CheckRange = Qt_Cvar_CheckRange;
+	imp.Cvar_SetDescription = Qt_Cvar_SetDescription;
+	imp.Cvar_SetGroup = Qt_Cvar_SetGroup;
+	imp.Cvar_CheckGroup = Qt_Cvar_CheckGroup;
+	imp.Cvar_ResetGroup = Qt_Cvar_ResetGroup;
+	imp.Cvar_VariableStringBuffer = Qt_Cvar_VariableStringBuffer;
+	imp.Cvar_VariableString = Qt_Cvar_VariableString;
+	imp.Cvar_VariableIntegerValue = Qt_Cvar_VariableIntegerValue;
+
+	imp.Cmd_AddCommand = Qt_Cmd_AddCommand;
+	imp.Cmd_RemoveCommand = Qt_Cmd_RemoveCommand;
+	imp.Cmd_Argc = Qt_Cmd_Argc;
+	imp.Cmd_Argv = Qt_Cmd_Argv;
+	imp.Cmd_ExecuteText = Qt_Cmd_ExecuteText;
 
 	// Vulkan surface hooks (only CreateSurface for now)
-	ri.VKimp_Init = nullptr;
-	ri.VKimp_Shutdown = nullptr;
-	ri.VK_GetInstanceProcAddr = nullptr;
-	ri.VK_CreateSurface = Qt_VK_CreateSurface;
+	imp.VKimp_Init = nullptr;
+	imp.VKimp_Shutdown = nullptr;
+	imp.VK_GetInstanceProcAddr = nullptr;
+	imp.VK_CreateSurface = Qt_VK_CreateSurface;
 
-	return ri;
+	return imp;
 }
 
 #endif

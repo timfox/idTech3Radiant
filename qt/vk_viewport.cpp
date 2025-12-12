@@ -12,6 +12,7 @@
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <QTimer>
+#include <cmath>
 
 #ifdef RADIANT_USE_ENGINE_RENDERER_VK
 #include "tr_public.h" // ensure renderer headers are reachable; not yet invoked
@@ -28,6 +29,8 @@ VkViewportWidget::VkViewportWidget(const QString &rendererPathHint, QWidget *par
 	SetVkSurfaceWindow( static_cast<quintptr>( winId() ) );
 #endif
 
+	m_frameTimer.start();
+
 	QString candidate = rendererPathHint;
 	if (candidate.isEmpty()) {
 		candidate = locateDefaultRenderer();
@@ -38,20 +41,41 @@ VkViewportWidget::VkViewportWidget(const QString &rendererPathHint, QWidget *par
 		m_status = QStringLiteral("No renderer path hint provided; not loaded");
 	}
 	setMinimumSize(640, 360);
+
+	// Simple frame pump
+	auto *timer = new QTimer(this);
+	connect(timer, &QTimer::timeout, this, [this](){ update(); });
+	timer->start(16); // ~60 FPS
 }
 
 QString VkViewportWidget::locateDefaultRenderer() const
 {
 	// Try a few conventional spots relative to the app or repo layout.
 	const QString appDir = QCoreApplication::applicationDirPath();
-	const QStringList candidates = {
-		appDir + QStringLiteral("/idtech3_vulkan_x86_64.so"),
-		appDir + QStringLiteral("/idtech3_vulkan.so"),
-		appDir + QStringLiteral("/../build/idtech3_vulkan_x86_64.so"),
-		appDir + QStringLiteral("/../build/idtech3_vulkan.so"),
-		appDir + QStringLiteral("/../idtech3_vulkan_x86_64.dll"),
-		appDir + QStringLiteral("/../idtech3_vulkan.dll")
-	};
+	QStringList candidates;
+
+	// 1) Explicit env override
+	const QByteArray envLib = qgetenv("ENGINE_RENDERER_VK_LIB");
+	if ( !envLib.isEmpty() ) {
+		candidates << QString::fromLocal8Bit(envLib);
+	}
+
+	// 2) Alongside the app
+	candidates << appDir + QStringLiteral("/idtech3_vulkan_x86_64.so")
+	           << appDir + QStringLiteral("/idtech3_vulkan.so");
+
+	// 3) Typical build/release locations relative to install dir
+	const QString repoRoot = QFileInfo(appDir + QStringLiteral("/../../..")).canonicalFilePath();
+	if ( !repoRoot.isEmpty() ) {
+		candidates << repoRoot + QStringLiteral("/build/idtech3_vulkan_x86_64.so")
+		           << repoRoot + QStringLiteral("/release/idtech3_vulkan_x86_64.so")
+		           << repoRoot + QStringLiteral("/build/idtech3_vulkan.so")
+		           << repoRoot + QStringLiteral("/release/idtech3_vulkan.so");
+	}
+
+	// 4) Windows names for completeness
+	candidates << appDir + QStringLiteral("/../idtech3_vulkan_x86_64.dll")
+	           << appDir + QStringLiteral("/../idtech3_vulkan.dll");
 
 	for (const QString &path : candidates) {
 		if (QFile::exists(path)) {
@@ -74,7 +98,7 @@ bool VkViewportWidget::loadRenderer(const QString &path)
 	}
 
 	// Construct a minimal refimport to initialize the renderer.
-	refimport_t ri = MakeQtRefImport(QStringLiteral("/tmp/radiant_qt_renderer.log"));
+	refimport_t import = MakeQtRefImport(QStringLiteral("/tmp/radiant_qt_renderer.log"));
 	GetRefAPI_t getRefApi = bridge.getRefApi();
 	if ( !getRefApi ) {
 		m_loaded = false;
@@ -83,7 +107,7 @@ bool VkViewportWidget::loadRenderer(const QString &path)
 		return false;
 	}
 
-	refexport_t* re = getRefApi( REF_API_VERSION, &ri );
+	refexport_t* re = getRefApi( REF_API_VERSION, &import );
 	if ( !re ) {
 		m_loaded = false;
 		m_status = QStringLiteral("GetRefAPI returned null (init failed)");
@@ -121,6 +145,46 @@ bool VkViewportWidget::loadRenderer(const QString &path)
 void VkViewportWidget::paintEvent(QPaintEvent *event)
 {
 	Q_UNUSED(event);
+	// If renderer is available, run a frame. Otherwise draw placeholder.
+#ifdef RADIANT_USE_ENGINE_RENDERER_VK
+	if ( m_re ) {
+		const int w = std::max(1, width());
+		const int h = std::max(1, height());
+
+		// Build camera basis
+		const float yawRad   = m_yaw   * (float)M_PI / 180.0f;
+		const float pitchRad = m_pitch * (float)M_PI / 180.0f;
+		const float cy = std::cos(yawRad),  sy = std::sin(yawRad);
+		const float cp = std::cos(pitchRad), sp = std::sin(pitchRad);
+
+		vec3_t forward = { cp * cy, cp * sy, -sp };
+		vec3_t right   = { -sy, cy, 0.0f };
+		vec3_t up      = { sp * cy, sp * sy, cp };
+
+		vec3_t target = { m_panX, m_panY, 0.0f };
+		vec3_t vieworg = {
+			target[0] - forward[0] * m_distance,
+			target[1] - forward[1] * m_distance,
+			target[2] - forward[2] * m_distance
+		};
+
+		refdef_t rd{};
+		rd.x = 0; rd.y = 0; rd.width = w; rd.height = h;
+		rd.fov_x = 75.0f;
+		rd.fov_y = 75.0f * (float)h / (float)w;
+		VectorCopy(vieworg, rd.vieworg);
+		VectorCopy(forward, rd.viewaxis[0]);
+		VectorCopy(right,   rd.viewaxis[1]);
+		VectorCopy(up,      rd.viewaxis[2]);
+		rd.time = static_cast<int>( m_frameTimer.elapsed() );
+
+		m_re->BeginFrame(STEREO_CENTER);
+		m_re->RenderScene(&rd);
+		m_re->EndFrame(nullptr, nullptr);
+		return;
+	}
+#endif
+
 	QPainter p(this);
 	p.fillRect(rect(), QColor(26, 26, 26));
 
