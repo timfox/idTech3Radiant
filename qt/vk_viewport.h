@@ -13,12 +13,22 @@
 class VkViewportWidget final : public QWidget {
 	Q_OBJECT
 public:
-	explicit VkViewportWidget(const QString& rendererPathHint = QString(), QWidget* parent = nullptr);
+	enum class ViewType {
+		Perspective,
+		Top,
+		Front,
+		Side
+	};
+
+	explicit VkViewportWidget(const QString& rendererPathHint = QString(),
+	                          ViewType view = ViewType::Perspective,
+	                          QWidget* parent = nullptr);
 
 	bool loadRenderer(const QString& path);
 	bool loadMap(const QString& path);
 	QString status() const { return m_status; }
 	QString rendererPath() const { return m_rendererPath; }
+	QString viewName() const;
 
 protected:
 	void paintEvent(QPaintEvent* event) override;
@@ -43,6 +53,7 @@ private:
 	float m_panX{0.0f};
 	float m_panY{0.0f};
 	QString m_cameraInfo;
+	ViewType m_viewType{ViewType::Perspective};
 
 	QElapsedTimer m_frameTimer;
 	qint64 m_lastFrameMs{0};

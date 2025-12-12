@@ -7,6 +7,7 @@
 #include <QElapsedTimer>
 #include <QGuiApplication>
 #include <QDir>
+#include <dlfcn.h>
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #  if __has_include(<QtGui/qnativeinterface.h>)
 #    include <QtGui/qnativeinterface.h>
@@ -57,6 +58,61 @@ static void Qt_Free( void *ptr ){
 }
 
 static void Qt_FreeAll( void ){
+}
+
+static void Qt_GLimp_InitGamma( glconfig_t* ) {}
+
+static void Qt_CL_SetScaling( float, int, int ) {}
+
+static void* g_vulkanLib = nullptr;
+static PFN_vkGetInstanceProcAddr g_vkGetInstanceProcAddr = nullptr;
+
+static void Qt_VKimp_Shutdown( qboolean ){
+	if ( g_vulkanLib ) {
+		dlclose( g_vulkanLib );
+		g_vulkanLib = nullptr;
+		g_vkGetInstanceProcAddr = nullptr;
+	}
+}
+
+static void Qt_VKimp_Init( glconfig_t *config ){
+	if ( !g_vkGetInstanceProcAddr ) {
+		g_vulkanLib = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_LOCAL);
+		if ( !g_vulkanLib ) {
+			fprintf(stderr, "Failed to load libvulkan.so.1: %s\n", dlerror());
+			return;
+		}
+		g_vkGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>( dlsym(g_vulkanLib, "vkGetInstanceProcAddr") );
+		if ( !g_vkGetInstanceProcAddr ) {
+			fprintf(stderr, "Failed to resolve vkGetInstanceProcAddr\n");
+			return;
+		}
+	}
+
+	if ( config ) {
+		config->vidWidth = 1280;
+		config->vidHeight = 720;
+		config->colorBits = 24;
+		config->depthBits = 24;
+		config->stencilBits = 8;
+		config->displayFrequency = 60;
+		config->driverType = GLDRV_ICD;
+		config->hardwareType = GLHW_GENERIC;
+		config->deviceSupportsGamma = qfalse;
+		config->isFullscreen = qfalse;
+		config->stereoEnabled = qfalse;
+		config->smpActive = qfalse;
+		config->textureEnvAddAvailable = qtrue;
+		memset(config->renderer_string, 0, sizeof(config->renderer_string));
+		memset(config->vendor_string, 0, sizeof(config->vendor_string));
+		memset(config->version_string, 0, sizeof(config->version_string));
+		memset(config->extensions_string, 0, sizeof(config->extensions_string));
+	}
+}
+
+static PFN_vkVoidFunction Qt_VK_GetInstanceProcAddr( VkInstance instance, const char *name ){
+	if ( !g_vkGetInstanceProcAddr ) return nullptr;
+	return g_vkGetInstanceProcAddr( instance, name );
 }
 
 static void* Qt_Hunk_Alloc( int size, ha_pref ){
@@ -269,6 +325,8 @@ refimport_t MakeQtRefImport(const QString& logPath){
 	imp.Malloc = Qt_Malloc;
 	imp.Free = Qt_Free;
 	imp.FreeAll = Qt_FreeAll;
+	imp.GLimp_InitGamma = Qt_GLimp_InitGamma;
+	imp.CL_SetScaling = Qt_CL_SetScaling;
 
 	// File helpers (still basic; real VFS integration TBD)
 	imp.FS_ReadFile = Qt_FS_ReadFile;
@@ -298,9 +356,9 @@ refimport_t MakeQtRefImport(const QString& logPath){
 	imp.Cmd_ExecuteText = Qt_Cmd_ExecuteText;
 
 	// Vulkan surface hooks (only CreateSurface for now)
-	imp.VKimp_Init = nullptr;
-	imp.VKimp_Shutdown = nullptr;
-	imp.VK_GetInstanceProcAddr = nullptr;
+	imp.VKimp_Init = Qt_VKimp_Init;
+	imp.VKimp_Shutdown = Qt_VKimp_Shutdown;
+	imp.VK_GetInstanceProcAddr = Qt_VK_GetInstanceProcAddr;
 	imp.VK_CreateSurface = Qt_VK_CreateSurface;
 
 	return imp;

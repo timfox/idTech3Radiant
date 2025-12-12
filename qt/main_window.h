@@ -8,6 +8,7 @@ class QPlainTextEdit;
 class QLabel;
 class VkViewportWidget;
 class QTreeWidget;
+class QListWidget;
 
 class RadiantMainWindow : public QMainWindow {
 	Q_OBJECT
@@ -19,10 +20,12 @@ private:
 	void appendLogInfo(const QtRadiantEnv& env);
 	void populateOutliner();
 	void populateInspector();
+	void populateTextureBrowser(const QtRadiantEnv& env);
 	void setOutlinerLoadedMap(const QString& path);
 
 	QPlainTextEdit* m_console = nullptr;
 	QLabel* m_status = nullptr;
 	QTreeWidget* m_outliner = nullptr;
 	QWidget* m_inspector = nullptr;
+	QListWidget* m_textureList = nullptr;
 };

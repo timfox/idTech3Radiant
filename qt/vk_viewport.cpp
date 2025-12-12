@@ -20,7 +20,7 @@
 #include "renderer_import.h"
 #endif
 
-VkViewportWidget::VkViewportWidget(const QString &rendererPathHint, QWidget *parent)
+VkViewportWidget::VkViewportWidget(const QString &rendererPathHint, ViewType view, QWidget *parent)
 	: QWidget(parent)
 {
 #ifdef RADIANT_USE_ENGINE_RENDERER_VK
@@ -28,6 +28,28 @@ VkViewportWidget::VkViewportWidget(const QString &rendererPathHint, QWidget *par
 	(void)winId();
 	SetVkSurfaceWindow( static_cast<quintptr>( winId() ) );
 #endif
+
+	m_viewType = view;
+	switch (m_viewType) {
+	case ViewType::Top:
+		m_pitch = -89.0f;
+		m_yaw = 0.0f;
+		m_distance = 64.0f;
+		break;
+	case ViewType::Front:
+		m_pitch = 0.0f;
+		m_yaw = 0.0f;
+		m_distance = 64.0f;
+		break;
+	case ViewType::Side:
+		m_pitch = 0.0f;
+		m_yaw = 90.0f;
+		m_distance = 64.0f;
+		break;
+	case ViewType::Perspective:
+	default:
+		break;
+	}
 
 	m_frameTimer.start();
 
@@ -84,6 +106,16 @@ QString VkViewportWidget::locateDefaultRenderer() const
 		}
 	}
 	return QString();
+}
+
+QString VkViewportWidget::viewName() const {
+	switch (m_viewType) {
+	case ViewType::Top: return QStringLiteral("Top");
+	case ViewType::Front: return QStringLiteral("Front");
+	case ViewType::Side: return QStringLiteral("Side");
+	case ViewType::Perspective:
+	default: return QStringLiteral("Perspective");
+	}
 }
 
 bool VkViewportWidget::loadRenderer(const QString &path)
@@ -201,10 +233,11 @@ void VkViewportWidget::paintEvent(QPaintEvent *event)
 	const QString title = m_loaded ? QStringLiteral("Vulkan/PBR Viewport (engine)") : QStringLiteral("Renderer not loaded");
 	const QString detail = m_status.isEmpty() ? QStringLiteral("No status") : m_status;
 	const QString cam = m_cameraInfo.isEmpty() ? QStringLiteral("Cam: yaw/pitch/dst/pan TBD") : m_cameraInfo;
+	const QString view = QStringLiteral("View: %1").arg(viewName());
 
 	p.setPen(Qt::white);
 	p.drawText(rect().adjusted(12, 12, -12, -12), Qt::AlignLeft | Qt::AlignTop,
-	           title + QStringLiteral("\n") + detail + QStringLiteral("\n") + cam +
+	           title + QStringLiteral("\n") + view + QStringLiteral("\n") + detail + QStringLiteral("\n") + cam +
 	           QStringLiteral("\n(WYSIWYG viewport stub; hook GetRefAPI next.)"));
 }
 

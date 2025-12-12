@@ -11,6 +11,11 @@
 #include <QToolBar>
 #include <QVBoxLayout>
 #include <QTreeWidget>
+#include <QSplitter>
+#include <QListWidget>
+#include <QDirIterator>
+#include <QListWidget>
+#include <QDirIterator>
 #include <QFormLayout>
 #include <QLineEdit>
 #include <QComboBox>
@@ -31,7 +36,9 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 
 	// Central viewport stack; try to locate renderer relative to install dir
 	QString rendererHint = env.appPath + QStringLiteral("/../../idtech3_vulkan_x86_64.so");
-	auto *viewport = new VkViewportWidget(rendererHint, this);
+
+	// Single viewport (Perspective) until renderer is fully wired; avoids nested UI duplication.
+	auto *viewport = new VkViewportWidget(rendererHint, VkViewportWidget::ViewType::Perspective, this);
 	setCentralWidget(viewport);
 
 	// Console dock
@@ -71,6 +78,14 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 	populateInspector();
 	inspDock->setWidget(m_inspector);
 	addDockWidget(Qt::RightDockWidgetArea, inspDock);
+
+	// Texture browser dock (stubbed, file list from base/textures)
+	auto *texDock = new QDockWidget(QStringLiteral("Textures"), this);
+	texDock->setObjectName(QStringLiteral("TexturesDock"));
+	m_textureList = new QListWidget(texDock);
+	texDock->setWidget(m_textureList);
+	addDockWidget(Qt::LeftDockWidgetArea, texDock);
+	populateTextureBrowser(env);
 
 	// Menu
 	auto *fileMenu = menuBar()->addMenu(QStringLiteral("&File"));
@@ -180,5 +195,41 @@ void RadiantMainWindow::setOutlinerLoadedMap(const QString& path){
 	auto *root = m_outliner->topLevelItem(0);
 	if ( root ) {
 		root->setText(0, QStringLiteral("Map: %1").arg(path));
+	}
+}
+
+void RadiantMainWindow::populateTextureBrowser(const QtRadiantEnv& env){
+	if ( !m_textureList ) return;
+	m_textureList->clear();
+
+	// Look for textures under games/*/base*/textures
+	QString gamesRoot = env.gamesPath;
+	if (!gamesRoot.endsWith('/')) gamesRoot += '/';
+
+	QStringList searchDirs;
+	QDir gamesDir(gamesRoot);
+	for (const QString& sub : gamesDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+		const QString baseDir = gamesRoot + sub + QStringLiteral("/base");
+		if (QDir(baseDir).exists()) {
+			searchDirs << baseDir + QStringLiteral("/textures");
+		}
+	}
+
+	int added = 0;
+	const QStringList exts = {QStringLiteral("*.tga"), QStringLiteral("*.jpg"), QStringLiteral("*.jpeg"), QStringLiteral("*.png")};
+	for (const QString& dirPath : searchDirs) {
+		QDirIterator it(dirPath, exts, QDir::Files, QDirIterator::Subdirectories);
+		while (it.hasNext()) {
+			const QString filePath = it.next();
+			const QString rel = QDir(dirPath).relativeFilePath(filePath);
+			m_textureList->addItem(rel);
+			++added;
+			if (added > 2048) break; // safety cap
+		}
+		if (added > 2048) break;
+	}
+
+	if (added == 0) {
+		m_textureList->addItem(QStringLiteral("(no textures found)"));
 	}
 }
