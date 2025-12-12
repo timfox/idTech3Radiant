@@ -31,6 +31,10 @@ private:
 	void createEntityAtSelection();
 	bool hasSelection() const;
 	void populateInspectorForItem(QTreeWidgetItem* item);
+	void saveMap();
+	bool saveMapToFile(const QString& path);
+	void writeEntityToMap(QTextStream& out, QTreeWidgetItem* item);
+	void writeBrushToMap(QTextStream& out, QTreeWidgetItem* item);
 
 	QPlainTextEdit* m_console = nullptr;
 	QLabel* m_status = nullptr;
