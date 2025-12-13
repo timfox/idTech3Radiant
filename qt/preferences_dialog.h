@@ -24,6 +24,7 @@ private Q_SLOTS:
 
 private:
 	void setupUI();
+	void updateColorButton(QPushButton* button, const QColor& color);
 	
 	QTabWidget* m_tabs = nullptr;
 	
@@ -64,4 +65,71 @@ private:
 	// Build settings
 	QLineEdit* m_q3map2PathEdit = nullptr;
 	QLineEdit* m_compilerOptionsEdit = nullptr;
+	
+	// Camera/Viewport movement settings
+	QDoubleSpinBox* m_cameraMoveSpeedSpin = nullptr;
+	QDoubleSpinBox* m_cameraRotateSpeedSpin = nullptr;
+	QDoubleSpinBox* m_mouseSensitivitySpin = nullptr;
+	QCheckBox* m_invertMouseYCheck = nullptr;
+	QDoubleSpinBox* m_cameraAccelerationSpin = nullptr;
+	QDoubleSpinBox* m_defaultCameraDistanceSpin = nullptr;
+	
+	// Selection appearance settings
+	QCheckBox* m_showSelectionBoundsCheck = nullptr;
+	QDoubleSpinBox* m_selectionOutlineWidthSpin = nullptr;
+	
+	// Grid appearance settings
+	QDoubleSpinBox* m_gridOpacitySpin = nullptr;
+	QSpinBox* m_gridSubdivisionsSpin = nullptr;
+	QCheckBox* m_showGridInPerspectiveCheck = nullptr;
+	
+	// Display/Rendering settings
+	QCheckBox* m_showTexturesCheck = nullptr;
+	QCheckBox* m_showEntityModelsCheck = nullptr;
+	QCheckBox* m_showEntityNamesCheck = nullptr;
+	QCheckBox* m_showBrushWireframesCheck = nullptr;
+	QCheckBox* m_showLightRadiusCheck = nullptr;
+	QDoubleSpinBox* m_lightIntensitySpin = nullptr;
+	QDoubleSpinBox* m_ambientLightSpin = nullptr;
+	QComboBox* m_textureFilteringCombo = nullptr;
+	
+	// Editor behavior settings
+	QSpinBox* m_undoLimitSpin = nullptr;
+	QSpinBox* m_autosaveBackupCountSpin = nullptr;
+	QCheckBox* m_confirmOnExitCheck = nullptr;
+	QCheckBox* m_showTooltipsCheck = nullptr;
+	QCheckBox* m_showCoordinateDisplayCheck = nullptr;
+	QCheckBox* m_showCrosshairCheck = nullptr;
+	
+	// Keyboard/Mouse settings
+	QDoubleSpinBox* m_mouseWheelZoomSpeedSpin = nullptr;
+	QDoubleSpinBox* m_panSpeedSpin = nullptr;
+	QDoubleSpinBox* m_rotationSpeedSpin = nullptr;
+	
+	// Additional file paths
+	QLineEdit* m_mapPathEdit = nullptr;
+	QLineEdit* m_gamePathEdit = nullptr;
+	QLineEdit* m_shaderPathEdit = nullptr;
+	QLineEdit* m_soundPathEdit = nullptr;
+	
+	// Color settings
+	QPushButton* m_selectionColorBtn = nullptr;
+	QPushButton* m_gridColorBtn = nullptr;
+	QPushButton* m_gridMajorColorBtn = nullptr;
+	QPushButton* m_backgroundColorBtn = nullptr;
+	QColor m_selectionColor;
+	QColor m_gridColor;
+	QColor m_gridMajorColor;
+	QColor m_backgroundColor;
+	
+	// Performance settings
+	QComboBox* m_renderQualityCombo = nullptr;
+	QSpinBox* m_maxFPSSpin = nullptr;
+	QCheckBox* m_vsyncCheck = nullptr;
+	QCheckBox* m_multisampleCheck = nullptr;
+	QSpinBox* m_multisampleSamplesSpin = nullptr;
+	QCheckBox* m_anisotropicFilteringCheck = nullptr;
+	QSpinBox* m_anisotropicLevelSpin = nullptr;
+	QCheckBox* m_useTextureCompressionCheck = nullptr;
+	QSpinBox* m_textureCacheSizeSpin = nullptr;
 };
