@@ -404,14 +404,6 @@ void VkViewportWidget::paintEvent(QPaintEvent *event)
 		drawCrosshair(p);
 	}
 
-	// Draw coordinate display
-	if (m_showCoordinates) {
-		drawCoordinateDisplay(p);
-	}
-
-	// Draw viewport information (FPS, stats, etc.)
-	drawViewportInfo(p);
-	
 	// Draw drag select rectangle
 	if (m_dragSelecting && !m_dragSelectRect.isEmpty()) {
 		p.setPen(QPen(QColor(100, 150, 255), 2));
@@ -433,13 +425,7 @@ void VkViewportWidget::paintEvent(QPaintEvent *event)
 		m_clippingTool->render(p, viewMatrix, projMatrix, width(), height());
 	}
 
-	const QString title = m_loaded ? QStringLiteral("Vulkan/PBR Viewport (engine)") : QStringLiteral("Renderer not loaded");
-	const QString detail = m_status.isEmpty() ? QStringLiteral("No status") : m_status;
-	const QString cam = m_cameraInfo.isEmpty() ? QStringLiteral("Cam: yaw/pitch/dst/pan TBD") : m_cameraInfo;
-	const QString view = QStringLiteral("View: %1").arg(viewName());
-	const QString sel = m_hasSelection ? QStringLiteral("Selection: (%.1f, %.1f, %.1f)").arg(m_selection.x()).arg(m_selection.y()).arg(m_selection.z()) : QStringLiteral("No selection");
-
-	// Draw enhanced viewport information
+	// Draw viewport information (FPS, stats, etc.) - only once
 	if (m_showStats) {
 		drawViewportInfo(p);
 	}
@@ -449,8 +435,8 @@ void VkViewportWidget::paintEvent(QPaintEvent *event)
 		drawFPSCounter(p);
 	}
 
-	// Draw coordinate display if mouse is over viewport
-	if (rect().contains(mapFromGlobal(QCursor::pos()))) {
+	// Draw coordinate display if enabled and mouse is over viewport
+	if (m_showCoordinates && rect().contains(mapFromGlobal(QCursor::pos()))) {
 		drawCoordinateDisplay(p);
 	}
 }
@@ -1401,32 +1387,105 @@ void VkViewportWidget::drawEnhancedGrid(QPainter& painter) {
 	// Calculate zoom-based opacity for depth fading effect
 	float zoomOpacity = qBound(0.1f, 1.0f - (m_distance - 1.0f) * 0.1f, 1.0f);
 
-	// Minor grid lines (thinner, lighter) with depth fading
-	QColor minorColor(70, 70, 70);
-	minorColor.setAlphaF(minorColor.alphaF() * zoomOpacity);
-	painter.setPen(QPen(minorColor, 1, Qt::DotLine));
+	// For orthographic views, draw grid in world space with proper coordinate mapping
+	if (m_viewType != ViewType::Perspective) {
+		// Calculate world-space bounds visible in viewport
+		float worldScale = m_distance / 256.0f;
+		float worldLeft = m_panX - (viewportWidth / 2.0f) * worldScale;
+		float worldRight = m_panX + (viewportWidth / 2.0f) * worldScale;
+		float worldTop = m_panY + (viewportHeight / 2.0f) * worldScale;
+		float worldBottom = m_panY - (viewportHeight / 2.0f) * worldScale;
 
-	for (int x = 0; x < viewportWidth; x += static_cast<int>(gridStep)) {
-		if ((x / static_cast<int>(gridStep)) % majorGridInterval != 0) {
+		// Snap to grid
+		float gridStartX = std::floor(worldLeft / gridStep) * gridStep;
+		float gridEndX = std::ceil(worldRight / gridStep) * gridStep;
+		float gridStartY = std::floor(worldBottom / gridStep) * gridStep;
+		float gridEndY = std::ceil(worldTop / gridStep) * gridStep;
+
+		// Helper lambda to convert world coordinate to screen for current view type
+		auto worldToScreenCoord = [this, viewportWidth, viewportHeight, worldScale](float worldX, float worldY) -> QPoint {
+			float screenX = (worldX - m_panX) / worldScale + viewportWidth / 2.0f;
+			float screenY = viewportHeight / 2.0f - (worldY - m_panY) / worldScale;
+			return QPoint(static_cast<int>(screenX), static_cast<int>(screenY));
+		};
+
+		// Minor grid lines (thinner, lighter) with depth fading
+		QColor minorColor(70, 70, 70);
+		minorColor.setAlphaF(minorColor.alphaF() * zoomOpacity);
+		painter.setPen(QPen(minorColor, 1, Qt::DotLine));
+
+		for (float x = gridStartX; x <= gridEndX; x += gridStep) {
+			if (std::fmod(std::abs(x), majorGridSize) > 0.01f) {
+				QPoint start = worldToScreenCoord(x, worldBottom);
+				QPoint end = worldToScreenCoord(x, worldTop);
+				if (start.x() >= -50 && start.x() < viewportWidth + 50) {
+					painter.drawLine(start, end);
+				}
+			}
+		}
+		for (float y = gridStartY; y <= gridEndY; y += gridStep) {
+			if (std::fmod(std::abs(y), majorGridSize) > 0.01f) {
+				QPoint start = worldToScreenCoord(worldLeft, y);
+				QPoint end = worldToScreenCoord(worldRight, y);
+				if (start.y() >= -50 && start.y() < viewportHeight + 50) {
+					painter.drawLine(start, end);
+				}
+			}
+		}
+
+		// Major grid lines (thicker, more visible) with depth fading
+		QColor majorColor(100, 100, 100);
+		majorColor.setAlphaF(majorColor.alphaF() * zoomOpacity);
+		painter.setPen(QPen(majorColor, 2, Qt::SolidLine));
+
+		for (float x = gridStartX; x <= gridEndX; x += majorGridSize) {
+			QPoint start = worldToScreenCoord(x, worldBottom);
+			QPoint end = worldToScreenCoord(x, worldTop);
+			if (start.x() >= -50 && start.x() < viewportWidth + 50) {
+				painter.drawLine(start, end);
+			}
+		}
+		for (float y = gridStartY; y <= gridEndY; y += majorGridSize) {
+			QPoint start = worldToScreenCoord(worldLeft, y);
+			QPoint end = worldToScreenCoord(worldRight, y);
+			if (start.y() >= -50 && start.y() < viewportHeight + 50) {
+				painter.drawLine(start, end);
+			}
+		}
+	} else {
+		// For perspective view, use screen-space grid (simpler)
+		// Minor grid lines (thinner, lighter) with depth fading
+		QColor minorColor(70, 70, 70);
+		minorColor.setAlphaF(minorColor.alphaF() * zoomOpacity);
+		painter.setPen(QPen(minorColor, 1, Qt::DotLine));
+
+		// Use a screen-space grid for perspective (can be improved later)
+		int screenGridStep = static_cast<int>(gridStep * (256.0f / m_distance));
+		if (screenGridStep < 1) screenGridStep = 1;
+
+		for (int x = 0; x < viewportWidth; x += screenGridStep) {
+			if ((x / screenGridStep) % majorGridInterval != 0) {
+				painter.drawLine(x, 0, x, viewportHeight);
+			}
+		}
+		for (int y = 0; y < viewportHeight; y += screenGridStep) {
+			if ((y / screenGridStep) % majorGridInterval != 0) {
+				painter.drawLine(0, y, viewportWidth, y);
+			}
+		}
+
+		// Major grid lines
+		QColor majorColor(100, 100, 100);
+		majorColor.setAlphaF(majorColor.alphaF() * zoomOpacity);
+		painter.setPen(QPen(majorColor, 2, Qt::SolidLine));
+
+		int majorScreenStep = screenGridStep * majorGridInterval;
+		for (int x = 0; x < viewportWidth; x += majorScreenStep) {
 			painter.drawLine(x, 0, x, viewportHeight);
 		}
-	}
-	for (int y = 0; y < viewportHeight; y += static_cast<int>(gridStep)) {
-		if ((y / static_cast<int>(gridStep)) % majorGridInterval != 0) {
+		for (int y = 0; y < viewportHeight; y += majorScreenStep) {
 			painter.drawLine(0, y, viewportWidth, y);
 		}
-	}
-
-	// Major grid lines (thicker, more visible) with depth fading
-	QColor majorColor(100, 100, 100);
-	majorColor.setAlphaF(majorColor.alphaF() * zoomOpacity);
-	painter.setPen(QPen(majorColor, 2, Qt::SolidLine));
-
-	for (int x = 0; x < viewportWidth; x += static_cast<int>(majorGridSize)) {
-		painter.drawLine(x, 0, x, viewportHeight);
-	}
-	for (int y = 0; y < viewportHeight; y += static_cast<int>(majorGridSize)) {
-		painter.drawLine(0, y, viewportWidth, y);
 	}
 
 	// Draw center cross (origin indicator) with pulsing effect

@@ -268,9 +268,16 @@ void PreferencesDialog::loadSettings() {
 
 	// Editor
 	QString savedTheme = settings.value("editor/theme", "Default Dark").toString();
-	// Make sure the saved theme exists, fallback to current theme if not
-	if (!ThemeManager::instance().availableThemes().contains(savedTheme)) {
-		savedTheme = ThemeManager::instance().currentTheme();
+	// Make sure the saved theme exists, fallback to a valid theme if not
+	QStringList availableThemes = ThemeManager::instance().availableThemes();
+	if (!availableThemes.contains(savedTheme)) {
+		// Try Default Dark first
+		if (availableThemes.contains("Default Dark")) {
+			savedTheme = "Default Dark";
+		} else if (!availableThemes.isEmpty()) {
+			// Use first available theme as fallback
+			savedTheme = availableThemes.first();
+		}
 	}
 	m_themeCombo->setCurrentText(savedTheme);
 	m_fontCombo->setCurrentText(settings.value("editor/font", "Default").toString());
@@ -334,6 +341,9 @@ void PreferencesDialog::saveSettings() {
 
 	// Update viewport settings - signal to main window to apply to all viewports
 	// This would need to be implemented with signals/slots in a full implementation
+	
+	// Ensure settings are written to disk immediately
+	settings.sync();
 }
 
 void PreferencesDialog::onApply() {

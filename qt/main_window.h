@@ -28,6 +28,7 @@ private:
 	void populateOutliner();
 	void populateInspector();
 	void populateTextureBrowser(const QtRadiantEnv& env);
+	void setupDockWidgetMinimize(QDockWidget* dock);
 	void setOutlinerLoadedMap(const QString& path);
 	void createBrushAtSelection();
 	void createEntityAtSelection();

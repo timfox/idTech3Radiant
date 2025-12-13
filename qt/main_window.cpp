@@ -39,6 +39,14 @@
 #include <QSettings>
 #include <QKeyEvent>
 #include <QDockWidget>
+#include <QToolButton>
+#include <QHBoxLayout>
+#include <QWidget>
+#include <QIcon>
+#include <QStyle>
+#include <QPixmap>
+#include <QPainter>
+#include <QFile>
 
 #include "vk_viewport.h"
 #include "color_picker_dialog.h"
@@ -82,6 +90,14 @@ RadiantMainWindow::RadiantMainWindow(const QtRadiantEnv& env, QWidget* parent)
 
 void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 	setWindowTitle(QStringLiteral("Radiant Qt (prototype)"));
+	
+	// Ensure proper window decorations (titlebar, minimize, maximize, close buttons)
+	// Qt::Window flag already includes resizing capability by default
+	setWindowFlags(Qt::Window | Qt::WindowTitleHint | Qt::WindowSystemMenuHint |
+	              Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
+	
+	// Ensure window is resizable (set minimum size, but allow resizing)
+	setMinimumSize(640, 480);
 
 	// Central viewport stack; try to locate renderer relative to install dir
 	QString rendererHint = env.appPath + QStringLiteral("/../../idtech3_vulkan_x86_64.so");
@@ -197,6 +213,7 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 	m_console = new QPlainTextEdit(consoleDock);
 	m_console->setReadOnly(true);
 	consoleDock->setWidget(m_console);
+	setupDockWidgetMinimize(consoleDock);
 	addDockWidget(Qt::BottomDockWidgetArea, consoleDock);
 
 	// Info dock
@@ -210,6 +227,7 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 	info->setAlignment(Qt::AlignLeft);
 	info->setContentsMargins(8, 8, 8, 8);
 	infoDock->setWidget(info);
+	setupDockWidgetMinimize(infoDock);
 	addDockWidget(Qt::LeftDockWidgetArea, infoDock);
 
 	// Outliner dock
@@ -219,6 +237,7 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 	m_outliner->setHeaderLabels({QStringLiteral("Name"), QStringLiteral("Type")});
 	populateOutliner();
 	outlinerDock->setWidget(m_outliner);
+	setupDockWidgetMinimize(outlinerDock);
 	addDockWidget(Qt::LeftDockWidgetArea, outlinerDock);
 
 	// Inspector dock
@@ -227,6 +246,7 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 	m_inspector = new QWidget(inspDock);
 	populateInspector();
 	inspDock->setWidget(m_inspector);
+	setupDockWidgetMinimize(inspDock);
 	addDockWidget(Qt::RightDockWidgetArea, inspDock);
 
 	// Texture browser dock (stubbed, file list from base/textures)
@@ -242,6 +262,7 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 	textureLayout->addWidget(m_textureList);
 
 	texDock->setWidget(textureContainer);
+	setupDockWidgetMinimize(texDock);
 	addDockWidget(Qt::LeftDockWidgetArea, texDock);
 	populateTextureBrowser(env);
 	connect(m_textureList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* item){
@@ -278,6 +299,7 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 	buildLayout->addStretch(1);
 	buildBody->setLayout(buildLayout);
 	buildDock->setWidget(buildBody);
+	setupDockWidgetMinimize(buildDock);
 	addDockWidget(Qt::RightDockWidgetArea, buildDock);
 	connect(runBtn, &QPushButton::clicked, this, [this, presetCombo, buildLog](){
 		const QString msg = QStringLiteral("[Compile] %1 (stubbed; wire q3map2 next)").arg(presetCombo->currentText());
@@ -2914,4 +2936,151 @@ void RadiantMainWindow::setGizmoOperation(int operation) {
 	if (m_viewFront) m_viewFront->setGizmoOperation(operation);
 	if (m_viewSide) m_viewSide->setGizmoOperation(operation);
 	updateToolStatus();
+}
+
+void RadiantMainWindow::setupDockWidgetMinimize(QDockWidget* dock) {
+	if (!dock) return;
+	
+	// Enable dock widget features
+	dock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable);
+	
+	// Store the original widget
+	QWidget* originalWidget = dock->widget();
+	if (!originalWidget) return;
+	
+	// Create a custom title bar with minimize button
+	QWidget* titleBar = new QWidget();
+	QHBoxLayout* titleLayout = new QHBoxLayout(titleBar);
+	titleLayout->setContentsMargins(4, 2, 4, 2);
+	titleLayout->setSpacing(2);
+	
+	QLabel* titleLabel = new QLabel(dock->windowTitle(), titleBar);
+	titleLayout->addWidget(titleLabel);
+	titleLayout->addStretch();
+	
+	// Minimize button
+	QToolButton* minimizeBtn = new QToolButton(titleBar);
+	
+	// Try to load custom icons, fallback to Qt standard icons
+	QIcon minimizeIcon;
+	QIcon restoreIcon;
+	
+	// Try loading from common icon paths
+	QStringList iconPaths = {
+		QCoreApplication::applicationDirPath() + "/../radiant/install/bitmaps/minimize.png",
+		QCoreApplication::applicationDirPath() + "/radiant/install/bitmaps/minimize.png",
+		QStringLiteral("radiant/install/bitmaps/minimize.png"),
+		QStringLiteral("./radiant/install/bitmaps/minimize.png")
+	};
+	
+	QStringList restorePaths = {
+		QCoreApplication::applicationDirPath() + "/../radiant/install/bitmaps/restore.png",
+		QCoreApplication::applicationDirPath() + "/radiant/install/bitmaps/restore.png",
+		QStringLiteral("radiant/install/bitmaps/restore.png"),
+		QStringLiteral("./radiant/install/bitmaps/restore.png")
+	};
+	
+	// Try to load minimize icon
+	for (const QString& path : iconPaths) {
+		if (QFile::exists(path)) {
+			minimizeIcon = QIcon(path);
+			break;
+		}
+	}
+	
+	// Try to load restore icon
+	for (const QString& path : restorePaths) {
+		if (QFile::exists(path)) {
+			restoreIcon = QIcon(path);
+			break;
+		}
+	}
+	
+	// If icons not found, use Qt standard icons or create simple ones
+	if (minimizeIcon.isNull()) {
+		// Use Qt's standard minimize icon, or create a simple one
+		minimizeIcon = style()->standardIcon(QStyle::SP_TitleBarMinButton);
+		if (minimizeIcon.isNull()) {
+			// Create a simple minimize icon (horizontal line)
+			QPixmap pix(16, 16);
+			pix.fill(Qt::transparent);
+			QPainter painter(&pix);
+			painter.setPen(QPen(Qt::white, 2));
+			painter.drawLine(4, 8, 12, 8);
+			minimizeIcon = QIcon(pix);
+		}
+	}
+	
+	if (restoreIcon.isNull()) {
+		// Use Qt's standard restore icon, or create a simple one
+		restoreIcon = style()->standardIcon(QStyle::SP_TitleBarNormalButton);
+		if (restoreIcon.isNull()) {
+			// Create a simple restore icon (plus/expand)
+			QPixmap pix(16, 16);
+			pix.fill(Qt::transparent);
+			QPainter painter(&pix);
+			painter.setPen(QPen(Qt::white, 2));
+			painter.drawLine(8, 4, 8, 12); // Vertical line
+			painter.drawLine(4, 8, 12, 8); // Horizontal line
+			restoreIcon = QIcon(pix);
+		}
+	}
+	
+	minimizeBtn->setIcon(minimizeIcon);
+	minimizeBtn->setToolTip(QStringLiteral("Minimize"));
+	minimizeBtn->setAutoRaise(true);
+	minimizeBtn->setFixedSize(20, 20);
+	
+	// Track minimized state using a property
+	dock->setProperty("minimized", false);
+	
+		connect(minimizeBtn, &QToolButton::clicked, this, [this, dock, originalWidget, minimizeBtn, minimizeIcon, restoreIcon]() {
+		bool isMinimized = dock->property("minimized").toBool();
+		
+		if (!isMinimized) {
+			// Minimize: hide the widget content
+			originalWidget->setVisible(false);
+			// Collapse the dock to minimum size (just title bar)
+			// Store original size constraints
+			dock->setProperty("originalMinWidth", dock->minimumWidth());
+			dock->setProperty("originalMinHeight", dock->minimumHeight());
+			dock->setProperty("originalMaxWidth", dock->maximumWidth());
+			dock->setProperty("originalMaxHeight", dock->maximumHeight());
+			
+			// Set to minimal size
+			dock->setMinimumWidth(30);
+			dock->setMaximumWidth(30);
+			dock->setMinimumHeight(30);
+			dock->setMaximumHeight(30);
+			
+			minimizeBtn->setIcon(restoreIcon); // Change to restore icon
+			minimizeBtn->setToolTip(QStringLiteral("Restore"));
+			dock->setProperty("minimized", true);
+		} else {
+			// Restore: show the widget content
+			originalWidget->setVisible(true);
+			// Restore original size constraints
+			int origMinW = dock->property("originalMinWidth").toInt();
+			int origMinH = dock->property("originalMinHeight").toInt();
+			int origMaxW = dock->property("originalMaxWidth").toInt();
+			int origMaxH = dock->property("originalMaxHeight").toInt();
+			
+			if (origMinW > 0) dock->setMinimumWidth(origMinW);
+			else dock->setMinimumWidth(100);
+			if (origMinH > 0) dock->setMinimumHeight(origMinH);
+			else dock->setMinimumHeight(100);
+			if (origMaxW > 0) dock->setMaximumWidth(origMaxW);
+			else dock->setMaximumWidth(16777215);
+			if (origMaxH > 0) dock->setMaximumHeight(origMaxH);
+			else dock->setMaximumHeight(16777215);
+			
+			minimizeBtn->setIcon(minimizeIcon); // Change back to minimize icon
+			minimizeBtn->setToolTip(QStringLiteral("Minimize"));
+			dock->setProperty("minimized", false);
+		}
+	});
+	
+	titleLayout->addWidget(minimizeBtn);
+	
+	dock->setTitleBarWidget(titleBar);
 }

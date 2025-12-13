@@ -17,12 +17,8 @@
 #include "snapping_system.h"
 
 int main(int argc, char* argv[]) {
-	// Avoid double titlebars on Wayland by disabling Qt's client-side decoration
-	// Only apply automatically when running under Wayland; honor existing env if set.
-	if (qEnvironmentVariableIsSet("WAYLAND_DISPLAY") &&
-	    !qEnvironmentVariableIsSet("QT_WAYLAND_DISABLE_WINDOWDECORATION")) {
-		qputenv("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1");
-	}
+	// Note: On Wayland, window decorations are handled by the compositor
+	// We don't need to disable decorations here - let the window manager handle it
 
 	QApplication app(argc, argv);
 
