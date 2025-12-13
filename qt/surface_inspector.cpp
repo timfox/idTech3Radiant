@@ -16,6 +16,9 @@ SurfaceInspector::SurfaceInspector(QWidget* parent)
 	: QDialog(parent) {
 	setWindowTitle(QStringLiteral("Surface Inspector"));
 	setModal(false);
+	setWindowFlags(Qt::Dialog | Qt::WindowTitleHint | Qt::WindowSystemMenuHint |
+	              Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
+	setSizeGripEnabled(true);
 	resize(500, 600);
 	
 	setupUI();

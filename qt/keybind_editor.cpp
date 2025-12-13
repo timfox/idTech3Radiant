@@ -18,6 +18,9 @@ KeybindEditor::KeybindEditor(QWidget* parent)
 {
 	setWindowTitle(QStringLiteral("Keybind Editor"));
 	setModal(true);
+	setWindowFlags(Qt::Dialog | Qt::WindowTitleHint | Qt::WindowSystemMenuHint |
+	              Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
+	setSizeGripEnabled(true);
 	resize(700, 500);
 	
 	auto* mainLayout = new QVBoxLayout(this);
@@ -250,6 +253,10 @@ void KeybindEditor::onAssignKeybind() {
 	
 	QDialog dlg(this);
 	dlg.setWindowTitle(QStringLiteral("Assign Keybind"));
+	dlg.setWindowFlags(Qt::Dialog | Qt::WindowTitleHint | Qt::WindowSystemMenuHint |
+	                  Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
+	dlg.setSizeGripEnabled(true);
+	dlg.resize(300, 120);
 	auto* layout = new QVBoxLayout(&dlg);
 	layout->addWidget(new QLabel(QStringLiteral("Press the key combination:")));
 	layout->addWidget(keyEdit);

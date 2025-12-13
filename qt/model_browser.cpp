@@ -20,6 +20,9 @@ ModelBrowser::ModelBrowser(QWidget* parent)
 {
 	setWindowTitle(QStringLiteral("Model Browser"));
 	setModal(true);
+	setWindowFlags(Qt::Dialog | Qt::WindowTitleHint | Qt::WindowSystemMenuHint |
+	              Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
+	setSizeGripEnabled(true);
 	resize(800, 600);
 	
 	auto* mainLayout = new QVBoxLayout(this);

@@ -23,6 +23,8 @@
 #include <QMatrix4x4>
 #include <QResizeEvent>
 #include <QShowEvent>
+#include <QFontMetrics>
+#include <QRadialGradient>
 #include <cmath>
 #include <algorithm>
 #include <cstring>
@@ -52,6 +54,15 @@ VkViewportWidget::VkViewportWidget(const QString &rendererPathHint, ViewType vie
 #endif
 
 	m_viewType = view;
+
+	// Initialize bookmarks
+	for (int i = 0; i < 10; ++i) {
+		m_bookmarks[i].valid = false;
+	}
+
+	// Initialize FPS monitoring
+	m_fpsTimer.start();
+
 	switch (m_viewType) {
 	case ViewType::Top:
 		m_pitch = -89.0f;
@@ -317,20 +328,23 @@ void VkViewportWidget::paintEvent(QPaintEvent *event)
 #endif
 
 	QPainter p(this);
-	p.fillRect(rect(), QColor(26, 26, 26));
+	p.setRenderHint(QPainter::Antialiasing, true); // Enable anti-aliasing for smoother rendering
 
-	// Draw grid with configurable size
-	float gridStep = s_gridSize;
-	if (gridStep < 1.0f) {
-		gridStep = 32.0f; // Default fallback
+	// Choose background color based on wireframe mode
+	QColor bgColor = m_wireframeMode ? QColor(20, 20, 25) : QColor(32, 32, 32);
+	p.fillRect(rect(), bgColor);
+
+	// Update FPS counter
+	updateFPS();
+
+	// Draw world axis indicators (X=red, Y=green, Z=blue)
+	if (m_showAxes) {
+		drawWorldAxes(p);
 	}
-	
-	p.setPen(QColor(60, 60, 60));
-	for (int x = 0; x < width(); x += static_cast<int>(gridStep)) {
-		p.drawLine(x, 0, x, height());
-	}
-	for (int y = 0; y < height(); y += static_cast<int>(gridStep)) {
-		p.drawLine(0, y, width(), y);
+
+	// Draw improved grid with configurable size
+	if (m_showGrid) {
+		drawEnhancedGrid(p);
 	}
 
 	// Draw gizmo if enabled
@@ -354,53 +368,46 @@ void VkViewportWidget::paintEvent(QPaintEvent *event)
 		m_gizmo->render(p, viewMatrix, projMatrix, width(), height());
 	}
 	
-	// Draw selection indicators
-	if (m_hasSelection) {
-		// Draw all selected objects
-		for (int i = 0; i < m_selectedObjects.size(); ++i) {
-			const QVector3D& sel = m_selectedObjects[i];
-			bool isPrimary = (sel - m_selection).lengthSquared() < 0.01f;
-			
-			// Convert 3D selection to 2D screen coordinates
-			QPoint screenPos;
-			switch (m_viewType) {
-			case ViewType::Top:
-				screenPos = QPoint(
-					width()/2 + static_cast<int>((sel.x() - m_panX) * 256.0f / m_distance),
-					height()/2 - static_cast<int>((sel.y() - m_panY) * 256.0f / m_distance)
-				);
-				break;
-			case ViewType::Front:
-				screenPos = QPoint(
-					width()/2 + static_cast<int>((sel.x() - m_panX) * 256.0f / m_distance),
-					height()/2 - static_cast<int>((sel.z() - m_panY) * 256.0f / m_distance)
-				);
-				break;
-			case ViewType::Side:
-				screenPos = QPoint(
-					width()/2 + static_cast<int>((sel.y() - m_panX) * 256.0f / m_distance),
-					height()/2 - static_cast<int>((sel.z() - m_panY) * 256.0f / m_distance)
-				);
-				break;
-			case ViewType::Perspective:
-			default:
-				screenPos = QPoint(width()/2, height()/2); // Center for perspective
-				break;
-			}
+	// Draw enhanced selection indicators
+	drawSelectionIndicators(p);
 
-			// Draw selection indicator (primary selection is brighter)
-			QColor selColor = isPrimary ? QColor(255, 255, 0) : QColor(200, 200, 100);
-			p.setPen(QPen(selColor, isPrimary ? 2 : 1));
-			const int crossSize = isPrimary ? 10 : 6;
-			p.drawLine(screenPos.x() - crossSize, screenPos.y(), screenPos.x() + crossSize, screenPos.y());
-			p.drawLine(screenPos.x(), screenPos.y() - crossSize, screenPos.x(), screenPos.y() + crossSize);
-
-			// Draw selection circle
-			p.setPen(QPen(selColor, 1));
-			p.setBrush(Qt::NoBrush);
-			p.drawEllipse(screenPos, crossSize, crossSize);
-		}
+	// Draw camera frustum in orthographic views (perspective camera visualization)
+	if (m_viewType != ViewType::Perspective) {
+		drawCameraFrustum(p);
 	}
+
+	// Draw measurement overlay if active
+	if (m_showMeasurements) {
+		drawMeasurementOverlay(p);
+	}
+
+	// Draw navigation minimap in corner
+	if (m_showMinimap) {
+		drawMinimap(p);
+	}
+
+	// Draw performance warnings if FPS is low
+	if (m_currentFPS < 30.0f && m_showPerformanceWarnings) {
+		drawPerformanceWarning(p);
+	}
+
+	// Draw measurements
+	if (!m_measurements.isEmpty()) {
+		drawMeasurements(p);
+	}
+
+	// Draw crosshair
+	if (m_showCrosshair) {
+		drawCrosshair(p);
+	}
+
+	// Draw coordinate display
+	if (m_showCoordinates) {
+		drawCoordinateDisplay(p);
+	}
+
+	// Draw viewport information (FPS, stats, etc.)
+	drawViewportInfo(p);
 	
 	// Draw drag select rectangle
 	if (m_dragSelecting && !m_dragSelectRect.isEmpty()) {
@@ -429,10 +436,20 @@ void VkViewportWidget::paintEvent(QPaintEvent *event)
 	const QString view = QStringLiteral("View: %1").arg(viewName());
 	const QString sel = m_hasSelection ? QStringLiteral("Selection: (%.1f, %.1f, %.1f)").arg(m_selection.x()).arg(m_selection.y()).arg(m_selection.z()) : QStringLiteral("No selection");
 
-	p.setPen(Qt::white);
-	p.drawText(rect().adjusted(12, 12, -12, -12), Qt::AlignLeft | Qt::AlignTop,
-	           title + QStringLiteral("\n") + view + QStringLiteral("\n") + detail + QStringLiteral("\n") + cam + QStringLiteral("\n") + sel +
-	           QStringLiteral("\n(WYSIWYG viewport stub; hook GetRefAPI next.)"));
+	// Draw enhanced viewport information
+	if (m_showStats) {
+		drawViewportInfo(p);
+	}
+
+	// Draw FPS counter if enabled
+	if (m_showFPS) {
+		drawFPSCounter(p);
+	}
+
+	// Draw coordinate display if mouse is over viewport
+	if (rect().contains(mapFromGlobal(QCursor::pos()))) {
+		drawCoordinateDisplay(p);
+	}
 }
 
 bool VkViewportWidget::loadMap(const QString& path){
@@ -504,10 +521,35 @@ void VkViewportWidget::mousePressEvent(QMouseEvent *event){
 		return;
 	}
 	
-	if ( event->button() == Qt::LeftButton ) {
+		if ( event->button() == Qt::LeftButton ) {
 		// Calculate 3D position from mouse click
 		QVector3D clickPos = screenToWorld(event->pos());
-		
+
+		// Handle measurement tool
+		if (m_showMeasurements && (event->modifiers() & Qt::ControlModifier)) {
+			if (m_measurementStart.isNull()) {
+				// Start new measurement
+				m_measurementStart = clickPos;
+				if (m_console) {
+					m_console->appendPlainText(QStringLiteral("Measurement started at (%1, %2, %3)")
+						.arg(clickPos.x(), 0, 'f', 2)
+						.arg(clickPos.y(), 0, 'f', 2)
+						.arg(clickPos.z(), 0, 'f', 2));
+				}
+			} else {
+				// Complete measurement
+				addMeasurement(m_measurementStart, clickPos);
+				m_measurementStart = QVector3D(); // Reset
+				if (m_console) {
+					float distance = (clickPos - m_measurementStart).length();
+					m_console->appendPlainText(QStringLiteral("Measurement completed: %1 units")
+						.arg(distance, 0, 'f', 3));
+				}
+			}
+			update();
+			return;
+		}
+
 		// Handle clipping tool
 		if (m_clippingTool) {
 			// Check if clicking on a handle
@@ -612,6 +654,27 @@ void VkViewportWidget::mousePressEvent(QMouseEvent *event){
 			m_dragStartPos = event->pos();
 			m_dragSelectRect = QRect();
 			QWidget::mousePressEvent(event);
+			return;
+		}
+
+		// Check for measurement creation (Ctrl+click for measurement points)
+		if (m_showMeasurements && (event->modifiers() & Qt::ControlModifier)) {
+			if (m_measurementStart.isNull()) {
+				// First measurement point
+				m_measurementStart = clickPos;
+				if (m_console) {
+					m_console->appendPlainText(QStringLiteral("Measurement start: (%.2f, %.2f, %.2f)")
+						.arg(clickPos.x()).arg(clickPos.y()).arg(clickPos.z()));
+				}
+			} else {
+				// Second measurement point - create measurement
+				addMeasurement(m_measurementStart, clickPos);
+				m_measurementStart = QVector3D(); // Reset
+				if (m_console) {
+					m_console->appendPlainText(QStringLiteral("Measurement created: %.2f units")
+						.arg((clickPos - m_measurementStart).length()));
+				}
+			}
 			return;
 		}
 
@@ -1210,8 +1273,30 @@ QVector3D VkViewportWidget::screenToWorld(const QPoint& screenPos) const {
 		worldPos = QVector3D(m_panX, m_panY, m_distance * 0.5f);
 		break;
 	}
-	
+
 	return worldPos;
+}
+
+QPoint VkViewportWidget::worldToScreen(const QVector3D& worldPos) const {
+	QMatrix4x4 viewMatrix, projMatrix;
+	buildViewMatrices(viewMatrix, projMatrix);
+
+	// Transform world position to clip space
+	QVector4D worldPos4(worldPos.x(), worldPos.y(), worldPos.z(), 1.0f);
+	QVector4D viewPos = viewMatrix * worldPos4;
+	QVector4D clipPos = projMatrix * viewPos;
+
+	if (clipPos.w() <= 0.0f) {
+		return QPoint(-1000, -1000); // Off-screen
+	}
+
+	float invW = 1.0f / clipPos.w();
+	QPoint screenPos(
+		static_cast<int>((clipPos.x() * invW + 1.0f) * 0.5f * width()),
+		static_cast<int>((1.0f - clipPos.y() * invW) * 0.5f * height())
+	);
+
+	return screenPos;
 }
 
 void VkViewportWidget::setGridSize(float size) {
@@ -1266,4 +1351,1154 @@ void VkViewportWidget::resetCamera() {
 	m_panX = 0.0f;
 	m_panY = 0.0f;
 	update();
+}
+
+void VkViewportWidget::updateFPS() {
+	m_frameCount++;
+
+	// Update FPS every 500ms for smooth display
+	if (m_fpsTimer.elapsed() >= 500) {
+		float elapsedSeconds = m_fpsTimer.elapsed() / 1000.0f;
+		m_currentFPS = m_frameCount / elapsedSeconds;
+
+		// Reset counters
+		m_frameCount = 0;
+		m_fpsTimer.restart();
+	}
+}
+
+// ===== ENHANCED VIEWPORT RENDERING =====
+
+void VkViewportWidget::drawWorldAxes(QPainter& painter) {
+	// Draw world coordinate system axes in the corner
+	const int axisLength = 40;
+	const int axisThickness = 3;
+	const int cornerMargin = 20;
+
+	// Bottom-left corner position
+	QPoint origin(cornerMargin, height() - cornerMargin);
+
+	// Draw X axis (red) - right
+	painter.setPen(QPen(QColor(255, 100, 100), axisThickness, Qt::SolidLine, Qt::RoundCap));
+	painter.drawLine(origin, origin + QPoint(axisLength, 0));
+
+	// Draw Y axis (green) - up
+	painter.setPen(QPen(QColor(100, 255, 100), axisThickness, Qt::SolidLine, Qt::RoundCap));
+	painter.drawLine(origin, origin - QPoint(0, axisLength));
+
+	// Draw Z axis (blue) - diagonal for 3D effect
+	painter.setPen(QPen(QColor(100, 150, 255), axisThickness, Qt::SolidLine, Qt::RoundCap));
+	painter.drawLine(origin, origin + QPoint(axisLength/2, -axisLength/2));
+
+	// Draw axis labels
+	painter.setPen(QPen(Qt::white, 1));
+	painter.setFont(QFont("Arial", 8, QFont::Bold));
+	painter.drawText(origin + QPoint(axisLength + 5, 5), "X");
+	painter.drawText(origin + QPoint(-10, -axisLength - 5), "Y");
+	painter.drawText(origin + QPoint(axisLength/2 + 10, -axisLength/2 - 5), "Z");
+}
+
+void VkViewportWidget::drawEnhancedGrid(QPainter& painter) {
+	float gridStep = s_gridSize;
+	if (gridStep < 1.0f) {
+		gridStep = 32.0f; // Default fallback
+	}
+
+	const int viewportWidth = width();
+	const int viewportHeight = height();
+
+	// Calculate center point
+	QPoint center(viewportWidth / 2, viewportHeight / 2);
+
+	// Draw major grid lines (every N units)
+	const int majorGridInterval = 4; // Every 4th grid line is major
+	const float majorGridSize = gridStep * majorGridInterval;
+
+	// Calculate zoom-based opacity for depth fading effect
+	float zoomOpacity = qBound(0.1f, 1.0f - (m_distance - 1.0f) * 0.1f, 1.0f);
+
+	// Minor grid lines (thinner, lighter) with depth fading
+	QColor minorColor(70, 70, 70);
+	minorColor.setAlphaF(minorColor.alphaF() * zoomOpacity);
+	painter.setPen(QPen(minorColor, 1, Qt::DotLine));
+
+	for (int x = 0; x < viewportWidth; x += static_cast<int>(gridStep)) {
+		if ((x / static_cast<int>(gridStep)) % majorGridInterval != 0) {
+			painter.drawLine(x, 0, x, viewportHeight);
+		}
+	}
+	for (int y = 0; y < viewportHeight; y += static_cast<int>(gridStep)) {
+		if ((y / static_cast<int>(gridStep)) % majorGridInterval != 0) {
+			painter.drawLine(0, y, viewportWidth, y);
+		}
+	}
+
+	// Major grid lines (thicker, more visible) with depth fading
+	QColor majorColor(100, 100, 100);
+	majorColor.setAlphaF(majorColor.alphaF() * zoomOpacity);
+	painter.setPen(QPen(majorColor, 2, Qt::SolidLine));
+
+	for (int x = 0; x < viewportWidth; x += static_cast<int>(majorGridSize)) {
+		painter.drawLine(x, 0, x, viewportHeight);
+	}
+	for (int y = 0; y < viewportHeight; y += static_cast<int>(majorGridSize)) {
+		painter.drawLine(0, y, viewportWidth, y);
+	}
+
+	// Draw center cross (origin indicator) with pulsing effect
+	static int crossPulseCounter = 0;
+	crossPulseCounter = (crossPulseCounter + 1) % 60;
+	float crossPulse = 0.5f + 0.5f * sin(crossPulseCounter * 0.1f);
+
+	QColor crossColor(150, 150, 150);
+	crossColor.setAlphaF(crossColor.alphaF() * pulse);
+	painter.setPen(QPen(crossColor, 1, Qt::DashLine));
+
+	const int crossSize = 20;
+	painter.drawLine(center.x() - crossSize, center.y(), center.x() + crossSize, center.y());
+	painter.drawLine(center.x(), center.y() - crossSize, center.x(), center.y() + crossSize);
+
+	// Enhanced center point with pulsing effect and gradient
+	static int centerPulseCounter = 0;
+	centerPulseCounter = (centerPulseCounter + 1) % 120;
+	float centerPulse = 0.3f + 0.7f * fabs(sin(centerPulseCounter * 0.05f));
+
+	QRadialGradient gradient(center, 8);
+	gradient.setColorAt(0, QColor(100, 150, 255, static_cast<int>(200 * centerPulse)));
+	gradient.setColorAt(0.7, QColor(150, 200, 255, static_cast<int>(150 * centerPulse)));
+	gradient.setColorAt(1, QColor(200, 200, 200, static_cast<int>(50 * centerPulse)));
+
+	painter.setPen(QPen(QColor(100, 150, 255, static_cast<int>(255 * centerPulse)), 2));
+	painter.setBrush(QBrush(gradient));
+	painter.drawEllipse(center, 6, 6);
+
+	// Add inner highlight
+	QColor innerColor(255, 255, 255, static_cast<int>(150 * centerPulse));
+	painter.setPen(Qt::NoPen);
+	painter.setBrush(QBrush(innerColor));
+	painter.drawEllipse(center, 2, 2);
+
+	// Draw grid coordinate labels at edges (for orthographic views)
+	if (m_viewType != ViewType::Perspective) {
+		drawGridLabels(painter);
+	}
+}
+
+void VkViewportWidget::drawViewportInfo(QPainter& painter) {
+	const QString title = m_loaded ? QStringLiteral("Vulkan/PBR Viewport (engine)") : QStringLiteral("Qt Viewport");
+	const QString detail = m_status.isEmpty() ? QStringLiteral("Ready") : m_status;
+	const QString cam = QStringLiteral("Cam: Y%.0f P%.0f D%.1f").arg(m_yaw).arg(m_pitch).arg(m_distance);
+	const QString view = QStringLiteral("View: %1").arg(viewName());
+	const QString sel = m_hasSelection ?
+		QStringLiteral("Sel: (%.1f, %.1f, %.1f)").arg(m_selection.x()).arg(m_selection.y()).arg(m_selection.z()) :
+		QStringLiteral("No Selection");
+
+	const QString grid = QStringLiteral("Grid: %.1f").arg(s_gridSize);
+
+	// Add bookmark status
+	QString bookmarks;
+	for (int i = 0; i < 10; ++i) {
+		if (m_bookmarkSaved[i]) {
+			bookmarks += QString::number(i);
+		}
+	}
+	const QString bookmarkInfo = bookmarks.isEmpty() ? QStringLiteral("No bookmarks") :
+								QStringLiteral("Bookmarks: %1").arg(bookmarks);
+
+	// Create info text with better formatting
+	QStringList infoLines;
+	infoLines << title;
+	infoLines << view;
+	infoLines << detail;
+	infoLines << cam;
+	infoLines << sel;
+	infoLines << grid;
+	infoLines << bookmarkInfo;
+
+	// If Vulkan renderer is not loaded, add helpful hint
+	if (!m_loaded) {
+		infoLines << QStringLiteral("Tip: Enable RADIANT_USE_ENGINE_RENDERER_VK");
+	}
+
+	// Draw background for text readability
+	QRect textRect(10, 10, 300, infoLines.size() * 16 + 10);
+	painter.fillRect(textRect, QColor(0, 0, 0, 120));
+
+	// Draw text with better colors and spacing
+	painter.setPen(QPen(QColor(255, 255, 255), 1));
+	painter.setFont(QFont("Consolas", 9));
+
+	int y = 20;
+	for (const QString& line : infoLines) {
+		painter.drawText(15, y, line);
+		y += 16;
+	}
+
+	// Draw zoom level indicator in bottom-right corner
+	const QString zoomText = QStringLiteral("Zoom: %1%").arg(static_cast<int>(100.0f / m_distance * 10.0f));
+	QRect zoomRect(width() - 120, height() - 30, 110, 20);
+	painter.fillRect(zoomRect, QColor(0, 0, 0, 120));
+	painter.setPen(QPen(QColor(200, 200, 255), 1));
+	painter.drawText(zoomRect.adjusted(5, 0, -5, 0), Qt::AlignVCenter | Qt::AlignRight, zoomText);
+}
+
+void VkViewportWidget::drawSelectionIndicators(QPainter& painter) {
+	if (!m_hasSelection) return;
+
+	// Draw all selected objects with enhanced visuals
+	for (int i = 0; i < m_selectedObjects.size(); ++i) {
+		const QVector3D& sel = m_selectedObjects[i];
+		bool isPrimary = (sel - m_selection).lengthSquared() < 0.01f;
+
+		// Convert 3D selection to 2D screen coordinates
+		QPoint screenPos = worldToScreen(sel);
+
+		// Skip if outside viewport bounds (with margin)
+		const int margin = 50;
+		if (screenPos.x() < -margin || screenPos.x() > width() + margin ||
+			screenPos.y() < -margin || screenPos.y() > height() + margin) {
+			continue;
+		}
+
+		// Enhanced selection indicator styling
+		QColor selColor = isPrimary ? QColor(255, 220, 0) : QColor(180, 180, 100);
+		const int crossSize = isPrimary ? 12 : 8;
+		const int lineWidth = isPrimary ? 3 : 2;
+
+		// Draw selection cross with glow effect
+		painter.setPen(QPen(selColor.lighter(150), lineWidth + 2, Qt::SolidLine, Qt::RoundCap));
+		painter.drawLine(screenPos.x() - crossSize, screenPos.y(), screenPos.x() + crossSize, screenPos.y());
+		painter.drawLine(screenPos.x(), screenPos.y() - crossSize, screenPos.x(), screenPos.y() + crossSize);
+
+		painter.setPen(QPen(selColor, lineWidth, Qt::SolidLine, Qt::RoundCap));
+		painter.drawLine(screenPos.x() - crossSize, screenPos.y(), screenPos.x() + crossSize, screenPos.y());
+		painter.drawLine(screenPos.x(), screenPos.y() - crossSize, screenPos.x(), screenPos.y() + crossSize);
+
+		// Draw selection circle with fill
+		painter.setPen(QPen(selColor, 2));
+		painter.setBrush(QBrush(selColor.lighter(180)));
+		painter.drawEllipse(screenPos, crossSize, crossSize);
+
+		// Draw coordinate label for primary selection
+		if (isPrimary) {
+			QString coordText = QStringLiteral("(%.1f, %.1f, %.1f)").arg(sel.x()).arg(sel.y()).arg(sel.z());
+			QRect labelRect(screenPos.x() + crossSize + 5, screenPos.y() - 10, 120, 20);
+
+			// Background for label
+			painter.fillRect(labelRect, QColor(0, 0, 0, 180));
+			painter.setPen(QPen(selColor, 1));
+			painter.drawRect(labelRect);
+
+			// Label text
+			painter.setPen(QPen(Qt::white, 1));
+			painter.setFont(QFont("Arial", 8));
+			painter.drawText(labelRect.adjusted(3, 0, -3, 0), Qt::AlignVCenter | Qt::AlignLeft, coordText);
+		}
+	}
+}
+
+void VkViewportWidget::drawFPSCounter(QPainter& painter) {
+	// Draw FPS counter in top-right corner
+	const QString fpsText = QStringLiteral("FPS: %1").arg(static_cast<int>(m_currentFPS));
+	QRect fpsRect(width() - 80, 10, 70, 25);
+
+	// Background for FPS counter
+	QColor bgColor = m_currentFPS < 30 ? QColor(180, 50, 50, 200) :
+					 m_currentFPS < 60 ? QColor(180, 180, 50, 200) :
+					 QColor(50, 180, 50, 200);
+
+	painter.fillRect(fpsRect.adjusted(-5, -5, 5, 5), bgColor);
+
+	// FPS text
+	painter.setPen(QPen(Qt::white, 2));
+	painter.setFont(QFont("Consolas", 10, QFont::Bold));
+	painter.drawText(fpsRect, Qt::AlignCenter, fpsText);
+
+	// Border
+	painter.setPen(QPen(Qt::black, 1));
+	painter.setBrush(Qt::NoBrush);
+	painter.drawRect(fpsRect.adjusted(-5, -5, 5, 5));
+}
+
+void VkViewportWidget::drawGridLabels(QPainter& painter) {
+	// Draw coordinate labels at viewport edges for orthographic views
+	const int margin = 5;
+	const int labelSpacing = 50;
+
+	painter.setFont(QFont("Arial", 8));
+	painter.setPen(QPen(QColor(150, 150, 150), 1));
+
+	// Calculate world coordinates at viewport edges
+	float worldLeft = -m_panX - (width() / 2.0f) * m_distance / 256.0f;
+	float worldRight = -m_panX + (width() / 2.0f) * m_distance / 256.0f;
+	float worldTop = m_panY + (height() / 2.0f) * m_distance / 256.0f;
+	float worldBottom = m_panY - (height() / 2.0f) * m_distance / 256.0f;
+
+	// Draw X-axis labels (horizontal edges)
+	for (int x = margin; x < width(); x += labelSpacing) {
+		float worldX = worldLeft + (worldRight - worldLeft) * (x / (float)width());
+		if (m_viewType == ViewType::Top) {
+			painter.drawText(x - 10, margin + 10, QString::number(worldX, 'f', 0));
+		} else if (m_viewType == ViewType::Front) {
+			painter.drawText(x - 10, margin + 10, QString::number(worldX, 'f', 0));
+		}
+	}
+
+	// Draw Y/Z-axis labels (vertical edges)
+	for (int y = margin; y < height(); y += labelSpacing) {
+		float worldY = worldTop - (worldTop - worldBottom) * (y / (float)height());
+		if (m_viewType == ViewType::Top) {
+			painter.drawText(margin, y + 3, QString::number(worldY, 'f', 0));
+		} else if (m_viewType == ViewType::Side) {
+			painter.drawText(margin, y + 3, QString::number(worldY, 'f', 0));
+		}
+	}
+
+	// Draw axis labels
+	painter.setPen(QPen(QColor(255, 100, 100), 2)); // Red for X
+	painter.drawText(width() - 20, height() - 5, "X");
+
+	painter.setPen(QPen(QColor(100, 255, 100), 2)); // Green for Y
+	if (m_viewType == ViewType::Top) {
+		painter.drawText(5, 15, "Y");
+	} else {
+		painter.drawText(5, height() - 5, "Y");
+	}
+
+	painter.setPen(QPen(QColor(100, 150, 255), 2)); // Blue for Z
+	if (m_viewType == ViewType::Front) {
+		painter.drawText(5, height() - 5, "Z");
+	} else if (m_viewType == ViewType::Side) {
+		painter.drawText(width() - 20, 15, "Z");
+	}
+}
+
+void VkViewportWidget::drawCameraFrustum(QPainter& painter) {
+	// Draw perspective camera frustum in orthographic views
+	// This shows what the perspective camera can see
+
+	const float fovRadians = 75.0f * M_PI / 180.0f; // Default FOV
+	const float aspectRatio = (float)width() / height();
+	const float nearPlane = 0.1f;
+	const float farPlane = m_distance * 2.0f; // Extend frustum based on camera distance
+
+	// Calculate frustum corners at far plane
+	const float tanHalfFov = tan(fovRadians * 0.5f);
+	const float nearHeight = 2.0f * tanHalfFov * nearPlane;
+	const float nearWidth = nearHeight * aspectRatio;
+	const float farHeight = 2.0f * tanHalfFov * farPlane;
+	const float farWidth = farHeight * aspectRatio;
+
+	// Camera position in world space
+	QVector3D cameraPos(0, 0, 0); // Perspective camera is at origin in view space
+
+	// Transform camera space frustum to screen space
+	QVector<QPoint> frustumPoints;
+
+	// Near plane corners (not visible, but used for lines)
+	QVector3D nearTopLeft(-nearWidth * 0.5f, nearHeight * 0.5f, -nearPlane);
+	QVector3D nearTopRight(nearWidth * 0.5f, nearHeight * 0.5f, -nearPlane);
+	QVector3D nearBottomLeft(-nearWidth * 0.5f, -nearHeight * 0.5f, -nearPlane);
+	QVector3D nearBottomRight(nearWidth * 0.5f, -nearHeight * 0.5f, -nearPlane);
+
+	// Far plane corners
+	QVector3D farTopLeft(-farWidth * 0.5f, farHeight * 0.5f, -farPlane);
+	QVector3D farTopRight(farWidth * 0.5f, farHeight * 0.5f, -farPlane);
+	QVector3D farBottomLeft(-farWidth * 0.5f, -farHeight * 0.5f, -farPlane);
+	QVector3D farBottomRight(farWidth * 0.5f, -farHeight * 0.5f, -farPlane);
+
+	// Convert to screen coordinates
+	auto toScreen = [&](const QVector3D& world) -> QPoint {
+		return worldToScreen(world);
+	};
+
+	// Draw frustum lines with semi-transparent cyan color
+	QColor frustumColor(0, 255, 255, 100);
+	painter.setPen(QPen(frustumColor, 2, Qt::SolidLine));
+
+	// Near plane (optional, usually not visible)
+	// painter.drawLine(toScreen(nearTopLeft), toScreen(nearTopRight));
+	// painter.drawLine(toScreen(nearTopRight), toScreen(nearBottomRight));
+	// painter.drawLine(toScreen(nearBottomRight), toScreen(nearBottomLeft));
+	// painter.drawLine(toScreen(nearBottomLeft), toScreen(nearTopLeft));
+
+	// Far plane
+	painter.drawLine(toScreen(farTopLeft), toScreen(farTopRight));
+	painter.drawLine(toScreen(farTopRight), toScreen(farBottomRight));
+	painter.drawLine(toScreen(farBottomRight), toScreen(farBottomLeft));
+	painter.drawLine(toScreen(farBottomLeft), toScreen(farTopLeft));
+
+	// Connecting lines from camera to far plane
+	QPoint cameraScreen = toScreen(cameraPos);
+	painter.drawLine(cameraScreen, toScreen(farTopLeft));
+	painter.drawLine(cameraScreen, toScreen(farTopRight));
+	painter.drawLine(cameraScreen, toScreen(farBottomLeft));
+	painter.drawLine(cameraScreen, toScreen(farBottomRight));
+
+	// Draw camera icon at frustum origin
+	painter.setPen(QPen(QColor(0, 255, 255), 2));
+	painter.setBrush(QBrush(QColor(0, 255, 255, 50)));
+	painter.drawEllipse(cameraScreen, 8, 8);
+
+	// Camera direction indicator
+	QPoint cameraDirEnd = toScreen(QVector3D(0, 0, -0.5f));
+	painter.drawLine(cameraScreen, cameraDirEnd);
+}
+
+void VkViewportWidget::drawMeasurementOverlay(QPainter& painter) {
+	// Draw measurement lines, distances, and angles between selected objects
+	if (m_selectedObjects.size() < 2) return;
+
+	painter.setFont(QFont("Arial", 8, QFont::Bold));
+
+	for (int i = 0; i < m_selectedObjects.size(); ++i) {
+		for (int j = i + 1; j < m_selectedObjects.size(); ++j) {
+			QPoint p1 = worldToScreen(m_selectedObjects[i]);
+			QPoint p2 = worldToScreen(m_selectedObjects[j]);
+
+			// Skip if either point is off-screen
+			if (p1.x() < -50 || p1.x() > width() + 50 || p1.y() < -50 || p1.y() > height() + 50 ||
+				p2.x() < -50 || p2.x() > width() + 50 || p2.y() < -50 || p2.y() > height() + 50) {
+				continue;
+			}
+
+			// Draw measurement line with gradient effect
+			QLinearGradient gradient(p1, p2);
+			gradient.setColorAt(0, QColor(255, 255, 0, 200));
+			gradient.setColorAt(0.5, QColor(255, 220, 0, 150));
+			gradient.setColorAt(1, QColor(255, 255, 0, 200));
+
+			painter.setPen(QPen(QBrush(gradient), 2, Qt::SolidLine));
+			painter.drawLine(p1, p2);
+
+			// Calculate and display distance
+			float distance = (m_selectedObjects[i] - m_selectedObjects[j]).length();
+			QPoint midPoint = (p1 + p2) / 2;
+
+			// Draw distance measurement
+			QString distText = QStringLiteral("%.2f").arg(distance);
+			QFontMetrics fm(painter.font());
+			QRect distRect = fm.boundingRect(distText);
+			distRect.moveCenter(midPoint);
+			distRect.adjust(-4, -4, 4, 4);
+
+			// Background with rounded corners
+			QPainterPath bgPath;
+			bgPath.addRoundedRect(distRect, 3, 3);
+			painter.fillPath(bgPath, QColor(0, 0, 0, 200));
+			painter.setPen(QPen(QColor(255, 255, 0), 1));
+			painter.drawPath(bgPath);
+
+			painter.setPen(QPen(Qt::white, 1));
+			painter.drawText(distRect, Qt::AlignCenter, distText);
+
+			// Draw units label below
+			QRect unitsRect = distRect.adjusted(0, distRect.height(), 0, 4);
+			painter.setPen(QPen(QColor(200, 200, 200), 1));
+			painter.setFont(QFont("Arial", 6));
+			painter.drawText(unitsRect, Qt::AlignCenter, "units");
+		}
+	}
+
+	// Draw angle measurements for triangles (3+ points)
+	if (m_selectedObjects.size() >= 3) {
+		for (int i = 0; i < m_selectedObjects.size(); ++i) {
+			for (int j = i + 1; j < m_selectedObjects.size(); ++j) {
+				for (int k = j + 1; k < m_selectedObjects.size(); ++k) {
+					drawAngleMeasurement(painter, m_selectedObjects[i], m_selectedObjects[j], m_selectedObjects[k]);
+				}
+			}
+		}
+	}
+}
+
+void VkViewportWidget::drawAngleMeasurement(QPainter& painter, const QVector3D& p1, const QVector3D& p2, const QVector3D& vertex) {
+	// Calculate angle at vertex between p1 and p2
+	QVector3D v1 = (p1 - vertex).normalized();
+	QVector3D v2 = (p2 - vertex).normalized();
+
+	// Calculate angle in degrees
+	float dot = QVector3D::dotProduct(v1, v2);
+	float angle = qRadiansToDegrees(acos(qBound(-1.0f, dot, 1.0f)));
+
+	// Only show angles between 15-165 degrees for readability
+	if (angle < 15.0f || angle > 165.0f) return;
+
+	QPoint screenVertex = worldToScreen(vertex);
+
+	// Find arc center and draw angle arc
+	QVector3D bisector = (v1 + v2).normalized();
+	float radius = 30.0f; // Fixed screen radius for arc
+
+	QPoint arcCenter = screenVertex + QPoint(bisector.x() * radius, -bisector.y() * radius);
+
+	// Calculate start and span angles
+	QVector3D refVec(1, 0, 0); // Reference vector along X-axis
+	float angle1 = atan2(-v1.y(), v1.x()) * 180.0f / M_PI;
+	float angle2 = atan2(-v2.y(), v2.x()) * 180.0f / M_PI;
+
+	// Normalize angles
+	while (angle1 < 0) angle1 += 360;
+	while (angle2 < 0) angle2 += 360;
+
+	float startAngle = qMin(angle1, angle2);
+	float spanAngle = qAbs(angle1 - angle2);
+
+	// Draw angle arc
+	painter.setPen(QPen(QColor(0, 255, 255), 2));
+	painter.setBrush(Qt::NoBrush);
+	painter.drawArc(arcCenter.x() - radius, arcCenter.y() - radius,
+					radius * 2, radius * 2, startAngle * 16, spanAngle * 16);
+
+	// Draw angle text
+	QString angleText = QStringLiteral("%.1f°").arg(angle);
+	QFontMetrics fm(painter.font());
+	QRect angleRect = fm.boundingRect(angleText);
+	angleRect.moveCenter(arcCenter);
+	angleRect.adjust(-3, -3, 3, 3);
+
+	// Background for angle text
+	painter.fillRect(angleRect, QColor(0, 0, 0, 200));
+	painter.setPen(QPen(QColor(0, 255, 255), 1));
+	painter.drawRect(angleRect);
+
+	painter.setPen(QPen(Qt::white, 1));
+	painter.drawText(angleRect, Qt::AlignCenter, angleText);
+}
+
+void VkViewportWidget::drawMinimap(QPainter& painter) {
+	// Draw a small navigation minimap in the top-right corner
+	const int minimapSize = 120;
+	const int margin = 15;
+	const int borderWidth = 2;
+
+	QRect minimapRect(width() - minimapSize - margin, margin, minimapSize, minimapSize);
+
+	// Minimap background
+	painter.fillRect(minimapRect, QColor(20, 20, 20, 200));
+	painter.setPen(QPen(QColor(100, 100, 100), borderWidth));
+	painter.drawRect(minimapRect.adjusted(-borderWidth/2, -borderWidth/2, borderWidth/2, borderWidth/2));
+
+	// Draw a simple representation of the scene bounds (placeholder)
+	// In a full implementation, this would show the actual scene geometry
+	const int sceneMargin = 10;
+	QRect sceneRect = minimapRect.adjusted(sceneMargin, sceneMargin, -sceneMargin, -sceneMargin);
+
+	// Draw scene bounds
+	painter.setPen(QPen(QColor(150, 150, 150), 1, Qt::DashLine));
+	painter.drawRect(sceneRect);
+
+	// Draw camera viewport indicator
+	float cameraX = (m_panX + 1000.0f) / 2000.0f; // Normalize to 0-1 range (placeholder calculation)
+	float cameraY = (m_panY + 1000.0f) / 2000.0f;
+	float viewportWidth = minimapSize - 2 * sceneMargin;
+	float viewportHeight = minimapSize - 2 * sceneMargin;
+
+	QRect viewportRect(
+		minimapRect.x() + sceneMargin + cameraX * viewportWidth - 15,
+		minimapRect.y() + sceneMargin + cameraY * viewportHeight - 10,
+		30, 20
+	);
+
+	painter.setPen(QPen(QColor(0, 255, 255), 2));
+	painter.setBrush(QBrush(QColor(0, 255, 255, 50)));
+	painter.drawRect(viewportRect);
+
+	// Minimap title
+	painter.setPen(QPen(Qt::white, 1));
+	painter.setFont(QFont("Arial", 7, QFont::Bold));
+	painter.drawText(minimapRect.adjusted(0, -12, 0, 0), Qt::AlignHCenter, "NAV");
+
+	// Zoom indicator
+	float zoomLevel = 100.0f / m_distance;
+	painter.setFont(QFont("Arial", 6));
+	painter.drawText(minimapRect.adjusted(0, minimapSize + 2, 0, 0), Qt::AlignHCenter,
+					QStringLiteral("Z:%1%").arg(static_cast<int>(zoomLevel)));
+}
+
+void VkViewportWidget::drawCoordinateDisplay(QPainter& painter) {
+	// Get mouse position in widget coordinates
+	QPoint mousePos = mapFromGlobal(QCursor::pos());
+
+	// Only show if mouse is actually over the viewport
+	if (!rect().contains(mousePos)) return;
+
+	// Convert to world coordinates
+	QVector3D worldPos = screenToWorld(mousePos);
+
+	// Get snapped position if snapping is active
+	QVector3D snappedPos = SnappingSystem::instance().snapPosition(worldPos);
+	bool isSnapped = (worldPos - snappedPos).length() < 0.01f;
+
+	// Format coordinate display with snapping preview
+	QString coordText;
+	QString snapText;
+
+	if (isSnapped) {
+		switch (m_viewType) {
+		case ViewType::Top:
+			coordText = QStringLiteral("X: %.2f  Y: %.2f").arg(snappedPos.x()).arg(snappedPos.y());
+			break;
+		case ViewType::Front:
+			coordText = QStringLiteral("X: %.2f  Z: %.2f").arg(snappedPos.x()).arg(snappedPos.z());
+			break;
+		case ViewType::Side:
+			coordText = QStringLiteral("Y: %.2f  Z: %.2f").arg(snappedPos.y()).arg(snappedPos.z());
+			break;
+		case ViewType::Perspective:
+		default:
+			coordText = QStringLiteral("X: %.2f  Y: %.2f  Z: %.2f").arg(snappedPos.x()).arg(snappedPos.y()).arg(snappedPos.z());
+			break;
+		}
+		snapText = QStringLiteral("SNAPPED");
+	} else {
+		switch (m_viewType) {
+		case ViewType::Top:
+			coordText = QStringLiteral("X: %.2f  Y: %.2f").arg(worldPos.x()).arg(worldPos.y());
+			break;
+		case ViewType::Front:
+			coordText = QStringLiteral("X: %.2f  Z: %.2f").arg(worldPos.x()).arg(worldPos.z());
+			break;
+		case ViewType::Side:
+			coordText = QStringLiteral("Y: %.2f  Z: %.2f").arg(worldPos.y()).arg(worldPos.z());
+			break;
+		case ViewType::Perspective:
+		default:
+			coordText = QStringLiteral("X: %.2f  Y: %.2f  Z: %.2f").arg(worldPos.x()).arg(worldPos.y()).arg(worldPos.z());
+			break;
+		}
+		snapText = QStringLiteral("FREE");
+	}
+
+	// Position in bottom-left corner with dynamic width
+	QFontMetrics fm(QFont("Consolas", 9, QFont::Bold));
+	int coordWidth = fm.horizontalAdvance(coordText) + 60;
+	int snapWidth = fm.horizontalAdvance(snapText) + 20;
+	int totalWidth = coordWidth + snapWidth + 10;
+
+	QRect coordRect(10, height() - 35, totalWidth, 25);
+
+	// Background for readability with rounded corners
+	QPainterPath bgPath;
+	bgPath.addRoundedRect(coordRect.adjusted(-5, -5, 5, 5), 5, 5);
+	painter.fillPath(bgPath, QColor(0, 0, 0, 200));
+
+	// Border with snap status color
+	QColor borderColor = isSnapped ? QColor(100, 255, 100) : QColor(150, 150, 150);
+	painter.setPen(QPen(borderColor, 1));
+	painter.drawPath(bgPath);
+
+	// Coordinate text
+	painter.setPen(QPen(QColor(200, 200, 255), 1));
+	painter.setFont(QFont("Consolas", 9, QFont::Bold));
+	painter.drawText(coordRect.adjusted(5, 0, -snapWidth-10, 0), Qt::AlignVCenter | Qt::AlignLeft, coordText);
+
+	// Snap status indicator
+	QColor snapColor = isSnapped ? QColor(100, 255, 100) : QColor(200, 200, 200);
+	painter.setPen(QPen(snapColor, 1));
+	painter.drawText(coordRect.adjusted(coordWidth - snapWidth + 5, 0, -5, 0), Qt::AlignVCenter | Qt::AlignRight, snapText);
+
+	// Draw snap preview line if snapping and there's a significant difference
+	if (isSnapped && (worldPos - snappedPos).length() > 0.1f) {
+		QPoint worldScreen = worldToScreen(worldPos);
+		QPoint snapScreen = worldToScreen(snappedPos);
+
+		painter.setPen(QPen(QColor(255, 255, 0, 150), 1, Qt::DashLine));
+		painter.drawLine(worldScreen, snapScreen);
+
+		// Small indicator at snap target
+		painter.setPen(QPen(QColor(100, 255, 100), 2));
+		painter.setBrush(QBrush(QColor(100, 255, 100, 100)));
+		painter.drawEllipse(snapScreen, 3, 3);
+	}
+}
+
+void VkViewportWidget::saveBookmark(int slot) {
+	if (slot < 0 || slot >= 10) return;
+
+	m_bookmarks[slot] = {m_yaw, m_pitch, m_distance, m_panX, m_panY, m_viewType};
+	m_bookmarkSaved[slot] = true;
+}
+
+void VkViewportWidget::loadBookmark(int slot) {
+	if (slot < 0 || slot >= 10 || !m_bookmarkSaved[slot]) return;
+
+	const auto& bookmark = m_bookmarks[slot];
+	m_yaw = bookmark.yaw;
+	m_pitch = bookmark.pitch;
+	m_distance = bookmark.distance;
+	m_panX = bookmark.panX;
+	m_panY = bookmark.panY;
+
+	// Note: We don't change viewType as bookmarks are per-viewport
+	update();
+}
+
+bool VkViewportWidget::hasBookmark(int slot) const {
+	return slot >= 0 && slot < 10 && m_bookmarkSaved[slot];
+}
+
+void VkViewportWidget::drawPerformanceWarning(QPainter& painter) {
+	if (m_currentFPS >= 30.0f) return;
+
+	// Draw performance warning overlay
+	QColor warningColor(255, 100, 100, 150);
+	painter.fillRect(rect(), warningColor);
+
+	// Warning text
+	painter.setPen(QPen(Qt::white, 2));
+	painter.setFont(QFont("Arial", 14, QFont::Bold));
+	painter.drawText(rect(), Qt::AlignCenter, QStringLiteral("⚠ LOW FPS\n%1 FPS").arg(static_cast<int>(m_currentFPS)));
+
+	// Performance tips
+	painter.setFont(QFont("Arial", 10));
+	QStringList tips = {
+		"Try reducing viewport resolution",
+		"Disable wireframe mode",
+		"Hide unnecessary geometry",
+		"Reduce texture detail"
+	};
+
+	int y = height() / 2 + 50;
+	for (const QString& tip : tips) {
+		painter.drawText(width() / 2 - 150, y, 300, 20, Qt::AlignCenter, tip);
+		y += 20;
+	}
+}
+
+// ===== VIEWPORT ENHANCEMENT METHODS =====
+
+// Measurement tools
+void VkViewportWidget::addMeasurement(const QVector3D& start, const QVector3D& end) {
+	Measurement measurement;
+	measurement.start = start;
+	measurement.end = end;
+	measurement.distance = (end - start).length();
+	measurement.active = true;
+	m_measurements.append(measurement);
+	update();
+}
+
+void VkViewportWidget::clearMeasurements() {
+	m_measurements.clear();
+	update();
+}
+
+// Bookmarks
+void VkViewportWidget::saveBookmark(int slot) {
+	if (slot < 0 || slot >= 10) return;
+
+	m_bookmarks[slot].yaw = m_yaw;
+	m_bookmarks[slot].pitch = m_pitch;
+	m_bookmarks[slot].distance = m_distance;
+	m_bookmarks[slot].panX = m_panX;
+	m_bookmarks[slot].panY = m_panY;
+	m_bookmarks[slot].valid = true;
+
+	// Could save to QSettings here for persistence
+}
+
+
+// Performance monitoring
+void VkViewportWidget::updatePerformanceStats(float fps, float frameTime, int triangles, int drawCalls) {
+	m_fps = fps;
+	m_frameTime = frameTime;
+	m_triangleCount = triangles;
+	m_drawCallCount = drawCalls;
+	update();
+}
+
+// Enhanced measurement drawing
+void VkViewportWidget::drawMeasurements(QPainter& painter) {
+	if (m_measurements.isEmpty()) return;
+
+	painter.setFont(QFont("Arial", 8));
+
+	for (const Measurement& measurement : m_measurements) {
+		if (!measurement.active) continue;
+
+		// Convert 3D points to screen coordinates
+		QPoint startScreen = worldToScreen(measurement.start);
+		QPoint endScreen = worldToScreen(measurement.end);
+
+		// Draw measurement line
+		QColor lineColor(255, 255, 0, 200); // Yellow with transparency
+		painter.setPen(QPen(lineColor, 2));
+		painter.drawLine(startScreen, endScreen);
+
+		// Draw distance label
+		QPoint midPoint = (startScreen + endScreen) / 2;
+		QString distanceText = QStringLiteral("%.2f units").arg(measurement.distance);
+
+		// Background for text
+		QFontMetrics fm(painter.font());
+		QRect textRect = fm.boundingRect(distanceText);
+		textRect.moveCenter(midPoint);
+
+		painter.setPen(Qt::NoPen);
+		painter.setBrush(QBrush(QColor(0, 0, 0, 180)));
+		painter.drawRect(textRect.adjusted(-2, -2, 2, 2));
+
+		// Text
+		painter.setPen(QPen(Qt::white));
+		painter.drawText(textRect, Qt::AlignCenter, distanceText);
+
+		// Draw endpoint markers
+		painter.setPen(QPen(lineColor, 3));
+		painter.setBrush(QBrush(lineColor));
+		painter.drawEllipse(startScreen, 4, 4);
+		painter.drawEllipse(endScreen, 4, 4);
+	}
+}
+
+void VkViewportWidget::drawCameraFrustum(QPainter& painter) {
+	// TODO: Draw camera frustum visualization for orthographic views
+	Q_UNUSED(painter);
+}
+
+void VkViewportWidget::drawMeasurementOverlay(QPainter& painter) {
+	// TODO: Draw measurement creation overlay
+	Q_UNUSED(painter);
+}
+
+void VkViewportWidget::drawMinimap(QPainter& painter) {
+	// TODO: Draw navigation minimap in corner
+	Q_UNUSED(painter);
+}
+
+void VkViewportWidget::drawPerformanceWarning(QPainter& painter) {
+	// Draw performance warning when FPS is low
+	QColor warningColor(255, 165, 0, 200); // Orange
+	painter.setPen(QPen(warningColor, 2));
+	painter.setBrush(QBrush(QColor(255, 165, 0, 100)));
+
+	int warningSize = 100;
+	int x = width() - warningSize - 10;
+	int y = 10;
+
+	painter.drawRoundedRect(x, y, warningSize, 40, 5, 5);
+
+	painter.setPen(QPen(Qt::white));
+	painter.setFont(QFont("Arial", 8));
+	painter.drawText(x + 5, y + 15, "Low FPS!");
+	painter.drawText(x + 5, y + 30, QString("Current: %1").arg(m_currentFPS, 0, 'f', 1));
+}
+
+void VkViewportWidget::drawMeasurements(QPainter& painter) {
+	for (const Measurement& measurement : m_measurements) {
+		if (!measurement.active) continue;
+
+		QPoint startScreen = worldToScreen(measurement.start);
+		QPoint endScreen = worldToScreen(measurement.end);
+
+		if (startScreen.x() < 0 || startScreen.y() < 0 || startScreen.x() >= width() || startScreen.y() >= height() ||
+			endScreen.x() < 0 || endScreen.y() < 0 || endScreen.x() >= width() || endScreen.y() >= height()) {
+			continue; // Skip measurements where endpoints are not visible
+		}
+
+		QColor lineColor(255, 255, 0, 180); // Yellow measurement lines
+		painter.setPen(QPen(lineColor, 2));
+
+		// Draw measurement line
+		painter.drawLine(startScreen, endScreen);
+
+		// Calculate midpoint for text
+		QPoint midPoint = (startScreen + endScreen) / 2;
+
+		// Draw background for text
+		QFontMetrics fm(painter.font());
+		QString distanceText = QString("%1").arg(measurement.distance, 0, 'f', 2);
+		QRect textRect = fm.boundingRect(distanceText);
+		textRect.moveCenter(midPoint);
+
+		painter.setPen(Qt::NoPen);
+		painter.setBrush(QBrush(QColor(0, 0, 0, 180)));
+		painter.drawRect(textRect.adjusted(-2, -2, 2, 2));
+
+		// Text
+		painter.setPen(QPen(Qt::white));
+		painter.drawText(textRect, Qt::AlignCenter, distanceText);
+
+		// Draw endpoint markers
+		painter.setPen(QPen(lineColor, 3));
+		painter.setBrush(QBrush(lineColor));
+		painter.drawEllipse(startScreen, 4, 4);
+		painter.drawEllipse(endScreen, 4, 4);
+	}
+}
+
+void VkViewportWidget::drawCoordinateDisplay(QPainter& painter) {
+	// TODO: Draw coordinate display
+	Q_UNUSED(painter);
+}
+
+void VkViewportWidget::drawCrosshair(QPainter& painter) {
+	int centerX = width() / 2;
+	int centerY = height() / 2;
+
+	QColor crosshairColor(255, 255, 255, 150);
+	painter.setPen(QPen(crosshairColor, 1));
+
+	// Horizontal line
+	painter.drawLine(centerX - 10, centerY, centerX + 10, centerY);
+	// Vertical line
+	painter.drawLine(centerX, centerY - 10, centerX, centerY + 10);
+
+	// Center dot
+	painter.setPen(Qt::NoPen);
+	painter.setBrush(QBrush(crosshairColor));
+	painter.drawEllipse(centerX - 1, centerY - 1, 2, 2);
+}
+
+// ===== ENHANCED VIEWPORT FEATURES =====
+
+void VkViewportWidget::addMeasurement(const QVector3D& start, const QVector3D& end) {
+	Measurement measurement;
+	measurement.start = start;
+	measurement.end = end;
+	measurement.distance = (end - start).length();
+	measurement.active = true;
+
+	m_measurements.append(measurement);
+	update();
+}
+
+void VkViewportWidget::clearMeasurements() {
+	m_measurements.clear();
+	update();
+}
+
+void VkViewportWidget::saveBookmark(int slot) {
+	if (slot < 0 || slot >= 10) return;
+
+	m_bookmarks[slot].yaw = m_yaw;
+	m_bookmarks[slot].pitch = m_pitch;
+	m_bookmarks[slot].distance = m_distance;
+	m_bookmarks[slot].panX = m_panX;
+	m_bookmarks[slot].panY = m_panY;
+	m_bookmarks[slot].valid = true;
+
+	// Show feedback
+	if (m_console) {
+		m_console->appendPlainText(QStringLiteral("Camera bookmark saved to slot %1").arg(slot));
+	}
+}
+
+void VkViewportWidget::loadBookmark(int slot) {
+	if (slot < 0 || slot >= 10 || !m_bookmarks[slot].valid) return;
+
+	m_yaw = m_bookmarks[slot].yaw;
+	m_pitch = m_bookmarks[slot].pitch;
+	m_distance = m_bookmarks[slot].distance;
+	m_panX = m_bookmarks[slot].panX;
+	m_panY = m_bookmarks[slot].panY;
+
+	update();
+
+	// Show feedback
+	if (m_console) {
+		m_console->appendPlainText(QStringLiteral("Camera bookmark loaded from slot %1").arg(slot));
+	}
+}
+
+void VkViewportWidget::updatePerformanceStats(float fps, float frameTime, int triangles, int drawCalls) {
+	m_fps = fps;
+	m_frameTime = frameTime;
+	m_triangleCount = triangles;
+	m_drawCallCount = drawCalls;
+}
+
+QPoint VkViewportWidget::worldToScreen(const QVector3D& worldPos) const {
+	QVector4D pos4(worldPos.x(), worldPos.y(), worldPos.z(), 1.0f);
+
+	// Get current view and projection matrices
+	QMatrix4x4 viewMatrix, projMatrix;
+	buildViewMatrices(viewMatrix, projMatrix);
+
+	QVector4D viewPos = viewMatrix * pos4;
+	QVector4D clipPos = projMatrix * viewPos;
+
+	if (clipPos.w() <= 0.0f) {
+		return QPoint(-1, -1); // Behind camera
+	}
+
+	float invW = 1.0f / clipPos.w();
+	QPoint screenPos(
+		static_cast<int>((clipPos.x() * invW + 1.0f) * 0.5f * width()),
+		static_cast<int>((1.0f - clipPos.y() * invW) * 0.5f * height())
+	);
+
+	return screenPos;
+}
+
+void VkViewportWidget::drawWorldAxes(QPainter& painter) {
+	if (!m_showAxes) return;
+
+	// Draw world coordinate axes
+	QVector3D origin(0, 0, 0);
+	QPoint originScreen = worldToScreen(origin);
+
+	if (originScreen.x() < 0 || originScreen.y() < 0 ||
+		originScreen.x() >= width() || originScreen.y() >= height()) {
+		return; // Origin not visible
+	}
+
+	// Draw axis lines (X=red, Y=green, Z=blue)
+	const float axisLength = 1.0f;
+
+	// X axis (red)
+	QVector3D xAxis(axisLength, 0, 0);
+	QPoint xScreen = worldToScreen(xAxis);
+	if (xScreen.x() >= 0 && xScreen.y() >= 0 && xScreen.x() < width() && xScreen.y() < height()) {
+		painter.setPen(QPen(Qt::red, 2));
+		painter.drawLine(originScreen, xScreen);
+		painter.drawText(xScreen + QPoint(5, 0), "X");
+	}
+
+	// Y axis (green)
+	QVector3D yAxis(0, axisLength, 0);
+	QPoint yScreen = worldToScreen(yAxis);
+	if (yScreen.x() >= 0 && yScreen.y() >= 0 && yScreen.x() < width() && yScreen.y() < height()) {
+		painter.setPen(QPen(Qt::green, 2));
+		painter.drawLine(originScreen, yScreen);
+		painter.drawText(yScreen + QPoint(5, 0), "Y");
+	}
+
+	// Z axis (blue)
+	QVector3D zAxis(0, 0, axisLength);
+	QPoint zScreen = worldToScreen(zAxis);
+	if (zScreen.x() >= 0 && zScreen.y() >= 0 && zScreen.x() < width() && zScreen.y() < height()) {
+		painter.setPen(QPen(Qt::blue, 2));
+		painter.drawLine(originScreen, zScreen);
+		painter.drawText(zScreen + QPoint(5, 0), "Z");
+	}
+}
+
+void VkViewportWidget::drawEnhancedGrid(QPainter& painter) {
+	if (!m_showGrid) return;
+
+	QColor gridColor(100, 100, 100, 80);
+	painter.setPen(QPen(gridColor, 1));
+
+	float gridSize = VkViewportWidget::gridSize();
+	if (gridSize <= 0.0f) return;
+
+	// Calculate visible grid range based on current view
+	QRectF visibleRect;
+	switch (m_viewType) {
+	case ViewType::Top:
+		visibleRect = QRectF(-m_panX - 10, -m_panY - 10, 20, 20);
+		break;
+	case ViewType::Front:
+		visibleRect = QRectF(-m_panX - 10, -m_panY - 10, 20, 20);
+		break;
+	case ViewType::Side:
+		visibleRect = QRectF(-m_panX - 10, -m_panY - 10, 20, 20);
+		break;
+	default:
+		return; // Don't draw grid for perspective view
+	}
+
+	// Draw grid lines
+	int startX = static_cast<int>(visibleRect.left() / gridSize) * gridSize;
+	int endX = static_cast<int>(visibleRect.right() / gridSize + 1) * gridSize;
+	int startY = static_cast<int>(visibleRect.top() / gridSize) * gridSize;
+	int endY = static_cast<int>(visibleRect.bottom() / gridSize + 1) * gridSize;
+
+	// Vertical lines
+	for (int x = startX; x <= endX; x += gridSize) {
+		QVector3D worldStart(x, visibleRect.top(), 0);
+		QVector3D worldEnd(x, visibleRect.bottom(), 0);
+
+		QPoint screenStart = worldToScreen(worldStart);
+		QPoint screenEnd = worldToScreen(worldEnd);
+
+		if (screenStart.x() >= 0 && screenStart.x() < width()) {
+			painter.drawLine(screenStart.x(), 0, screenStart.x(), height());
+		}
+	}
+
+	// Horizontal lines
+	for (int y = startY; y <= endY; y += gridSize) {
+		QVector3D worldStart(visibleRect.left(), y, 0);
+		QVector3D worldEnd(visibleRect.right(), y, 0);
+
+		QPoint screenStart = worldToScreen(worldStart);
+		QPoint screenEnd = worldToScreen(worldEnd);
+
+		if (screenStart.y() >= 0 && screenStart.y() < height()) {
+			painter.drawLine(0, screenStart.y(), width(), screenStart.y());
+		}
+	}
+}
+
+void VkViewportWidget::drawViewportInfo(QPainter& painter) {
+	if (!m_showStats) return;
+
+	QColor textColor(255, 255, 255, 200);
+	painter.setPen(QPen(textColor));
+	painter.setFont(QFont("Arial", 9));
+
+	int lineHeight = 15;
+	int startY = 10;
+	int startX = 10;
+
+	if (m_showFPS) {
+		painter.drawText(startX, startY, QString("FPS: %1").arg(m_fps, 0, 'f', 1));
+		startY += lineHeight;
+	}
+
+	if (m_showStats) {
+		painter.drawText(startX, startY, QString("Triangles: %1").arg(m_triangleCount));
+		startY += lineHeight;
+		painter.drawText(startX, startY, QString("Draw Calls: %1").arg(m_drawCallCount));
+		startY += lineHeight;
+		painter.drawText(startX, startY, QString("Frame Time: %1ms").arg(m_frameTime, 0, 'f', 2));
+		startY += lineHeight;
+	}
+
+	// View mode info
+	QString viewMode;
+	switch (m_viewType) {
+	case ViewType::Perspective: viewMode = "Perspective"; break;
+	case ViewType::Top: viewMode = "Top"; break;
+	case ViewType::Front: viewMode = "Front"; break;
+	case ViewType::Side: viewMode = "Side"; break;
+	}
+
+	if (m_viewType == ViewType::Perspective) {
+		painter.drawText(startX, startY, QString("View: %1 (Yaw: %2°, Pitch: %3°)")
+			.arg(viewMode).arg(m_yaw, 0, 'f', 1).arg(m_pitch, 0, 'f', 1));
+	} else {
+		painter.drawText(startX, startY, QString("View: %1").arg(viewMode));
+	}
+}
+
+void VkViewportWidget::drawSelectionIndicators(QPainter& painter) {
+	if (!m_hasSelection) return;
+
+	// Draw selection highlight
+	QPoint selectionScreen = worldToScreen(m_selection);
+	if (selectionScreen.x() >= 0 && selectionScreen.y() >= 0 &&
+		selectionScreen.x() < width() && selectionScreen.y() < height()) {
+
+		QColor selectionColor(255, 255, 0, 150);
+		painter.setPen(QPen(selectionColor, 2));
+		painter.setBrush(Qt::NoBrush);
+
+		int radius = 8;
+		painter.drawEllipse(selectionScreen.x() - radius, selectionScreen.y() - radius,
+						   radius * 2, radius * 2);
+
+		// Selection coordinates if enabled
+		if (m_showCoordinates) {
+			painter.setPen(QPen(Qt::white));
+			painter.setFont(QFont("Arial", 8));
+			QString coords = QString("(%1, %2, %3)")
+				.arg(m_selection.x(), 0, 'f', 2)
+				.arg(m_selection.y(), 0, 'f', 2)
+				.arg(m_selection.z(), 0, 'f', 2);
+			painter.drawText(selectionScreen + QPoint(12, 0), coords);
+		}
+	}
 }

@@ -25,6 +25,9 @@ ColorPickerDialog::ColorPickerDialog(QWidget* parent)
 {
 	setWindowTitle(QStringLiteral("Color Picker"));
 	setModal(true);
+	setWindowFlags(Qt::Dialog | Qt::WindowTitleHint | Qt::WindowSystemMenuHint |
+	              Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
+	setSizeGripEnabled(true);
 	resize(500, 400);
 	
 	auto* mainLayout = new QVBoxLayout(this);

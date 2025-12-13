@@ -1,4 +1,5 @@
 #include "preferences_dialog.h"
+#include "snapping_system.h"
 
 #include <QTabWidget>
 #include <QCheckBox>
@@ -50,9 +51,6 @@ void PreferencesDialog::setupUI() {
 	m_loadLastMapCheck->setText(QStringLiteral("Load Last Map on Startup"));
 	generalLayout->addRow(m_loadLastMapCheck);
 	
-	m_showGridCheck = new QCheckBox(generalTab);
-	m_showGridCheck->setText(QStringLiteral("Show Grid"));
-	generalLayout->addRow(m_showGridCheck);
 	
 	m_snapToGridCheck = new QCheckBox(generalTab);
 	m_snapToGridCheck->setText(QStringLiteral("Snap to Grid"));
@@ -84,7 +82,67 @@ void PreferencesDialog::setupUI() {
 	m_showAxesCheck = new QCheckBox(viewportTab);
 	m_showAxesCheck->setText(QStringLiteral("Show Axes"));
 	viewportLayout->addRow(m_showAxesCheck);
-	
+
+	// Viewport display settings
+	viewportLayout->addRow(new QLabel(QStringLiteral("<b>Viewport Display:</b>")));
+
+	m_showStatsCheck = new QCheckBox(viewportTab);
+	m_showStatsCheck->setText(QStringLiteral("Show Viewport Stats"));
+	viewportLayout->addRow(m_showStatsCheck);
+
+	m_showGridCheck = new QCheckBox(viewportTab);
+	m_showGridCheck->setText(QStringLiteral("Show Grid"));
+	viewportLayout->addRow(m_showGridCheck);
+
+	m_showFPSCheck = new QCheckBox(viewportTab);
+	m_showFPSCheck->setText(QStringLiteral("Show FPS Counter"));
+	viewportLayout->addRow(m_showFPSCheck);
+
+	m_wireframeModeCheck = new QCheckBox(viewportTab);
+	m_wireframeModeCheck->setText(QStringLiteral("Wireframe Mode"));
+	viewportLayout->addRow(m_wireframeModeCheck);
+
+	// Additional viewport features
+	viewportLayout->addRow(new QLabel(QStringLiteral("<b>Advanced Features:</b>")));
+
+	m_showMeasurementsCheck = new QCheckBox(viewportTab);
+	m_showMeasurementsCheck->setText(QStringLiteral("Show Measurements"));
+	viewportLayout->addRow(m_showMeasurementsCheck);
+
+	m_showMinimapCheck = new QCheckBox(viewportTab);
+	m_showMinimapCheck->setText(QStringLiteral("Show Navigation Minimap"));
+	viewportLayout->addRow(m_showMinimapCheck);
+
+	m_showPerformanceWarningsCheck = new QCheckBox(viewportTab);
+	m_showPerformanceWarningsCheck->setText(QStringLiteral("Show Performance Warnings"));
+	viewportLayout->addRow(m_showPerformanceWarningsCheck);
+
+	// Snapping controls
+	viewportLayout->addRow(new QLabel(QStringLiteral("<b>Snapping:</b>")));
+
+	m_snapToGridCheck = new QCheckBox(viewportTab);
+	m_snapToGridCheck->setText(QStringLiteral("Snap to Grid"));
+	viewportLayout->addRow(m_snapToGridCheck);
+
+	m_snapToPointCheck = new QCheckBox(viewportTab);
+	m_snapToPointCheck->setText(QStringLiteral("Snap to Points"));
+	viewportLayout->addRow(m_snapToPointCheck);
+
+	m_snapToEdgeCheck = new QCheckBox(viewportTab);
+	m_snapToEdgeCheck->setText(QStringLiteral("Snap to Edges"));
+	viewportLayout->addRow(m_snapToEdgeCheck);
+
+	m_snapToFaceCheck = new QCheckBox(viewportTab);
+	m_snapToFaceCheck->setText(QStringLiteral("Snap to Faces"));
+	viewportLayout->addRow(m_snapToFaceCheck);
+
+	m_snapThresholdSpin = new QDoubleSpinBox(viewportTab);
+	m_snapThresholdSpin->setRange(0.01, 10.0);
+	m_snapThresholdSpin->setValue(0.5);
+	m_snapThresholdSpin->setSingleStep(0.1);
+	m_snapThresholdSpin->setSuffix(QStringLiteral(" units"));
+	viewportLayout->addRow(QStringLiteral("Snap Threshold:"), m_snapThresholdSpin);
+
 	m_tabs->addTab(viewportTab, QStringLiteral("Viewport"));
 	
 	// Editor tab
@@ -184,7 +242,6 @@ void PreferencesDialog::loadSettings() {
 	m_autosaveCheck->setChecked(settings.value("autosave/enabled", true).toBool());
 	m_autosaveIntervalSpin->setValue(settings.value("autosave/interval", 5).toInt());
 	m_loadLastMapCheck->setChecked(settings.value("general/loadLastMap", true).toBool());
-	m_showGridCheck->setChecked(settings.value("viewport/showGrid", true).toBool());
 	m_snapToGridCheck->setChecked(settings.value("viewport/snapToGrid", true).toBool());
 	
 	// Viewport
@@ -192,7 +249,20 @@ void PreferencesDialog::loadSettings() {
 	m_show3DGridCheck->setChecked(settings.value("viewport/show3DGrid", false).toBool());
 	m_fovSpin->setValue(settings.value("viewport/fov", 75).toInt());
 	m_showAxesCheck->setChecked(settings.value("viewport/showAxes", true).toBool());
-	
+	m_showStatsCheck->setChecked(settings.value("viewport/showStats", true).toBool());
+	m_showGridCheck->setChecked(settings.value("viewport/showGrid", true).toBool());
+	m_showFPSCheck->setChecked(settings.value("viewport/showFPS", true).toBool());
+	m_wireframeModeCheck->setChecked(settings.value("viewport/wireframeMode", false).toBool());
+	m_showMeasurementsCheck->setChecked(settings.value("viewport/showMeasurements", false).toBool());
+	m_showMinimapCheck->setChecked(settings.value("viewport/showMinimap", false).toBool());
+	m_showPerformanceWarningsCheck->setChecked(settings.value("viewport/showPerformanceWarnings", true).toBool());
+
+	// Snapping
+	m_snapToPointCheck->setChecked(settings.value("snapping/pointSnap", false).toBool());
+	m_snapToEdgeCheck->setChecked(settings.value("snapping/edgeSnap", false).toBool());
+	m_snapToFaceCheck->setChecked(settings.value("snapping/faceSnap", false).toBool());
+	m_snapThresholdSpin->setValue(settings.value("snapping/threshold", 0.5).toDouble());
+
 	// Editor
 	m_themeCombo->setCurrentText(settings.value("editor/theme", "Dark").toString());
 	m_fontCombo->setCurrentText(settings.value("editor/font", "Default").toString());
@@ -212,7 +282,6 @@ void PreferencesDialog::saveSettings() {
 	settings.setValue("autosave/enabled", m_autosaveCheck->isChecked());
 	settings.setValue("autosave/interval", m_autosaveIntervalSpin->value());
 	settings.setValue("general/loadLastMap", m_loadLastMapCheck->isChecked());
-	settings.setValue("viewport/showGrid", m_showGridCheck->isChecked());
 	settings.setValue("viewport/snapToGrid", m_snapToGridCheck->isChecked());
 	
 	// Viewport
@@ -220,6 +289,19 @@ void PreferencesDialog::saveSettings() {
 	settings.setValue("viewport/show3DGrid", m_show3DGridCheck->isChecked());
 	settings.setValue("viewport/fov", m_fovSpin->value());
 	settings.setValue("viewport/showAxes", m_showAxesCheck->isChecked());
+	settings.setValue("viewport/showStats", m_showStatsCheck->isChecked());
+	settings.setValue("viewport/showGrid", m_showGridCheck->isChecked());
+	settings.setValue("viewport/showFPS", m_showFPSCheck->isChecked());
+	settings.setValue("viewport/wireframeMode", m_wireframeModeCheck->isChecked());
+	settings.setValue("viewport/showMeasurements", m_showMeasurementsCheck->isChecked());
+	settings.setValue("viewport/showMinimap", m_showMinimapCheck->isChecked());
+	settings.setValue("viewport/showPerformanceWarnings", m_showPerformanceWarningsCheck->isChecked());
+
+	// Snapping
+	settings.setValue("snapping/pointSnap", m_snapToPointCheck->isChecked());
+	settings.setValue("snapping/edgeSnap", m_snapToEdgeCheck->isChecked());
+	settings.setValue("snapping/faceSnap", m_snapToFaceCheck->isChecked());
+	settings.setValue("snapping/threshold", m_snapThresholdSpin->value());
 	
 	// Editor
 	settings.setValue("editor/theme", m_themeCombo->currentText());
@@ -231,6 +313,16 @@ void PreferencesDialog::saveSettings() {
 	// Build
 	settings.setValue("build/q3map2Path", m_q3map2PathEdit->text());
 	settings.setValue("build/compilerOptions", m_compilerOptionsEdit->text());
+
+	// Update snapping system
+	SnappingSystem::instance().setSnapMode(SnapMode::Grid, m_snapToGridCheck->isChecked());
+	SnappingSystem::instance().setSnapMode(SnapMode::Point, m_snapToPointCheck->isChecked());
+	SnappingSystem::instance().setSnapMode(SnapMode::Edge, m_snapToEdgeCheck->isChecked());
+	SnappingSystem::instance().setSnapMode(SnapMode::Face, m_snapToFaceCheck->isChecked());
+	SnappingSystem::instance().setSnapThreshold(m_snapThresholdSpin->value());
+
+	// Update viewport settings - signal to main window to apply to all viewports
+	// This would need to be implemented with signals/slots in a full implementation
 }
 
 void PreferencesDialog::onApply() {

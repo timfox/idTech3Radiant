@@ -20,6 +20,9 @@ MESSDialog::MESSDialog(MESSManager* manager, QWidget* parent)
 	: QDialog(parent), m_manager(manager) {
 	setWindowTitle(QStringLiteral("MESS Template Browser"));
 	setModal(true);
+	setWindowFlags(Qt::Dialog | Qt::WindowTitleHint | Qt::WindowSystemMenuHint |
+	              Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
+	setSizeGripEnabled(true);
 	resize(800, 600);
 	
 	setupUI();

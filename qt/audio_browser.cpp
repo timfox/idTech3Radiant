@@ -19,6 +19,9 @@ AudioBrowser::AudioBrowser(QWidget* parent)
 {
 	setWindowTitle(QStringLiteral("Audio Browser"));
 	setModal(true);
+	setWindowFlags(Qt::Dialog | Qt::WindowTitleHint | Qt::WindowSystemMenuHint |
+	              Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
+	setSizeGripEnabled(true);
 	resize(600, 500);
 	
 	auto* mainLayout = new QVBoxLayout(this);

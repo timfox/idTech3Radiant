@@ -18,6 +18,9 @@ TextureExtractionDialog::TextureExtractionDialog(QWidget* parent)
 	: QDialog(parent) {
 	setWindowTitle(QStringLiteral("Texture Extraction Tool"));
 	setModal(true);
+	setWindowFlags(Qt::Dialog | Qt::WindowTitleHint | Qt::WindowSystemMenuHint |
+	              Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
+	setSizeGripEnabled(true);
 	resize(600, 500);
 	
 	m_extractor = new TextureExtractor();

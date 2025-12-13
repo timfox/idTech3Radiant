@@ -109,6 +109,58 @@ private:
 	void updateCameraText();
 	void buildViewMatrices(QMatrix4x4& viewMatrix, QMatrix4x4& projMatrix) const;
 	QVector3D screenToWorld(const QPoint& screenPos) const;
+	QPoint worldToScreen(const QVector3D& worldPos) const;
+
+	// Enhanced viewport rendering
+	void drawWorldAxes(QPainter& painter);
+	void drawEnhancedGrid(QPainter& painter);
+	void drawViewportInfo(QPainter& painter);
+	void drawSelectionIndicators(QPainter& painter);
+
+public:
+	// Viewport settings
+	void setShowStats(bool show) { m_showStats = show; update(); }
+	bool showStats() const { return m_showStats; }
+	void setShowAxes(bool show) { m_showAxes = show; update(); }
+	bool showAxes() const { return m_showAxes; }
+	void setShowGrid(bool show) { m_showGrid = show; update(); }
+	bool showGrid() const { return m_showGrid; }
+	void setShowFPS(bool show) { m_showFPS = show; update(); }
+	bool showFPS() const { return m_showFPS; }
+	void setWireframeMode(bool wireframe) { m_wireframeMode = wireframe; update(); }
+	bool wireframeMode() const { return m_wireframeMode; }
+	void setShowMeasurements(bool show) { m_showMeasurements = show; update(); }
+	bool showMeasurements() const { return m_showMeasurements; }
+	void setShowMinimap(bool show) { m_showMinimap = show; update(); }
+	bool showMinimap() const { return m_showMinimap; }
+	void setShowPerformanceWarnings(bool show) { m_showPerformanceWarnings = show; update(); }
+	bool showPerformanceWarnings() const { return m_showPerformanceWarnings; }
+
+	// Performance monitoring
+	float currentFPS() const { return m_currentFPS; }
+	void updateFPS();
+
+public:
+	// Viewport bookmarks
+	void saveBookmark(int slot);
+	void loadBookmark(int slot);
+	bool hasBookmark(int slot) const;
+
+	// Viewport display modes
+	enum class DisplayMode {
+		Normal,
+		Wireframe,
+		Shaded,
+		Textured
+	};
+	void setDisplayMode(DisplayMode mode) { m_displayMode = mode; update(); }
+	DisplayMode displayMode() const { return m_displayMode; }
+
+	// Advanced viewport features
+	void setShowNormals(bool show) { m_showNormals = show; update(); }
+	bool showNormals() const { return m_showNormals; }
+	void setShowBounds(bool show) { m_showBounds = show; update(); }
+	bool showBounds() const { return m_showBounds; }
 
 	QString m_rendererPath;
 	QString m_status;
@@ -167,11 +219,53 @@ private:
 	QElapsedTimer m_frameTimer;
 	qint64 m_lastFrameMs{0};
 
-#ifdef RADIANT_USE_ENGINE_RENDERER_VK
-	refexport_t* m_re{nullptr};
-#endif
+	// Viewport display settings
+	bool m_showStats{true};
+	bool m_showAxes{true};
+	bool m_showGrid{true};
+	bool m_showFPS{false};
+	bool m_wireframeMode{false};
+	bool m_showMeasurements{false};
+	bool m_showMinimap{false};
+	bool m_showCrosshair{true};
+	bool m_showCoordinates{true};
+	bool m_showPerformanceWarnings{true};
+	bool m_showNormals{false};
+	bool m_showBounds{false};
+	DisplayMode m_displayMode{DisplayMode::Normal};
+
+	// Performance monitoring
+	float m_currentFPS{60.0f};
+	QElapsedTimer m_fpsTimer;
+	int m_frameCount{0};
+
+	// Measurement tools
+	struct Measurement {
+		QVector3D start;
+		QVector3D end;
+		float distance;
+		bool active;
+	};
+	QVector<Measurement> m_measurements;
+
+	// Viewport bookmarks
+	struct ViewportBookmark {
+		float yaw, pitch, distance;
+		float panX, panY;
+		bool valid;
+	};
+	ViewportBookmark m_bookmarks[10]; // 0-9
+
+	// Performance monitoring
+	float m_fps{60.0f};
+	float m_frameTime{16.7f};
+	int m_triangleCount{0};
+	int m_drawCallCount{0};
 
 	SelectionMode m_selectionMode{SelectionMode::Object};
+
+	// Measurement tool state
+	QVector3D m_measurementStart;
 
 	// Grid settings (static for all viewports)
 	static float s_gridSize;

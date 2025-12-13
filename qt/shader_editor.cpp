@@ -17,6 +17,9 @@ ShaderEditor::ShaderEditor(QWidget* parent)
 {
 	setWindowTitle(QStringLiteral("Shader Editor"));
 	setModal(true);
+	setWindowFlags(Qt::Dialog | Qt::WindowTitleHint | Qt::WindowSystemMenuHint |
+	              Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
+	setSizeGripEnabled(true);
 	resize(800, 600);
 	
 	setupUI();

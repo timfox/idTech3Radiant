@@ -278,6 +278,8 @@ if(RADIANT_BUILD_QT)
 		qt/selection_sets.cpp
 		qt/preferences_dialog.cpp
 		qt/hotbox_widget.cpp
+		qt/theme_manager.cpp
+		qt/snapping_system.cpp
 	)
 
 	add_executable(${QT_TARGET} ${QT_SOURCES})

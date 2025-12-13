@@ -31,7 +31,6 @@ private:
 	QCheckBox* m_autosaveCheck = nullptr;
 	QSpinBox* m_autosaveIntervalSpin = nullptr;
 	QCheckBox* m_loadLastMapCheck = nullptr;
-	QCheckBox* m_showGridCheck = nullptr;
 	QCheckBox* m_snapToGridCheck = nullptr;
 	
 	// Viewport settings
@@ -39,6 +38,21 @@ private:
 	QCheckBox* m_show3DGridCheck = nullptr;
 	QSpinBox* m_fovSpin = nullptr;
 	QCheckBox* m_showAxesCheck = nullptr;
+
+	// Snapping settings
+	QCheckBox* m_snapToPointCheck = nullptr;
+	QCheckBox* m_snapToEdgeCheck = nullptr;
+	QCheckBox* m_snapToFaceCheck = nullptr;
+	QDoubleSpinBox* m_snapThresholdSpin = nullptr;
+
+	// Viewport display settings
+	QCheckBox* m_showStatsCheck = nullptr;
+	QCheckBox* m_showGridCheck = nullptr;
+	QCheckBox* m_showFPSCheck = nullptr;
+	QCheckBox* m_wireframeModeCheck = nullptr;
+	QCheckBox* m_showMeasurementsCheck = nullptr;
+	QCheckBox* m_showMinimapCheck = nullptr;
+	QCheckBox* m_showPerformanceWarningsCheck = nullptr;
 	
 	// Editor settings
 	QComboBox* m_themeCombo = nullptr;

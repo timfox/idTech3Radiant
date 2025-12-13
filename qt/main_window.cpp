@@ -67,6 +67,8 @@
 #include "surface_inspector.h"
 #include "selection_sets.h"
 #include "preferences_dialog.h"
+#include "theme_manager.h"
+#include "snapping_system.h"
 
 RadiantMainWindow::RadiantMainWindow(const QtRadiantEnv& env, QWidget* parent)
 	: QMainWindow(parent)
@@ -206,7 +208,7 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 		"temp: %2\n"
 		"games: %3").arg(env.appPath, env.tempPath, env.gamesPath));
 	info->setAlignment(Qt::AlignLeft);
-	info->setMargin(8);
+	info->setContentsMargins(8, 8, 8, 8);
 	infoDock->setWidget(info);
 	addDockWidget(Qt::LeftDockWidgetArea, infoDock);
 
@@ -457,6 +459,29 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 	auto* gridSettingsAct = new QAction(QStringLiteral("Set Grid Size..."), this);
 	connect(gridSettingsAct, &QAction::triggered, this, &RadiantMainWindow::openGridSettings);
 	viewMenu->addAction(gridSettingsAct);
+
+	viewMenu->addSeparator();
+
+	// Theme selection submenu
+	auto* themeMenu = viewMenu->addMenu(QStringLiteral("Themes"));
+
+	// Add theme options dynamically
+	for (const QString& themeName : ThemeManager::instance().availableThemes()) {
+		auto* themeAction = new QAction(themeName, this);
+		themeAction->setCheckable(true);
+		themeAction->setChecked(themeName == ThemeManager::instance().currentTheme());
+		connect(themeAction, &QAction::triggered, this, [this, themeName, themeMenu]() {
+			ThemeManager::instance().applyTheme(themeName);
+			// Update checkmarks
+			for (QAction* action : themeMenu->actions()) {
+				action->setChecked(action->text() == themeName);
+			}
+			if (m_console) {
+				m_console->appendPlainText(QStringLiteral("Theme changed to: %1").arg(themeName));
+			}
+		});
+		themeMenu->addAction(themeAction);
+	}
 
 	viewMenu->addSeparator();
 
@@ -974,12 +999,21 @@ void RadiantMainWindow::populateInspectorForItem(QTreeWidgetItem* item){
 	QWidget* oldWidget = m_inspector;
 	if (oldWidget->layout()) {
 		QLayout* layout = oldWidget->layout();
-		QLayoutItem* child;
-		while ((child = layout->takeAt(0)) != nullptr) {
-			delete child->widget();
-			delete child;
+
+		// Clear all widgets from the layout
+		while (layout->count() > 0) {
+			QLayoutItem* layoutItem = layout->takeAt(0);
+			if (layoutItem) {
+				if (layoutItem->widget()) {
+					delete layoutItem->widget();
+				}
+				delete layoutItem;
+			}
 		}
-		delete layout;
+
+		// Note: setLayout(nullptr) automatically deletes the old layout,
+		// so we don't need to manually delete it
+		oldWidget->setLayout(nullptr);
 	}
 
 	auto* layout = new QFormLayout(m_inspector);
@@ -1337,6 +1371,10 @@ void RadiantMainWindow::checkForRecoveryFiles() {
 void RadiantMainWindow::openGridSettings() {
 	QDialog dlg(this);
 	dlg.setWindowTitle(QStringLiteral("Grid Settings"));
+	dlg.setWindowFlags(Qt::Dialog | Qt::WindowTitleHint | Qt::WindowSystemMenuHint |
+	                  Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
+	dlg.setSizeGripEnabled(true);
+	dlg.resize(300, 150);
 	auto* layout = new QVBoxLayout(&dlg);
 	
 	// Microgrid enable
@@ -1918,6 +1956,10 @@ void RadiantMainWindow::adjustLightPower(float delta) {
 void RadiantMainWindow::showMapInfo() {
 	QDialog dlg(this);
 	dlg.setWindowTitle(QStringLiteral("Map Information"));
+	dlg.setWindowFlags(Qt::Dialog | Qt::WindowTitleHint | Qt::WindowSystemMenuHint |
+	                  Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
+	dlg.setSizeGripEnabled(true);
+	dlg.resize(400, 300);
 	auto* layout = new QVBoxLayout(&dlg);
 	
 	// Count entities and brushes
@@ -2466,9 +2508,16 @@ void RadiantMainWindow::updateGridStatus() {
 	if (!m_gridStatus) return;
 
 	float gridSize = VkViewportWidget::gridSize();
-	bool snapEnabled = VkViewportWidget::isMicrogridEnabled();
 
-	QString snapText = snapEnabled ? QStringLiteral("ON") : QStringLiteral("OFF");
+	// Build snapping status string
+	QStringList snapModes;
+	if (SnappingSystem::instance().isSnapModeEnabled(SnapMode::Grid)) snapModes << "G";
+	if (SnappingSystem::instance().isSnapModeEnabled(SnapMode::Point)) snapModes << "P";
+	if (SnappingSystem::instance().isSnapModeEnabled(SnapMode::Edge)) snapModes << "E";
+	if (SnappingSystem::instance().isSnapModeEnabled(SnapMode::Face)) snapModes << "F";
+
+	QString snapText = snapModes.isEmpty() ? "OFF" : snapModes.join("");
+
 	m_gridStatus->setText(QStringLiteral("Grid:%1 Snap:%2").arg(gridSize, 0, 'g', 3).arg(snapText));
 }
 
@@ -2720,6 +2769,128 @@ void RadiantMainWindow::keyPressEvent(QKeyEvent* event) {
 		resetCamera();
 		event->accept();
 		return;
+	}
+
+	// Handle snap mode toggles (Shift + number keys)
+	if (event->modifiers() & Qt::ShiftModifier) {
+		switch (event->key()) {
+		case Qt::Key_1:
+			SnappingSystem::instance().setSnapMode(SnapMode::Grid,
+				!SnappingSystem::instance().isSnapModeEnabled(SnapMode::Grid));
+			updateGridStatus();
+			event->accept();
+			return;
+		case Qt::Key_2:
+			SnappingSystem::instance().setSnapMode(SnapMode::Point,
+				!SnappingSystem::instance().isSnapModeEnabled(SnapMode::Point));
+			event->accept();
+			return;
+		case Qt::Key_3:
+			SnappingSystem::instance().setSnapMode(SnapMode::Edge,
+				!SnappingSystem::instance().isSnapModeEnabled(SnapMode::Edge));
+			event->accept();
+			return;
+		case Qt::Key_4:
+			SnappingSystem::instance().setSnapMode(SnapMode::Face,
+				!SnappingSystem::instance().isSnapModeEnabled(SnapMode::Face));
+			event->accept();
+			return;
+		case Qt::Key_R: // Toggle measurements
+			if (m_viewPerspective) m_viewPerspective->setShowMeasurements(!m_viewPerspective->showMeasurements());
+			if (m_viewTop) m_viewTop->setShowMeasurements(!m_viewTop->showMeasurements());
+			if (m_viewFront) m_viewFront->setShowMeasurements(!m_viewFront->showMeasurements());
+			if (m_viewSide) m_viewSide->setShowMeasurements(!m_viewSide->showMeasurements());
+			event->accept();
+			return;
+		case Qt::Key_C: // Toggle crosshair
+			if (m_viewPerspective) m_viewPerspective->setShowCrosshair(!m_viewPerspective->showCrosshair());
+			if (m_viewTop) m_viewTop->setShowCrosshair(!m_viewTop->showCrosshair());
+			if (m_viewFront) m_viewFront->setShowCrosshair(!m_viewFront->showCrosshair());
+			if (m_viewSide) m_viewSide->setShowCrosshair(!m_viewSide->showCrosshair());
+			event->accept();
+			return;
+		case Qt::Key_X: // Clear measurements
+			if (m_viewPerspective) m_viewPerspective->clearMeasurements();
+			if (m_viewTop) m_viewTop->clearMeasurements();
+			if (m_viewFront) m_viewFront->clearMeasurements();
+			if (m_viewSide) m_viewSide->clearMeasurements();
+			event->accept();
+			return;
+		}
+	}
+
+	// Handle viewport display toggles (Ctrl + keys)
+	if (event->modifiers() & Qt::ControlModifier) {
+		switch (event->key()) {
+		case Qt::Key_G: // Toggle grid
+			if (m_viewPerspective) m_viewPerspective->setShowGrid(!m_viewPerspective->showGrid());
+			if (m_viewTop) m_viewTop->setShowGrid(!m_viewTop->showGrid());
+			if (m_viewFront) m_viewFront->setShowGrid(!m_viewFront->showGrid());
+			if (m_viewSide) m_viewSide->setShowGrid(!m_viewSide->showGrid());
+			event->accept();
+			return;
+		case Qt::Key_A: // Toggle axes
+			if (m_viewPerspective) m_viewPerspective->setShowAxes(!m_viewPerspective->showAxes());
+			if (m_viewTop) m_viewTop->setShowAxes(!m_viewTop->showAxes());
+			if (m_viewFront) m_viewFront->setShowAxes(!m_viewFront->showAxes());
+			if (m_viewSide) m_viewSide->setShowAxes(!m_viewSide->showAxes());
+			event->accept();
+			return;
+		case Qt::Key_I: // Toggle stats
+			if (m_viewPerspective) m_viewPerspective->setShowStats(!m_viewPerspective->showStats());
+			if (m_viewTop) m_viewTop->setShowStats(!m_viewTop->showStats());
+			if (m_viewFront) m_viewFront->setShowStats(!m_viewFront->showStats());
+			if (m_viewSide) m_viewSide->setShowStats(!m_viewSide->showStats());
+			event->accept();
+			return;
+		case Qt::Key_F: // Toggle FPS
+			if (m_viewPerspective) m_viewPerspective->setShowFPS(!m_viewPerspective->showFPS());
+			if (m_viewTop) m_viewTop->setShowFPS(!m_viewTop->showFPS());
+			if (m_viewFront) m_viewFront->setShowFPS(!m_viewFront->showFPS());
+			if (m_viewSide) m_viewSide->setShowFPS(!m_viewSide->showFPS());
+			event->accept();
+			return;
+		case Qt::Key_W: // Toggle wireframe
+			if (m_viewPerspective) m_viewPerspective->setWireframeMode(!m_viewPerspective->wireframeMode());
+			if (m_viewTop) m_viewTop->setWireframeMode(!m_viewTop->wireframeMode());
+			if (m_viewFront) m_viewFront->setWireframeMode(!m_viewFront->wireframeMode());
+			if (m_viewSide) m_viewSide->setWireframeMode(!m_viewSide->wireframeMode());
+			event->accept();
+			return;
+		case Qt::Key_M: // Toggle measurements
+			if (m_viewPerspective) m_viewPerspective->setShowMeasurements(!m_viewPerspective->showMeasurements());
+			if (m_viewTop) m_viewTop->setShowMeasurements(!m_viewTop->showMeasurements());
+			if (m_viewFront) m_viewFront->setShowMeasurements(!m_viewFront->showMeasurements());
+			if (m_viewSide) m_viewSide->setShowMeasurements(!m_viewSide->showMeasurements());
+			event->accept();
+			return;
+		case Qt::Key_N: // Toggle minimap
+			if (m_viewPerspective) m_viewPerspective->setShowMinimap(!m_viewPerspective->showMinimap());
+			if (m_viewTop) m_viewTop->setShowMinimap(!m_viewTop->showMinimap());
+			if (m_viewFront) m_viewFront->setShowMinimap(!m_viewFront->showMinimap());
+			if (m_viewSide) m_viewSide->setShowMinimap(!m_viewSide->showMinimap());
+			event->accept();
+			return;
+		case Qt::Key_0: case Qt::Key_1: case Qt::Key_2: case Qt::Key_3: case Qt::Key_4:
+		case Qt::Key_5: case Qt::Key_6: case Qt::Key_7: case Qt::Key_8: case Qt::Key_9: {
+			int bookmarkSlot = event->key() - Qt::Key_0;
+			if (event->modifiers() & Qt::ControlModifier) {
+				// Ctrl+number: save bookmark
+				if (m_viewPerspective) m_viewPerspective->saveBookmark(bookmarkSlot);
+				if (m_viewTop) m_viewTop->saveBookmark(bookmarkSlot);
+				if (m_viewFront) m_viewFront->saveBookmark(bookmarkSlot);
+				if (m_viewSide) m_viewSide->saveBookmark(bookmarkSlot);
+			} else {
+				// Just number: load bookmark
+				if (m_viewPerspective) m_viewPerspective->loadBookmark(bookmarkSlot);
+				if (m_viewTop) m_viewTop->loadBookmark(bookmarkSlot);
+				if (m_viewFront) m_viewFront->loadBookmark(bookmarkSlot);
+				if (m_viewSide) m_viewSide->loadBookmark(bookmarkSlot);
+			}
+			event->accept();
+			return;
+		}
+		}
 	}
 
 	QMainWindow::keyPressEvent(event);
