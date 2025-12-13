@@ -8,6 +8,8 @@
 #include <QStyleFactory>
 #include <QPixmap>
 #include <QString>
+#include <QSettings>
+#include <QDir>
 
 #include "qt_env.h"
 #include "main_window.h"
@@ -36,11 +38,44 @@ int main(int argc, char* argv[]) {
 	QApplication::setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
 
 	// Load themes from themes directory
-	QString themesDir = QCoreApplication::applicationDirPath() + "/../radiant/themes";
-	ThemeManager::instance().loadThemesFromDirectory(themesDir);
+	// Try multiple possible paths
+	QString themesDir;
+	QStringList possiblePaths = {
+		QCoreApplication::applicationDirPath() + "/../radiant/themes",
+		QCoreApplication::applicationDirPath() + "/radiant/themes",
+		QStringLiteral("radiant/themes"),
+		QStringLiteral("./radiant/themes")
+	};
+	
+	for (const QString& path : possiblePaths) {
+		QDir dir(path);
+		if (dir.exists() && dir.entryInfoList(QStringList() << "*.json", QDir::Files).size() > 0) {
+			themesDir = path;
+			break;
+		}
+	}
+	
+	if (!themesDir.isEmpty()) {
+		ThemeManager::instance().loadThemesFromDirectory(themesDir);
+	}
 
-	// Apply default theme (Default Dark)
-	ThemeManager::instance().applyTheme("Default Dark");
+	// Load saved theme from settings, or use default
+	QSettings settings;
+	QString savedTheme = settings.value("editor/theme", "Default Dark").toString();
+	
+	// Verify the theme exists, fallback to default if not
+	if (!ThemeManager::instance().availableThemes().contains(savedTheme)) {
+		savedTheme = "Default Dark";
+		if (!ThemeManager::instance().availableThemes().contains(savedTheme)) {
+			// If Default Dark doesn't exist, use the first available theme
+			QStringList themes = ThemeManager::instance().availableThemes();
+			if (!themes.isEmpty()) {
+				savedTheme = themes.first();
+			}
+		}
+	}
+	
+	ThemeManager::instance().applyTheme(savedTheme);
 
 	splash.showMessage("Loading environment...", Qt::AlignBottom | Qt::AlignLeft, Qt::white);
 	const QtRadiantEnv env = InitQtRadiantEnv();

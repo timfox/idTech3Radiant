@@ -116,6 +116,16 @@ private:
 	void drawEnhancedGrid(QPainter& painter);
 	void drawViewportInfo(QPainter& painter);
 	void drawSelectionIndicators(QPainter& painter);
+	void drawCameraFrustum(QPainter& painter);
+	void drawMeasurementOverlay(QPainter& painter);
+	void drawMinimap(QPainter& painter);
+	void drawPerformanceWarning(QPainter& painter);
+	void drawMeasurements(QPainter& painter);
+	void drawCrosshair(QPainter& painter);
+	void drawCoordinateDisplay(QPainter& painter);
+	void drawFPSCounter(QPainter& painter);
+	void drawGridLabels(QPainter& painter);
+	void drawAngleMeasurement(QPainter& painter, const QVector3D& p1, const QVector3D& p2, const QVector3D& vertex);
 
 public:
 	// Viewport settings
@@ -135,10 +145,19 @@ public:
 	bool showMinimap() const { return m_showMinimap; }
 	void setShowPerformanceWarnings(bool show) { m_showPerformanceWarnings = show; update(); }
 	bool showPerformanceWarnings() const { return m_showPerformanceWarnings; }
+	void setShowCrosshair(bool show) { m_showCrosshair = show; update(); }
+	bool showCrosshair() const { return m_showCrosshair; }
+	void setShowCoordinates(bool show) { m_showCoordinates = show; update(); }
+	bool showCoordinates() const { return m_showCoordinates; }
 
 	// Performance monitoring
 	float currentFPS() const { return m_currentFPS; }
 	void updateFPS();
+	void updatePerformanceStats(float fps, float frameTime, int triangles, int drawCalls);
+
+	// Measurement tools
+	void addMeasurement(const QVector3D& start, const QVector3D& end);
+	void clearMeasurements();
 
 public:
 	// Viewport bookmarks

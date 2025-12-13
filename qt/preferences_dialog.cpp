@@ -1,5 +1,6 @@
 #include "preferences_dialog.h"
 #include "snapping_system.h"
+#include "theme_manager.h"
 
 #include <QTabWidget>
 #include <QCheckBox>
@@ -150,7 +151,9 @@ void PreferencesDialog::setupUI() {
 	auto* editorLayout = new QFormLayout(editorTab);
 	
 	m_themeCombo = new QComboBox(editorTab);
-	m_themeCombo->addItems({QStringLiteral("Dark"), QStringLiteral("Light"), QStringLiteral("Classic")});
+	// Populate from ThemeManager
+	QStringList themes = ThemeManager::instance().availableThemes();
+	m_themeCombo->addItems(themes);
 	editorLayout->addRow(QStringLiteral("Theme:"), m_themeCombo);
 	
 	m_fontCombo = new QComboBox(editorTab);
@@ -264,7 +267,12 @@ void PreferencesDialog::loadSettings() {
 	m_snapThresholdSpin->setValue(settings.value("snapping/threshold", 0.5).toDouble());
 
 	// Editor
-	m_themeCombo->setCurrentText(settings.value("editor/theme", "Dark").toString());
+	QString savedTheme = settings.value("editor/theme", "Default Dark").toString();
+	// Make sure the saved theme exists, fallback to current theme if not
+	if (!ThemeManager::instance().availableThemes().contains(savedTheme)) {
+		savedTheme = ThemeManager::instance().currentTheme();
+	}
+	m_themeCombo->setCurrentText(savedTheme);
 	m_fontCombo->setCurrentText(settings.value("editor/font", "Default").toString());
 	m_fontSizeSpin->setValue(settings.value("editor/fontSize", 10).toInt());
 	m_texturePathEdit->setText(settings.value("editor/texturePath", "").toString());
@@ -304,7 +312,10 @@ void PreferencesDialog::saveSettings() {
 	settings.setValue("snapping/threshold", m_snapThresholdSpin->value());
 	
 	// Editor
-	settings.setValue("editor/theme", m_themeCombo->currentText());
+	QString selectedTheme = m_themeCombo->currentText();
+	settings.setValue("editor/theme", selectedTheme);
+	// Apply the theme immediately
+	ThemeManager::instance().applyTheme(selectedTheme);
 	settings.setValue("editor/font", m_fontCombo->currentText());
 	settings.setValue("editor/fontSize", m_fontSizeSpin->value());
 	settings.setValue("editor/texturePath", m_texturePathEdit->text());
