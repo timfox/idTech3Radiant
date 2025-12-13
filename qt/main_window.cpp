@@ -20,8 +20,6 @@
 #include <QCheckBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
-#include <QListWidget>
-#include <QDirIterator>
 #include <QFormLayout>
 #include <QLineEdit>
 #include <QComboBox>
@@ -33,20 +31,17 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QInputDialog>
-#include <QCheckBox>
 #include <QDialog>
-#include <QLabel>
 #include <QSettings>
-#include <QKeyEvent>
 #include <QDockWidget>
 #include <QToolButton>
-#include <QHBoxLayout>
 #include <QWidget>
 #include <QIcon>
 #include <QStyle>
 #include <QPixmap>
 #include <QPainter>
-#include <QFile>
+#include <QSizePolicy>
+#include <QTimer>
 
 #include "vk_viewport.h"
 #include "color_picker_dialog.h"
@@ -104,19 +99,29 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 
 	// Quad-view layout (Perspective, Top, Front, Side)
 	m_viewPerspective = new VkViewportWidget(rendererHint, VkViewportWidget::ViewType::Perspective, this);
-	m_viewTop         = new VkViewportWidget(rendererHint, VkViewportWidget::ViewType::Top, this);
-	m_viewFront       = new VkViewportWidget(rendererHint, VkViewportWidget::ViewType::Front, this);
-	m_viewSide        = new VkViewportWidget(rendererHint, VkViewportWidget::ViewType::Side, this);
+	m_viewPerspective->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	m_viewPerspective->setMinimumSize(100, 100);
+	
+	m_viewTop = new VkViewportWidget(rendererHint, VkViewportWidget::ViewType::Top, this);
+	m_viewTop->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	m_viewTop->setMinimumSize(100, 100);
+	
+	m_viewFront = new VkViewportWidget(rendererHint, VkViewportWidget::ViewType::Front, this);
+	m_viewFront->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	m_viewFront->setMinimumSize(100, 100);
+	
+	m_viewSide = new VkViewportWidget(rendererHint, VkViewportWidget::ViewType::Side, this);
+	m_viewSide->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	m_viewSide->setMinimumSize(100, 100);
 
 	auto onSelect = [this](const QVector3D& pos){
 		m_lastSelection = pos;
 
-		// Update selection status with detailed information
+		// Update selection status with detailed information (count actual selected items)
 		int brushCount = 0, entityCount = 0;
 		if (m_outliner) {
-			auto* root = m_outliner->invisibleRootItem();
-			for (int i = 0; i < root->childCount(); ++i) {
-				auto* item = root->child(i);
+			auto selected = m_outliner->selectedItems();
+			for (auto* item : selected) {
 				if (item->text(1) == QStringLiteral("brush")) brushCount++;
 				else if (item->text(1) == QStringLiteral("entity")) entityCount++;
 			}
@@ -188,30 +193,52 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 	connect(m_viewTop, &VkViewportWidget::lightPowerChanged, this, onLightPowerChange);
 	connect(m_viewFront, &VkViewportWidget::lightPowerChanged, this, onLightPowerChange);
 	connect(m_viewSide, &VkViewportWidget::lightPowerChanged, this, onLightPowerChange);
+	
+	// Install event filter on viewports for key handling
+	m_viewPerspective->installEventFilter(this);
+	m_viewTop->installEventFilter(this);
+	m_viewFront->installEventFilter(this);
+	m_viewSide->installEventFilter(this);
 
 	auto *splitTop = new QSplitter(Qt::Horizontal, this);
+	splitTop->setChildrenCollapsible(false);
 	splitTop->addWidget(m_viewPerspective);
 	splitTop->addWidget(m_viewTop);
+	splitTop->setStretchFactor(0, 1);
+	splitTop->setStretchFactor(1, 1);
+	splitTop->setSizes({400, 400}); // Equal initial sizes
 
 	auto *splitBottom = new QSplitter(Qt::Horizontal, this);
+	splitBottom->setChildrenCollapsible(false);
 	splitBottom->addWidget(m_viewFront);
 	splitBottom->addWidget(m_viewSide);
+	splitBottom->setStretchFactor(0, 1);
+	splitBottom->setStretchFactor(1, 1);
+	splitBottom->setSizes({400, 400}); // Equal initial sizes
 
 	auto *splitVertical = new QSplitter(Qt::Vertical, this);
+	splitVertical->setChildrenCollapsible(false);
 	splitVertical->addWidget(splitTop);
 	splitVertical->addWidget(splitBottom);
+	splitVertical->setStretchFactor(0, 1);
+	splitVertical->setStretchFactor(1, 1);
+	splitVertical->setSizes({300, 300}); // Equal initial sizes
 
 	auto *center = new QWidget(this);
+	center->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	auto *centerLayout = new QVBoxLayout(center);
 	centerLayout->setContentsMargins(0,0,0,0);
+	centerLayout->setSpacing(0);
 	centerLayout->addWidget(splitVertical);
 	setCentralWidget(center);
 
 	// Console dock
 	auto *consoleDock = new QDockWidget(QStringLiteral("Console"), this);
 	consoleDock->setObjectName(QStringLiteral("ConsoleDock"));
+	consoleDock->setMinimumSize(200, 100);
 	m_console = new QPlainTextEdit(consoleDock);
 	m_console->setReadOnly(true);
+	m_console->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	consoleDock->setWidget(m_console);
 	setupDockWidgetMinimize(consoleDock);
 	addDockWidget(Qt::BottomDockWidgetArea, consoleDock);
@@ -219,6 +246,8 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 	// Info dock
 	auto *infoDock = new QDockWidget(QStringLiteral("Info"), this);
 	infoDock->setObjectName(QStringLiteral("InfoDock"));
+	infoDock->setMinimumSize(150, 100);
+	infoDock->setMaximumWidth(400);
 	auto *info = new QLabel(QStringLiteral(
 		"Radiant Qt prototype (dockable UI)\n"
 		"app: %1\n"
@@ -226,6 +255,8 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 		"games: %3").arg(env.appPath, env.tempPath, env.gamesPath));
 	info->setAlignment(Qt::AlignLeft);
 	info->setContentsMargins(8, 8, 8, 8);
+	info->setWordWrap(true);
+	info->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
 	infoDock->setWidget(info);
 	setupDockWidgetMinimize(infoDock);
 	addDockWidget(Qt::LeftDockWidgetArea, infoDock);
@@ -233,8 +264,11 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 	// Outliner dock
 	auto *outlinerDock = new QDockWidget(QStringLiteral("Outliner"), this);
 	outlinerDock->setObjectName(QStringLiteral("OutlinerDock"));
+	outlinerDock->setMinimumSize(200, 150);
+	outlinerDock->setMaximumWidth(500);
 	m_outliner = new QTreeWidget(outlinerDock);
 	m_outliner->setHeaderLabels({QStringLiteral("Name"), QStringLiteral("Type")});
+	m_outliner->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	populateOutliner();
 	outlinerDock->setWidget(m_outliner);
 	setupDockWidgetMinimize(outlinerDock);
@@ -243,7 +277,10 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 	// Inspector dock
 	auto *inspDock = new QDockWidget(QStringLiteral("Inspector"), this);
 	inspDock->setObjectName(QStringLiteral("InspectorDock"));
+	inspDock->setMinimumSize(200, 150);
+	inspDock->setMaximumWidth(400);
 	m_inspector = new QWidget(inspDock);
+	m_inspector->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	populateInspector();
 	inspDock->setWidget(m_inspector);
 	setupDockWidgetMinimize(inspDock);
@@ -252,13 +289,18 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 	// Texture browser dock (stubbed, file list from base/textures)
 	auto *texDock = new QDockWidget(QStringLiteral("Textures"), this);
 	texDock->setObjectName(QStringLiteral("TexturesDock"));
+	texDock->setMinimumSize(200, 150);
+	texDock->setMaximumWidth(400);
 
 	// Create container widget with layout for texture browser
 	auto* textureContainer = new QWidget();
+	textureContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	auto* textureLayout = new QVBoxLayout(textureContainer);
 	textureLayout->setContentsMargins(0, 0, 0, 0);
+	textureLayout->setSpacing(0);
 
 	m_textureList = new QListWidget(textureContainer);
+	m_textureList->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	textureLayout->addWidget(m_textureList);
 
 	texDock->setWidget(textureContainer);
@@ -285,18 +327,22 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 	// Compile front-end (stub)
 	auto *buildDock = new QDockWidget(QStringLiteral("Build/Compile"), this);
 	buildDock->setObjectName(QStringLiteral("BuildDock"));
+	buildDock->setMinimumSize(200, 150);
+	buildDock->setMaximumWidth(400);
 	auto *buildBody = new QWidget(buildDock);
+	buildBody->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	auto *buildLayout = new QVBoxLayout(buildBody);
 	buildLayout->setContentsMargins(8, 8, 8, 8);
+	buildLayout->setSpacing(4);
 	auto *runBtn = new QPushButton(QStringLiteral("Run q3map2 (stub)"), buildBody);
 	auto *presetCombo = new QComboBox(buildBody);
 	presetCombo->addItems({QStringLiteral("BSP"), QStringLiteral("BSP + VIS"), QStringLiteral("BSP + VIS + LIGHT")});
 	auto *buildLog = new QPlainTextEdit(buildBody);
 	buildLog->setReadOnly(true);
+	buildLog->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	buildLayout->addWidget(presetCombo);
 	buildLayout->addWidget(runBtn);
 	buildLayout->addWidget(buildLog);
-	buildLayout->addStretch(1);
 	buildBody->setLayout(buildLayout);
 	buildDock->setWidget(buildBody);
 	setupDockWidgetMinimize(buildDock);
@@ -310,7 +356,8 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 	});
 
 	// Menu
-	auto *fileMenu = menuBar()->addMenu(QStringLiteral("&File"));
+	m_fileMenu = menuBar()->addMenu(QStringLiteral("&File"));
+	auto *fileMenu = m_fileMenu;
 	auto *openMapAct = new QAction(QStringLiteral("Open Map..."), this);
 	auto *saveMapAct = new QAction(QStringLiteral("Save Map..."), this);
 	auto *quitAct = new QAction(QStringLiteral("Quit"), this);
@@ -354,12 +401,12 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 	fileMenu->addAction(openMapAct);
 	fileMenu->addAction(saveMapAct);
 	fileMenu->addSeparator();
-	fileMenu->addAction(quitAct);
 	
 	// Recent files submenu
-	QMenu* recentFilesMenu = fileMenu->addMenu(QStringLiteral("Recent Files"));
-	fileMenu->insertMenu(quitAct, recentFilesMenu);
-	fileMenu->insertSeparator(quitAct);
+	m_recentFilesMenu = fileMenu->addMenu(QStringLiteral("Recent Files"));
+	
+	fileMenu->addSeparator();
+	fileMenu->addAction(quitAct);
 	
 	// Edit menu
 	auto* editMenu = menuBar()->addMenu(QStringLiteral("&Edit"));
@@ -427,7 +474,7 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 	toolsMenu->addSeparator();
 	
 	auto* surfaceInspectorAct = new QAction(QStringLiteral("Surface Inspector..."), this);
-	surfaceInspectorAct->setShortcut(QKeySequence("Ctrl+S"));
+	surfaceInspectorAct->setShortcut(QKeySequence("Ctrl+Shift+I"));
 	connect(surfaceInspectorAct, &QAction::triggered, this, &RadiantMainWindow::openSurfaceInspector);
 	toolsMenu->addAction(surfaceInspectorAct);
 	
@@ -452,8 +499,8 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 	connect(walkPrevAct, &QAction::triggered, this, &RadiantMainWindow::walkToPreviousEntity);
 	toolsMenu->addAction(walkPrevAct);
 
-	// Color picker shortcut (Ctrl+C)
-	auto* colorPickerShortcut = new QShortcut(QKeySequence("Ctrl+C"), this);
+	// Color picker shortcut (Alt+C to avoid conflict with Copy)
+	auto* colorPickerShortcut = new QShortcut(QKeySequence("Alt+C"), this);
 	connect(colorPickerShortcut, &QShortcut::activated, this, &RadiantMainWindow::openColorPicker);
 	
 	// Clipping tool mode toggle (C key)
@@ -541,13 +588,17 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 	auto *fileTb = addToolBar(QStringLiteral("File"));
 	fileTb->setMovable(true);
 	fileTb->setToolTip(QStringLiteral("File Operations"));
+	fileTb->setIconSize(QSize(16, 16));
+	fileTb->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 	fileTb->addAction(openMapAct);
 	fileTb->addAction(saveMapAct);
 
 	// Selection & Transform Toolbar
-	auto *selectTb = addToolBar(QStringLiteral("Selection"));
-	selectTb->setMovable(true);
-	selectTb->setToolTip(QStringLiteral("Selection and Transform Tools"));
+	m_selectionToolbar = addToolBar(QStringLiteral("Selection"));
+	m_selectionToolbar->setObjectName(QStringLiteral("SelectionToolBar"));
+	m_selectionToolbar->setMovable(true);
+	m_selectionToolbar->setToolTip(QStringLiteral("Selection and Transform Tools"));
+	auto *selectTb = m_selectionToolbar;
 
 	// Selection tools
 	auto* selectAct = new QAction(QStringLiteral("Select"), this);
@@ -604,7 +655,7 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 	modelingTb->addAction(createBrushAct);
 
 	auto* createEntityAct = new QAction(QStringLiteral("Create Entity"), this);
-	createEntityAct->setShortcut(QKeySequence("Ctrl+Shift+A"));
+	createEntityAct->setShortcut(QKeySequence("Ctrl+Shift+E"));
 	connect(createEntityAct, &QAction::triggered, this, &RadiantMainWindow::createEntityAtSelection);
 	modelingTb->addAction(createEntityAct);
 
@@ -701,38 +752,56 @@ void RadiantMainWindow::buildUi(const QtRadiantEnv& env){
 
 	// Selection information
 	m_selectionStatus = new QLabel(QStringLiteral("No Selection"));
-	m_selectionStatus->setMinimumWidth(150);
+	m_selectionStatus->setMinimumWidth(100);
+	m_selectionStatus->setMaximumWidth(200);
+	m_selectionStatus->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
 	m_selectionStatus->setToolTip(QStringLiteral("Current selection information"));
+	m_selectionStatus->setTextFormat(Qt::PlainText);
 	statusBarPtr->addWidget(m_selectionStatus);
 
 	// Coordinate display
 	m_coordinatesStatus = new QLabel(QStringLiteral("X:0.0 Y:0.0 Z:0.0"));
-	m_coordinatesStatus->setMinimumWidth(180);
+	m_coordinatesStatus->setMinimumWidth(120);
+	m_coordinatesStatus->setMaximumWidth(200);
+	m_coordinatesStatus->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
 	m_coordinatesStatus->setToolTip(QStringLiteral("Current cursor/world coordinates"));
+	m_coordinatesStatus->setTextFormat(Qt::PlainText);
 	statusBarPtr->addWidget(m_coordinatesStatus);
 
 	// Grid and snap information
 	m_gridStatus = new QLabel(QStringLiteral("Grid:32 Snap:ON"));
-	m_gridStatus->setMinimumWidth(120);
+	m_gridStatus->setMinimumWidth(100);
+	m_gridStatus->setMaximumWidth(150);
+	m_gridStatus->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
 	m_gridStatus->setToolTip(QStringLiteral("Grid size and snap settings"));
+	m_gridStatus->setTextFormat(Qt::PlainText);
 	statusBarPtr->addWidget(m_gridStatus);
 
 	// Current tool/mode
 	m_toolStatus = new QLabel(QStringLiteral("Tool: Select"));
-	m_toolStatus->setMinimumWidth(120);
+	m_toolStatus->setMinimumWidth(100);
+	m_toolStatus->setMaximumWidth(150);
+	m_toolStatus->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
 	m_toolStatus->setToolTip(QStringLiteral("Current active tool"));
+	m_toolStatus->setTextFormat(Qt::PlainText);
 	statusBarPtr->addWidget(m_toolStatus);
 
 	// Camera/view information
 	m_cameraStatus = new QLabel(QStringLiteral("Perspective"));
-	m_cameraStatus->setMinimumWidth(100);
+	m_cameraStatus->setMinimumWidth(80);
+	m_cameraStatus->setMaximumWidth(120);
+	m_cameraStatus->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
 	m_cameraStatus->setToolTip(QStringLiteral("Current camera/view mode"));
+	m_cameraStatus->setTextFormat(Qt::PlainText);
 	statusBarPtr->addWidget(m_cameraStatus);
 
 	// Performance information (right-aligned)
 	m_performanceStatus = new QLabel(QStringLiteral("FPS:60"));
-	m_performanceStatus->setMinimumWidth(80);
+	m_performanceStatus->setMinimumWidth(60);
+	m_performanceStatus->setMaximumWidth(100);
+	m_performanceStatus->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
 	m_performanceStatus->setToolTip(QStringLiteral("Performance information"));
+	m_performanceStatus->setTextFormat(Qt::PlainText);
 	statusBarPtr->addPermanentWidget(m_performanceStatus);
 
 	resize(1280, 800);
@@ -1015,31 +1084,15 @@ bool RadiantMainWindow::hasSelection() const {
 }
 
 void RadiantMainWindow::populateInspectorForItem(QTreeWidgetItem* item){
-	if (!item || !m_inspector) return;
-
-	// Clear existing inspector content
-	QWidget* oldWidget = m_inspector;
-	if (oldWidget->layout()) {
-		QLayout* layout = oldWidget->layout();
-
-		// Clear all widgets from the layout
-		while (layout->count() > 0) {
-			QLayoutItem* layoutItem = layout->takeAt(0);
-			if (layoutItem) {
-				if (layoutItem->widget()) {
-					delete layoutItem->widget();
-				}
-				delete layoutItem;
-			}
-		}
-
-		// Note: setLayout(nullptr) automatically deletes the old layout,
-		// so we don't need to manually delete it
-		oldWidget->setLayout(nullptr);
-	}
-
-	auto* layout = new QFormLayout(m_inspector);
-	m_inspector->setLayout(layout);
+	if (!item) return;
+	
+	// Find the inspector dock widget
+	QDockWidget* inspDock = findChild<QDockWidget*>(QStringLiteral("InspectorDock"));
+	if (!inspDock) return;
+	
+	// Create new inspector widget (safer than manually clearing layout)
+	QWidget* newInspector = new QWidget;
+	auto* layout = new QFormLayout(newInspector);
 
 	QString type = item->text(1);
 	QString name = item->text(0);
@@ -1091,7 +1144,7 @@ void RadiantMainWindow::populateInspectorForItem(QTreeWidgetItem* item){
 
 	if (type == QStringLiteral("brush")) {
 		// Brush-specific properties
-		auto* materialCombo = new QComboBox(m_inspector);
+		auto* materialCombo = new QComboBox(newInspector);
 		materialCombo->addItems({QStringLiteral("common/caulk"), QStringLiteral("common/trigger"),
 			QStringLiteral("textures/base_wall/metal"), QStringLiteral("textures/base_wall/stone")});
 		materialCombo->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -1104,7 +1157,7 @@ void RadiantMainWindow::populateInspectorForItem(QTreeWidgetItem* item){
 		layout->addRow(QStringLiteral("Material:"), materialCombo);
 	} else if (type == QStringLiteral("entity")) {
 		// Entity-specific properties
-		m_nameEdit = new QLineEdit(name, m_inspector);
+		m_nameEdit = new QLineEdit(name, newInspector);
 		m_nameEdit->setContextMenuPolicy(Qt::CustomContextMenu);
 		connect(m_nameEdit, &QWidget::customContextMenuRequested, this, [this](const QPoint& menuPos) {
 			QMenu menu(m_nameEdit);
@@ -1113,7 +1166,7 @@ void RadiantMainWindow::populateInspectorForItem(QTreeWidgetItem* item){
 			menu.exec(m_nameEdit->mapToGlobal(menuPos));
 		});
 		
-		m_typeCombo = new QComboBox(m_inspector);
+		m_typeCombo = new QComboBox(newInspector);
 		m_typeCombo->addItems({QStringLiteral("func_static"), QStringLiteral("info_player_start"),
 			QStringLiteral("light"), QStringLiteral("trigger_multiple")});
 		m_typeCombo->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -1127,6 +1180,13 @@ void RadiantMainWindow::populateInspectorForItem(QTreeWidgetItem* item){
 		layout->addRow(QStringLiteral("Classname:"), m_typeCombo);
 		layout->addRow(QStringLiteral("Targetname:"), m_nameEdit);
 	}
+	
+	// Replace the inspector widget (safer than manual layout clearing)
+	inspDock->setWidget(newInspector);
+	if (m_inspector && m_inspector != newInspector) {
+		delete m_inspector;
+	}
+	m_inspector = newInspector;
 }
 
 void RadiantMainWindow::saveMap(){
@@ -1484,9 +1544,8 @@ void RadiantMainWindow::setupGizmoControls() {
 	connect(gizmoSpaceShortcut, &QShortcut::activated, this, &RadiantMainWindow::toggleGizmoSpace);
 	
 	// Add gizmo controls to selection toolbar
-	auto* selectionTb = findChild<QToolBar*>(QStringLiteral("Selection"));
-	if (selectionTb) {
-		selectionTb->addSeparator();
+	if (m_selectionToolbar) {
+		m_selectionToolbar->addSeparator();
 
 		auto* gizmoModeAct = new QAction(QStringLiteral("Gizmo Mode"), this);
 		gizmoModeAct->setCheckable(true);
@@ -1494,12 +1553,12 @@ void RadiantMainWindow::setupGizmoControls() {
 		connect(gizmoModeAct, &QAction::triggered, this, [this]() {
 			cycleGizmoMode();
 		});
-		selectionTb->addAction(gizmoModeAct);
+		m_selectionToolbar->addAction(gizmoModeAct);
 
 		auto* gizmoSpaceAct = new QAction(QStringLiteral("Gizmo Space"), this);
 		gizmoSpaceAct->setCheckable(true);
 		connect(gizmoSpaceAct, &QAction::triggered, this, &RadiantMainWindow::toggleGizmoSpace);
-		selectionTb->addAction(gizmoSpaceAct);
+		m_selectionToolbar->addAction(gizmoSpaceAct);
 	}
 }
 
@@ -2398,28 +2457,10 @@ void RadiantMainWindow::updateRecentFilesMenu() {
 	QSettings settings;
 	QStringList recentFiles = settings.value("recentFiles").toStringList();
 	
-	// Find recent files menu
-	QMenuBar* menuBar = this->menuBar();
-	QMenu* fileMenu = nullptr;
-	for (QAction* action : menuBar->actions()) {
-		if (action->text().contains("File")) {
-			fileMenu = action->menu();
-			break;
-		}
-	}
+	// Use stored menu pointer instead of searching
+	if (!m_recentFilesMenu) return;
 	
-	if (!fileMenu) return;
-	
-	// Find or create recent files menu
-	QMenu* recentMenu = nullptr;
-	for (QAction* action : fileMenu->actions()) {
-		if (action->text() == "Recent Files") {
-			recentMenu = action->menu();
-			break;
-		}
-	}
-	
-	if (!recentMenu) return;
+	QMenu* recentMenu = m_recentFilesMenu;
 	
 	recentMenu->clear();
 	

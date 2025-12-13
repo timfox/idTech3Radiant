@@ -239,4 +239,11 @@ protected:
 	
 private:
 	bool m_3dEditingEnabled{true}; // Enable editing in 3D view
+	
+	// Menu pointers (to avoid fragile text searching)
+	QMenu* m_fileMenu = nullptr;
+	QMenu* m_recentFilesMenu = nullptr;
+	
+	// Toolbar pointers (to avoid findChild)
+	QToolBar* m_selectionToolbar = nullptr;
 };

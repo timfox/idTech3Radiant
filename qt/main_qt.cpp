@@ -20,6 +20,10 @@ int main(int argc, char* argv[]) {
 	// Note: On Wayland, window decorations are handled by the compositor
 	// We don't need to disable decorations here - let the window manager handle it
 
+	// Set organization and application name for QSettings
+	QCoreApplication::setOrganizationName("QtRadiant");
+	QCoreApplication::setApplicationName("QtRadiant");
+
 	QApplication app(argc, argv);
 
 	// Show splash screen
