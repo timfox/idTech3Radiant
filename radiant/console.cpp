@@ -156,12 +156,12 @@ std::size_t Sys_Print( int level, const char* buf, std::size_t length ){
 			{
 			case SYS_WRN:
 			case SYS_ERR:
-				write( 2, buf, length );
+				if( write( 2, buf, length ) < 0 ) {}
 				break;
 			case SYS_STD:
 			case SYS_VRB:
 			default:
-				write( 1, buf, length );
+				if( write( 1, buf, length ) < 0 ) {}
 				break;
 			}
 		}

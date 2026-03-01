@@ -1270,6 +1270,7 @@ public:
 		case eColBack:
 			return PatchEdgeIter( *this, eRowBack );
 		}
+		return PatchEdgeIter( *this, eRowForward );
 	}
 };
 
