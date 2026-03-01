@@ -44,26 +44,26 @@
 #include "windowobservers.h"
 
 /*
-	?todo operator[] range check // checked during loading
-	layer color
-	restrict " in the name, empty name
-	'move to layer' context menu on keybind
-? tree 'move to layer' menu
-	def line format extensible
-? extensibility with new root keywords
-	handle paste, clone, map import
-	new layer = make current
-	hide recursively
-	always nullptr layer for group ents node
-	hide/show group entity nodes automatically
-	don't select hidden nodes
-	non locked 0 layer //may be confusing for user when falling back to default layer in operations, it's implicitly 1st in the list//?write 0 layer for future
-? feedback which layers are selected //highlight tree items
-? feedback items count in a layer
-? undo
-	button to add a layer
-	buttons to hide/show all layers
-? tree item highlight is torn with 'default' theme in windows
+	Future work items:
+	- layer color
+	- restrict " in the name, empty name
+	- 'move to layer' context menu on keybind
+	- tree 'move to layer' menu
+	- def line format extensible
+	- extensibility with new root keywords
+	- handle paste, clone, map import
+	- new layer = make current
+	- hide recursively
+	- always nullptr layer for group ents node
+	- hide/show group entity nodes automatically
+	- don't select hidden nodes
+	- non locked 0 layer
+	- feedback which layers are selected (highlight tree items)
+	- feedback items count in a layer
+	- undo
+	- button to add a layer
+	- buttons to hide/show all layers
+	- tree item highlight is torn with 'default' theme in windows
 */
 
 class LayerAssignVisitor : public SelectionSystem::Visitor

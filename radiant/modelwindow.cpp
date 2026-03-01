@@ -1011,10 +1011,6 @@ protected:
 		/* create misc_model */
 		if ( m_modBro.m_currentFolder != nullptr && m_modBro.m_currentModelId >= 0 ) {
 			UndoableCommand undo( "insertModel" );
-			// todo
-			// GlobalEntityClassManager() search for "misc_model"
-			// otherwise search for entityClass->miscmodel_is
-			// otherwise go with GlobalEntityClassManager().findOrInsert( "misc_model", false );
 			EntityClass* entityClass = GlobalEntityClassManager().findOrInsert( "misc_model", false );
 			NodeSmartReference node( GlobalEntityCreator().createEntity( entityClass ) );
 

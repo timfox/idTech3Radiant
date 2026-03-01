@@ -186,6 +186,15 @@ void PythonScript_run(){
 	g_pythonProcess = new QProcess( g_pythonScriptDock );
 	QObject::connect( g_pythonProcess, QOverload<int, QProcess::ExitStatus>::of( &QProcess::finished ),
 	                 []( int code, QProcess::ExitStatus status ){ PythonScript_runFinished( code, status ); } );
+	QObject::connect( g_pythonProcess, &QProcess::errorOccurred,
+	                 []( QProcess::ProcessError error ){
+		if ( error == QProcess::FailedToStart && g_pythonProcess != nullptr ) {
+			PythonScript_appendOutput( StringStream( "Error: Failed to start Python: ", g_pythonProcess->errorString().toUtf8().constData() ).c_str() );
+			g_pythonProcess->deleteLater();
+			g_pythonProcess = nullptr;
+			PythonScript_setStatus( "Failed to start" );
+		}
+	} );
 	QObject::connect( g_pythonProcess, &QProcess::readyReadStandardOutput, [](){
 		if ( g_pythonProcess != nullptr ) {
 			PythonScript_appendOutput( QString::fromUtf8( g_pythonProcess->readAllStandardOutput() ) );
@@ -234,13 +243,6 @@ void PythonScript_run(){
 	g_pythonProcess->setProcessEnvironment( env );
 
 	g_pythonProcess->start( pythonExe, { scriptInfo.absoluteFilePath() } );
-
-	if ( !g_pythonProcess->waitForStarted( 3000 ) ) {
-		PythonScript_appendOutput( StringStream( "Error: Failed to start Python: ", g_pythonProcess->errorString().toUtf8().constData() ).c_str() );
-		g_pythonProcess->deleteLater();
-		g_pythonProcess = nullptr;
-		PythonScript_setStatus( "Failed to start" );
-	}
 }
 
 bool PythonScript_loadFromPath( const QString& path ){

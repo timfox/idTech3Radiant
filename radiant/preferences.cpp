@@ -423,8 +423,8 @@ inline const char* GameDescription_getIdentifier( const CGameDescription& gameDe
 }
 
 void CGameDialog::AddPacksURL( StringOutputStream &URL ){
-	// add the URLs for the list of game packs installed
-	// FIXME: this is kinda hardcoded for now..
+	// Add game pack identifiers to the update-check URL query string.
+	// URL format: Games_dlup[]=id1&Games_dlup[]=id2&...
 	for ( const CGameDescription *iGame : mGames )
 	{
 		URL << "&Games_dlup%5B%5D=" << GameDescription_getIdentifier( *iGame );
