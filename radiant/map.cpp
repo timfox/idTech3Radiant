@@ -1861,6 +1861,47 @@ void ImportMap(){
 	}
 }
 
+
+#include "camwindow.h"
+
+void Scene_Translate_Selected( scene::Graph& graph, const Vector3& translation );
+
+static CopiedString g_strLastPrefabPath;
+
+void InsertPrefab(){
+	const char* path = g_strLastPrefabPath.empty() ? getMapsPath() : g_strLastPrefabPath.c_str();
+	const char* filename = file_dialog( MainFrame_getWindow(), true, "Insert Prefab", path, MapFormat::Name, false, true, false );
+
+	if ( filename != 0 ) {
+		g_strLastPrefabPath = StringStream( PathFilenameless( filename ) );
+
+		const Vector3 insertPos = Camera_getOrigin( *g_pParentWnd->GetCamWnd() );
+
+		UndoableCommand undo( "insertPrefab" );
+
+		GlobalSelectionSystem().setSelectedAll( false );
+
+		Map_ImportFile( filename );
+
+		if ( GlobalSelectionSystem().countSelected() != 0 ) {
+			AABB selBounds = GlobalSelectionSystem().getBoundsSelected();
+			const Vector3 offset = insertPos - selBounds.origin;
+			Scene_Translate_Selected( GlobalSceneGraph(), offset );
+		}
+	}
+}
+
+void SavePrefab(){
+	const char* path = g_strLastPrefabPath.empty() ? getMapsPath() : g_strLastPrefabPath.c_str();
+	const char* filename = file_dialog( MainFrame_getWindow(), false, "Save Prefab", path, MapFormat::Name, false, false, true );
+
+	if ( filename != 0 ) {
+		g_strLastPrefabPath = StringStream( PathFilenameless( filename ) );
+		Map_SaveSelected( filename );
+	}
+}
+
+
 bool Map_SaveAs(){
 	const char* filename = map_save( "Save Map" );
 
@@ -2429,6 +2470,8 @@ void Map_Construct(){
 	GlobalCommands_insert( "NewMap", makeCallbackF( NewMap ) );
 	GlobalCommands_insert( "OpenMap", makeCallbackF( OpenMap ), QKeySequence( "Ctrl+O" ) );
 	GlobalCommands_insert( "ImportMap", makeCallbackF( ImportMap ) );
+	GlobalCommands_insert( "InsertPrefab", makeCallbackF( InsertPrefab ), QKeySequence( "Ctrl+Shift+I" ) );
+	GlobalCommands_insert( "SavePrefab", makeCallbackF( SavePrefab ) );
 	GlobalCommands_insert( "SaveMap", makeCallbackF( SaveMap ), QKeySequence( "Ctrl+S" ) );
 	GlobalCommands_insert( "SaveMapAs", makeCallbackF( SaveMapAs ) );
 	GlobalCommands_insert( "SaveSelected", makeCallbackF( ExportMap ) );

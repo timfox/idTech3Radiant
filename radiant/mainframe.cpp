@@ -1372,10 +1372,12 @@ void create_file_menu( QMenuBar *menubar ){
 
 	create_menu_item_with_mnemonic( menu, "&Open...", "OpenMap" );
 	create_menu_item_with_mnemonic( menu, "&Import...", "ImportMap" );
+	create_menu_item_with_mnemonic( menu, "Insert &Prefab...", "InsertPrefab" );
 	menu->addSeparator();
 	create_menu_item_with_mnemonic( menu, "&Save", "SaveMap" );
 	create_menu_item_with_mnemonic( menu, "Save &as...", "SaveMapAs" );
 	create_menu_item_with_mnemonic( menu, "Save s&elected...", "SaveSelected" );
+	create_menu_item_with_mnemonic( menu, "Save Prefab...", "SavePrefab" );
 	create_menu_item_with_mnemonic( menu, "Save re&gion...", "SaveRegion" );
 	menu->addSeparator();
 	create_menu_item_with_mnemonic( menu, "&Pointfile", "TogglePointfile" );
