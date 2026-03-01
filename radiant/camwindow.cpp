@@ -47,7 +47,7 @@
 #include "gtkutil/xorrectangle.h"
 #include "gtkutil/cursor.h"
 #include "gtkutil/fbo.h"
-#include "gtkmisc.h"
+#include "qtmisc.h"
 #include "selection.h"
 #include "mainframe.h"
 #include "preferences.h"

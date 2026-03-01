@@ -23,7 +23,7 @@
 
 
 #include "itoolbar.h"
-#include "gtkmisc.h"
+#include "qtmisc.h"
 #include "gtkutil/image.h"
 #include "modulesystem.h"
 

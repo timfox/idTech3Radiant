@@ -1,5 +1,5 @@
 #include "filterbar.h"
-#include "gtkmisc.h"
+#include "qtmisc.h"
 #include "stream/stringstream.h"
 #include "select.h"
 #include "iundo.h"

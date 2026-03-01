@@ -31,7 +31,7 @@
 #include <set>
 
 #include "gtkutil/widget.h"
-#include "gtkmisc.h"
+#include "qtmisc.h"
 #include "commands.h"
 #include "preferences.h"
 #include "mainframe.h"

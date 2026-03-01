@@ -28,7 +28,7 @@
 #include "versionlib.h"
 #include "gtkutil/accelerator.h"
 #include "gtkutil/messagebox.h"
-#include "gtkmisc.h"
+#include "qtmisc.h"
 
 struct ShortcutValue{
 	QKeySequence accelerator;

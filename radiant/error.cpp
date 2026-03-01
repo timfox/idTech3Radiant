@@ -21,6 +21,10 @@
 
 #include "error.h"
 
+#include <cstdarg>
+#include <cstdio>
+#include <cstring>
+
 #include "debugging/debugging.h"
 #include "igl.h"
 
@@ -58,10 +62,10 @@ void Error( const char *error, ... ){
 	char text[4096];
 
 	va_start( argptr, error );
-	vsprintf( text, error, argptr );
+	vsnprintf( text, sizeof( text ), error, argptr );
 	va_end( argptr );
 
-	strcat( text, "\n" );
+	strncat( text, "\n", sizeof( text ) - std::strlen( text ) - 1 );
 
 #ifdef WIN32
 	if ( GetLastError() != 0 ) {
@@ -77,7 +81,7 @@ void Error( const char *error, ... ){
 		    0,
 		    0
 		);
-		strcat( text, "GetLastError: " );
+		strncat( text, "GetLastError: ", sizeof( text ) - std::strlen( text ) - 1 );
 		/*
 		   Gtk will only crunch 0<=char<=127
 		   this is a bit hackish, but I didn't find useful functions in win32 API for this
@@ -96,14 +100,14 @@ void Error( const char *error, ... ){
 			}
 			next = CharNext( scan );
 		} while ( next != scan );
-		strcat( text, "\n" );
+		strncat( text, "\n", sizeof( text ) - std::strlen( text ) - 1 );
 		LocalFree( lpMsgBuf );
 	}
 #else
 	if ( errno != 0 ) {
-		strcat( text, "errno: " );
-		strcat( text, strerror( errno ) );
-		strcat( text, "\n" );
+		strncat( text, "errno: ", sizeof( text ) - std::strlen( text ) - 1 );
+		strncat( text, strerror( errno ), sizeof( text ) - std::strlen( text ) - 1 );
+		strncat( text, "\n", sizeof( text ) - std::strlen( text ) - 1 );
 	}
 #endif
 
@@ -124,7 +128,7 @@ void Error( const char *error, ... ){
 	}
 #endif
 
-	strcat( text, "An unrecoverable error has occurred.\n" );
+	strncat( text, "An unrecoverable error has occurred.\n", sizeof( text ) - std::strlen( text ) - 1 );
 
 	ERROR_MESSAGE( text );
 

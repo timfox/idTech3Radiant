@@ -40,6 +40,7 @@
 #include "igl.h"
 #include "moduleobserver.h"
 
+#include <cstdio>
 #include <ctime>
 
 #include <QWidget>
@@ -125,8 +126,8 @@
 #include "findtexturedialog.h"
 #include "grid.h"
 #include "groupdialog.h"
-#include "gtkdlgs.h"
-#include "gtkmisc.h"
+#include "qtdlgs.h"
+#include "qtmisc.h"
 #include "help.h"
 #include "map.h"
 #include "mru.h"
@@ -607,12 +608,27 @@ const char* const c_library_extension =
 #endif
     ;
 
+static bool plugin_name_safe( const char* name ){
+	for ( const char* p = name; *p; ++p ) {
+		if ( *p == '.' && p[1] == '.' ) {
+			return false; // reject path traversal
+		}
+		if ( *p == '/' || *p == '\\' ) {
+			return false; // reject path separators
+		}
+	}
+	return true;
+}
+
 void Radiant_loadModules( const char* path ){
 	Directory_forEach( path, matchFileExtension( c_library_extension, [&]( const char *name ){
+		if ( !plugin_name_safe( name ) ) {
+			globalErrorStream() << "Skipping plugin with invalid name: " << name << '\n';
+			return;
+		}
 		char fullname[1024];
-		ASSERT_MESSAGE( strlen( path ) + strlen( name ) < 1024, "" );
-		strcpy( fullname, path );
-		strcat( fullname, name );
+		const int len = snprintf( fullname, sizeof( fullname ), "%s%s", path, name );
+		ASSERT_MESSAGE( len >= 0 && static_cast<std::size_t>( len ) < sizeof( fullname ), "" );
 		globalOutputStream() << "Found " << SingleQuoted( fullname ) << '\n';
 		GlobalModuleServer_loadModule( fullname );
 	}));

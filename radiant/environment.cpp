@@ -21,6 +21,8 @@
 
 #include "environment.h"
 
+#include <cstdio>
+
 #include "stream/textstream.h"
 #include "string/string.h"
 #include "stream/stringstream.h"
@@ -65,7 +67,7 @@ void gamedetect_found_game( const char *game, char *path ){
 
 	globalOutputStream() << "Detected game " << game << " in " << path << '\n';
 
-	sprintf( buf, "-%s-EnginePath", game );
+	snprintf( buf, sizeof( buf ), "-%s-EnginePath", game );
 	argc = 0;
 	gamedetect_argv_buffer[argc++] = "-global-gamefile";
 	gamedetect_argv_buffer[argc++] = game;
@@ -82,14 +84,14 @@ void gamedetect_found_game( const char *game, char *path ){
 bool gamedetect_check_game( const char *gamefile, const char *checkfile1, const char *checkfile2, char *buf /* must have 64 bytes free after bufpos */, int bufpos ){
 	buf[bufpos] = '/';
 
-	strcpy( buf + bufpos + 1, checkfile1 );
+	snprintf( buf + bufpos + 1, 64, "%s", checkfile1 );
 	globalOutputStream() << "Checking for a game file in " << buf << '\n';
 	if ( !file_exists( buf ) ) {
 		return false;
 	}
 
 	if ( checkfile2 ) {
-		strcpy( buf + bufpos + 1, checkfile2 );
+		snprintf( buf + bufpos + 1, 64, "%s", checkfile2 );
 		globalOutputStream() << "Checking for a game file in " << buf << '\n';
 		if ( !file_exists( buf ) ) {
 			return false;

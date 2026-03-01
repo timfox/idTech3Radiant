@@ -34,7 +34,7 @@
 // Leonardo Zide (leo@lokigames.com)
 //
 
-#include "gtkdlgs.h"
+#include "qtdlgs.h"
 
 #include "debugging/debugging.h"
 #include "version.h"
@@ -63,7 +63,7 @@
 #include "gtkutil/messagebox.h"
 #include "gtkutil/image.h"
 
-#include "gtkmisc.h"
+#include "qtmisc.h"
 #include "brushmanip.h"
 #include "qe3.h"
 #include "texwindow.h"

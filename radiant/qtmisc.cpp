@@ -32,7 +32,7 @@
 // Small functions to help with GTK
 //
 
-#include "gtkmisc.h"
+#include "qtmisc.h"
 
 #include "generic/vector.h"
 #include "os/path.h"

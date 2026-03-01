@@ -23,11 +23,11 @@
 
 
 #include "gtkutil/widget.h"
-#include "gtkmisc.h"
+#include "qtmisc.h"
 #include "brushnode.h"
 #include "map.h"
 #include "texwindow.h"
-#include "gtkdlgs.h"
+#include "qtdlgs.h"
 #include "commands.h"
 #include "mainframe.h"
 #include "dialog.h"

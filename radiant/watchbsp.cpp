@@ -35,6 +35,10 @@
 
 #include "watchbsp.h"
 
+#include <cstdarg>
+#include <cstdio>
+#include <cstring>
+
 #include <QTimer>
 
 #include "commandlib.h"
@@ -489,7 +493,7 @@ static void saxWarning( void *ctx, const char *msg, ... ){
 	va_list args;
 
 	va_start( args, msg );
-	vsprintf( saxMsgBuffer, msg, args );
+	vsnprintf( saxMsgBuffer, sizeof( saxMsgBuffer ), msg, args );
 	va_end( args );
 	globalWarningStream() << "XML warning: " << saxMsgBuffer << '\n';
 }
@@ -499,7 +503,7 @@ static void saxError( void *ctx, const char *msg, ... ){
 	va_list args;
 
 	va_start( args, msg );
-	vsprintf( saxMsgBuffer, msg, args );
+	vsnprintf( saxMsgBuffer, sizeof( saxMsgBuffer ), msg, args );
 	va_end( args );
 	globalErrorStream() << "XML error: " << saxMsgBuffer << '\n';
 }
@@ -510,7 +514,7 @@ static void saxFatal( void *ctx, const char *msg, ... ){
 	va_list args;
 
 	va_start( args, msg );
-	vsprintf( buffer, msg, args );
+	vsnprintf( buffer, sizeof( buffer ), msg, args );
 	va_end( args );
 	globalErrorStream() << "XML fatal error: " << buffer << '\n';
 }
@@ -694,8 +698,8 @@ void CWatchBSP::RoutineProcessing(){
 				// see if there's anything in input
 				ret = Net_Receive( m_pInSocket, &msg );
 				if ( ret > 0 ) {
-					//        unsigned int size = msg.size; //++timo just a check
-					strcpy( m_xmlBuf, NMSG_ReadString( &msg ) );
+					const char* str = NMSG_ReadString( &msg );
+					snprintf( m_xmlBuf, sizeof( m_xmlBuf ), "%s", str ? str : "" );
 					if ( m_bNeedCtxtInit ) {
 						m_xmlParserCtxt = nullptr;
 						m_xmlParserCtxt = xmlCreatePushParserCtxt( &saxParser, &m_message_info, m_xmlBuf, static_cast<int>( strlen( m_xmlBuf ) ), nullptr );

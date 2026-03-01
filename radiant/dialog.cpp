@@ -40,7 +40,7 @@
 #include "gtkutil/image.h"
 #include "gtkutil/spinbox.h"
 
-#include "gtkmisc.h"
+#include "qtmisc.h"
 
 #include <QCheckBox>
 #include "gtkutil/combobox.h"

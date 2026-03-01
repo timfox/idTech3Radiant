@@ -62,8 +62,17 @@ void MapChanged(){
 
 EntityCreator* g_entityCreator = 0;
 
+namespace {
+constexpr std::size_t c_mapFileSizeLimit = 100 * 1024 * 1024; // 100 MB
+}
+
 bool MapResource_loadFile( const MapFormat& format, scene::Node& root, const char* filename ){
 	globalOutputStream() << "Open file " << filename << " for read...";
+	const auto size = file_size( filename );
+	if ( size > c_mapFileSizeLimit ) {
+		globalErrorStream() << "Map file exceeds size limit (" << size << " > " << c_mapFileSizeLimit << " bytes). Refusing to load.\n";
+		return false;
+	}
 	TextFileInputStream file( filename );
 	if ( !file.failed() ) {
 		globalOutputStream() << "success\n";

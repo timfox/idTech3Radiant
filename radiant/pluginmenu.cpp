@@ -29,7 +29,7 @@
 #include "mainframe.h"
 #include "preferences.h"
 
-#include "gtkmisc.h"
+#include "qtmisc.h"
 
 #include <stack>
 typedef std::stack<QMenu*> MenuStack;

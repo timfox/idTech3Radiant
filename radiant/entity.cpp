@@ -21,6 +21,8 @@
 
 #include "entity.h"
 
+#include <cstdio>
+
 #include "ientity.h"
 #include "iselection.h"
 #include "imodel.h"
@@ -36,11 +38,11 @@
 
 #include "gtkutil/filechooser.h"
 #include "gtkutil/widget.h"
-#include "gtkmisc.h"
+#include "qtmisc.h"
 #include "select.h"
 #include "map.h"
 #include "preferences.h"
-#include "gtkdlgs.h"
+#include "qtdlgs.h"
 #include "mainframe.h"
 #include "qe3.h"
 #include "commands.h"
@@ -134,7 +136,7 @@ public:
 
 			if( entity->isContainer() && eclass->fixedsize ){ /* group entity to point one */
 				char value[64];
-				sprintf( value, "%g %g %g", instance.worldAABB().origin[0], instance.worldAABB().origin[1], instance.worldAABB().origin[2] );
+				snprintf( value, sizeof( value ), "%g %g %g", instance.worldAABB().origin[0], instance.worldAABB().origin[1], instance.worldAABB().origin[2] );
 				entity->setKeyValue( "origin", value );
 			}
 
@@ -466,7 +468,7 @@ void Entity_createFromSelection( const char* name, const Vector3& origin ){
 			if ( DoLightIntensityDlg( &intensity ) ) {
 				g_iLastLightIntensity = intensity;
 				char buf[30];
-				sprintf( buf, "255 255 255 %d", intensity );
+				snprintf( buf, sizeof( buf ), "255 255 255 %d", intensity );
 				entity->setKeyValue( "_light", buf );
 			}
 		}
@@ -478,7 +480,7 @@ void Entity_createFromSelection( const char* name, const Vector3& origin ){
 			if ( DoLightIntensityDlg( &intensity ) ) {
 				g_iLastLightIntensity = intensity;
 				char buf[10];
-				sprintf( buf, "%d", intensity );
+				snprintf( buf, sizeof( buf ), "%d", intensity );
 				entity->setKeyValue( "light", buf );
 			}
 		}
@@ -529,9 +531,8 @@ void Entity_normalizeColor(){
 					NormalizeColor( g_entity_globals.color_entity );
 
 					char buffer[128];
-					sprintf( buffer, "%g %g %g", g_entity_globals.color_entity[0],
-					                             g_entity_globals.color_entity[1],
-					                             g_entity_globals.color_entity[2] );
+					snprintf( buffer, sizeof( buffer ), "%g %g %g", g_entity_globals.color_entity[0],
+					          g_entity_globals.color_entity[1], g_entity_globals.color_entity[2] );
 
 					const auto command = StringStream<64>( "entityNormalizeColour ", buffer );
 					UndoableCommand undo( command );
@@ -561,9 +562,8 @@ void Entity_setColour(){
 			}
 			if ( color_dialog( MainFrame_getWindow(), g_entity_globals.color_entity ) ) {
 				char buffer[128];
-				sprintf( buffer, "%g %g %g", g_entity_globals.color_entity[0],
-				                             g_entity_globals.color_entity[1],
-				                             g_entity_globals.color_entity[2] );
+				snprintf( buffer, sizeof( buffer ), "%g %g %g", g_entity_globals.color_entity[0],
+				          g_entity_globals.color_entity[1], g_entity_globals.color_entity[2] );
 
 				const auto command = StringStream<64>( "entitySetColour ", buffer );
 				UndoableCommand undo( command );

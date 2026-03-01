@@ -42,7 +42,7 @@
 #include "error.h"
 #include "xywindow.h"
 #include "mainframe.h"
-#include "gtkdlgs.h"
+#include "qtdlgs.h"
 #include "theme.h"
 
 #include <QCoreApplication>

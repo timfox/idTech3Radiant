@@ -456,6 +456,7 @@ binaries-radiant-plugins: \
 	$(INSTALLDIR)/plugins/sunplug.$(DLL) \
 	$(INSTALLDIR)/plugins/ufoaiplug.$(DLL) \
 	$(INSTALLDIR)/plugins/meshtex.$(DLL) \
+	$(INSTALLDIR)/plugins/bkgrnd2d.$(DLL) \
 
 .PHONY: binaries-radiant
 binaries-radiant-core: \
@@ -956,8 +957,8 @@ $(INSTALLDIR)/radiant.$(EXE): \
 	radiant/glwidget.o \
 	radiant/grid.o \
 	radiant/groupdialog.o \
-	radiant/gtkdlgs.o \
-	radiant/gtkmisc.o \
+	radiant/qtdlgs.o \
+	radiant/qtmisc.o \
 	radiant/help.o \
 	radiant/image.o \
 	radiant/layerswindow.o \

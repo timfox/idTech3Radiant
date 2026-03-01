@@ -41,6 +41,7 @@
 
 #include "debugging/debugging.h"
 
+#include <cstdio>
 #include <limits>
 
 #include "math/frustum.h"
@@ -794,8 +795,8 @@ public:
 
 		{
 			char width[16], height[16];
-			sprintf( width, "%u", Unsigned( m_width ) );
-			sprintf( height, "%u", Unsigned( m_height ) );
+			snprintf( width, sizeof( width ), "%u", Unsigned( m_width ) );
+			snprintf( height, sizeof( height ), "%u", Unsigned( m_height ) );
 			StaticElement element( "matrix" );
 			element.insertAttribute( "width", width );
 			element.insertAttribute( "height", height );

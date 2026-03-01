@@ -33,7 +33,7 @@
 #include "mainframe.h"
 #include "brushmodule.h"
 #include "preferences.h"
-#include "gtkmisc.h"
+#include "qtmisc.h"
 #include "gtkutil/menu.h"
 #include "os/dir.h"
 #include "os/path.h"

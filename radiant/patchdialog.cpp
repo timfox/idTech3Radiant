@@ -34,7 +34,7 @@
 #include "gtkutil/spinbox.h"
 #include "gtkutil/nonmodal.h"
 #include "dialog.h"
-#include "gtkdlgs.h"
+#include "qtdlgs.h"
 #include "mainframe.h"
 #include "patchmanip.h"
 #include "patch.h"

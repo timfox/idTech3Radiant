@@ -140,7 +140,8 @@ void MRU_AddWidget( QAction *widget, std::size_t pos ){
 
 void MRU_Activate( std::size_t index ){
 	char text[1024];
-	strcpy( text, MRU_GetText( index ) );
+	const char* src = MRU_GetText( index );
+	snprintf( text, sizeof( text ), "%s", src ? src : "" );
 
 	if ( file_readable( text ) ) { //\todo Test 'map load succeeds' instead of 'file is readable'.
 		MRU_AddFile( text );

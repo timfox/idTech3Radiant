@@ -153,6 +153,28 @@ void PythonScript_runFinished( int exitCode, QProcess::ExitStatus status ){
 	}
 }
 
+static bool PythonScript_validatePath( const QString& path, QString& error ){
+	if ( path.contains( ".." ) ) {
+		error = "Script path contains invalid traversal.";
+		return false;
+	}
+	const QFileInfo info( path );
+	if ( !info.exists() || !info.isFile() ) {
+		error = "Script path does not exist or is not a file.";
+		return false;
+	}
+	const QString canonical = info.canonicalFilePath();
+	if ( canonical.isEmpty() ) {
+		error = "Could not resolve script path.";
+		return false;
+	}
+	if ( !path.endsWith( ".py", Qt::CaseInsensitive ) ) {
+		error = "Script must have .py extension.";
+		return false;
+	}
+	return true;
+}
+
 void PythonScript_run(){
 	if ( g_pythonScriptEditor == nullptr ) {
 		return;
@@ -178,6 +200,13 @@ void PythonScript_run(){
 			PythonScript_setStatus( "Save required" );
 			return;
 		}
+	}
+
+	QString pathError;
+	if ( !PythonScript_validatePath( scriptPath, pathError ) ) {
+		PythonScript_appendOutput( StringStream( "Error: ", pathError.toUtf8().constData(), "\n" ).c_str() );
+		PythonScript_setStatus( "Invalid path" );
+		return;
 	}
 
 	PythonScript_appendOutput( StringStream( "\n--- Running ", scriptPath.toUtf8().constData(), " ---\n" ).c_str() );

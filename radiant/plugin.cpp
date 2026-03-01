@@ -54,7 +54,7 @@
 #include "entityinspector.h"
 #include "entitylist.h"
 #include "points.h"
-#include "gtkmisc.h"
+#include "qtmisc.h"
 #include "texwindow.h"
 #include "modelwindow.h"
 #include "mainframe.h"

@@ -42,21 +42,23 @@ run:
 Execute 'install/radiant.x86'
 
 
-OSX(using X-windows)
-====================
+OS X
+====
 
 environment:
-- OS X 10.5 or 10.6
-- Xcode developer tools installed (OSX DVD)
-- X11 (from the OS X DVD)
-- MacPorts or fink or homebrew installed
-- the following packages installed:
-  Macports (reported as working in 10.15.3):
-    gtkglext pkgconfig glib2-devel libxml2 gtk2 pango atk gettext wget
-  Fink:
-    gtkglext1 pkgconfig glib2-dev libxml2 gtk+2 gtk+2-dev pango1-xft2-ft219-dev atk1 gettext-dev wget
-  homebrew (does not work due to X11->Quartz switch, requires patched gtkglext):
-    gtk+ gtkglext
+- OS X 10.5 or later
+- Xcode developer tools installed
+- X11 (from the OS X DVD or XQuartz) or native Quartz
+- MacPorts, Fink, or Homebrew for dependencies
+
+dependencies (Qt5 build):
+- qt5
+- qt5-svg
+- glib
+- libxml2
+- pkg-config
+- gettext
+- wget
 
 build:
 run 'make'

@@ -21,6 +21,8 @@
 
 #include "map.h"
 
+#include <cstdio>
+
 #include "debugging/debugging.h"
 
 #include "imap.h"
@@ -53,7 +55,7 @@
 #include "select.h"
 #include "plugin.h"
 #include "filetypes.h"
-#include "gtkdlgs.h"
+#include "qtdlgs.h"
 #include "points.h"
 #include "qe3.h"
 #include "camwindow.h"
@@ -1321,9 +1323,9 @@ class ScopeRegionBrushes
 	void ConstructRegionStartpoint( const Vector3& vOrig ){
 		// write the info_playerstart
 		char sTmp[1024];
-		sprintf( sTmp, "%d %d %d", (int)vOrig[0], (int)vOrig[1], (int)vOrig[2] );
+		snprintf( sTmp, sizeof( sTmp ), "%d %d %d", (int)vOrig[0], (int)vOrig[1], (int)vOrig[2] );
 		Node_getEntity( *m_startpoint )->setKeyValue( "origin", sTmp );
-		sprintf( sTmp, "%d", (int)Camera_getAngles( *g_pParentWnd->GetCamWnd() )[CAMERA_YAW] );
+		snprintf( sTmp, sizeof( sTmp ), "%d", (int)Camera_getAngles( *g_pParentWnd->GetCamWnd() )[CAMERA_YAW] );
 		Node_getEntity( *m_startpoint )->setKeyValue( "angle", sTmp );
 	}
 public:

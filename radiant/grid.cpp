@@ -30,7 +30,7 @@
 #include "signal/signal.h"
 #include "stringio.h"
 
-#include "gtkmisc.h"
+#include "qtmisc.h"
 #include "commands.h"
 #include "preferences.h"
 

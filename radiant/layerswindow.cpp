@@ -40,7 +40,7 @@
 #include "generic/callback.h"
 #include "signal/signal.h"
 #include "gtkutil/image.h"
-#include "gtkmisc.h"
+#include "qtmisc.h"
 #include "windowobservers.h"
 
 /*
