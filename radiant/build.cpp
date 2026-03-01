@@ -189,7 +189,7 @@ void updateVolumetricFogConfig( const char* mapFile ){
 
 	const char* candidate = pathStream.c_str();
 	if ( string_empty( candidate ) ) {
-		g_volumetricFogConfigPath.clear();
+		g_volumetricFogConfigPath = "";
 		build_set_variable( "VolumetricFogConfig", "" );
 		return;
 	}

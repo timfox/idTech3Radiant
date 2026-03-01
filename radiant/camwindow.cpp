@@ -1931,7 +1931,7 @@ void ShowSize3dToggle(){
 	}
 }
 
-ToggleItem g_show_navmesh( BoolExportCaller( g_navmeshOverlayEnabled ) );
+ToggleItem g_show_navmesh( (BoolExportCaller( g_navmeshOverlayEnabled )) );
 void ShowNavMeshToggle(){
 	NavMeshOverlay_toggle();
 	g_show_navmesh.update();

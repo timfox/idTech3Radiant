@@ -50,12 +50,12 @@ void NavMeshSystem::collectGeometry(){
 	m_triangles.clear();
 
 	Scene_forEachVisibleBrush( GlobalSceneGraph(), [this]( BrushInstance& instance ){
-		Brush* brush = Instance_getBrush( instance );
-		if ( brush == 0 ) {
+		BrushInstance* brushInstance = Instance_getBrush( instance );
+		if ( brushInstance == 0 ) {
 			return;
 		}
 
-		Brush_forEachFace( *brush, [this]( Face& face ){
+		Brush_forEachFace( brushInstance->getBrush(), [this]( Face& face ){
 			if ( face.isDetail() || !face.contributes() ) {
 				return;
 			}
