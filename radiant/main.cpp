@@ -88,7 +88,9 @@
 #include "error.h"
 
 #include <QApplication>
+#include <QCoreApplication>
 #include "gtkutil/glwidget.h"
+#include "cli.h"
 
 void show_splash();
 void hide_splash();
@@ -391,11 +393,15 @@ void remove_local_pid(){
 
 
 int main( int argc, char* argv[] ){
+	const bool headless = cli_is_headless( argc, argv );
+
 #ifdef __linux__
-	// Mouse pointer warping functions do not work with the Wayland backend.
-	// Forcing the backend to X11 will let us run using XWayland
-	// which does provide emulation of this functionality.
-	setenv( "QT_QPA_PLATFORM", "xcb", 0 );
+	if ( headless ){
+		setenv( "QT_QPA_PLATFORM", "offscreen", 1 );
+	}
+	else{
+		setenv( "QT_QPA_PLATFORM", "xcb", 0 );
+	}
 #endif
 
 	crt_init();
@@ -406,10 +412,11 @@ int main( int argc, char* argv[] ){
 	_setmaxstdio( 2048 );
 #endif
 
-	glwidget_setDefaultFormat(); // must go before QApplication instantiation
+	if ( !headless ){
+		glwidget_setDefaultFormat();
+	}
 
 	QCoreApplication::setAttribute( Qt::AA_EnableHighDpiScaling );
-	// QGuiApplication::setHighDpiScaleFactorRoundingPolicy( Qt::HighDpiScaleFactorRoundingPolicy::PassThrough );
 	QCoreApplication::setAttribute( Qt::AA_UseHighDpiPixmaps );
 
 	QApplication qapplication( argc, argv );
@@ -419,23 +426,25 @@ int main( int argc, char* argv[] ){
 	QCoreApplication::setApplicationName( "NetRadiant-Custom" );
 	QCoreApplication::setApplicationVersion( QT_VERSION_STR );
 
-	GlobalDebugMessageHandler::instance().setHandler( GlobalPopupDebugMessageHandler::instance() );
+	if ( !headless ){
+		GlobalDebugMessageHandler::instance().setHandler( GlobalPopupDebugMessageHandler::instance() );
+	}
 
 	environment_init( argc, argv );
 
 	paths_init();
 
-	if ( !check_version() ) {
+	if ( !headless && !check_version() ) {
 		return EXIT_FAILURE;
 	}
 
 	Sys_LogFile( true );
 
-	QApplication::setWindowIcon( new_local_icon( "radiant.ico" ) ); // before any windows, after paths_init()
-
-	show_splash();
-
-	create_global_pid();
+	if ( !headless ){
+		QApplication::setWindowIcon( new_local_icon( "radiant.ico" ) );
+		show_splash();
+		create_global_pid();
+	}
 
 	GlobalPreferences_Init();
 
@@ -443,15 +452,26 @@ int main( int argc, char* argv[] ){
 
 	g_strGameToolsPath = g_pGameDescription->mGameToolsPath;
 
-	remove_global_pid();
+	if ( !headless ){
+		remove_global_pid();
+	}
 
-	g_Preferences.Init(); // must occur before create_local_pid() to allow preferences to be reset
+	g_Preferences.Init();
 
-	create_local_pid();
+	if ( !headless ){
+		create_local_pid();
+	}
 
 	Radiant_Initialise();
 
-//	user_shortcuts_init();
+	if ( headless ){
+		int result = cli_main( argc, argv );
+
+		Radiant_Shutdown();
+		qInstallMessageHandler( nullptr );
+		Sys_LogFile( false );
+		return result;
+	}
 
 	g_pParentWnd = new MainFrame();
 
@@ -480,12 +500,9 @@ int main( int argc, char* argv[] ){
 
 	delete g_pParentWnd;
 
-//	user_shortcuts_save();
-
 	Radiant_Shutdown();
 
 	qInstallMessageHandler( nullptr );
-	// close the log file if any
 	Sys_LogFile( false );
 
 	return EXIT_SUCCESS;

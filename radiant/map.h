@@ -100,9 +100,14 @@ const float g_MinWorldCoord = -64 * 1024;
 
 void Map_LoadFile( const char* filename );
 bool Map_SaveFile( const char* filename );
+bool Map_ImportFile( const char* filename );
+bool Map_SaveSelected( const char* filename );
+void Map_Rename( const char* filename );
 
 void Map_New();
 void Map_Free();
+
+void DoMapInfo();
 
 void Map_RegionOff();
 

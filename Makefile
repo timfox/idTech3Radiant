@@ -963,6 +963,7 @@ $(INSTALLDIR)/radiant.$(EXE): \
 	radiant/layerswindow.o \
 	radiant/mainframe.o \
 	radiant/mainframe_commands.o \
+	radiant/cli.o \
 	radiant/main.o \
 	radiant/map.o \
 	radiant/navmesh.o \

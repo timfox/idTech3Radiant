@@ -1005,6 +1005,10 @@ void ScreenUpdates_process(){
 
 
 void ScreenUpdates_Disable( const char* message, const char* title ){
+	if ( g_pParentWnd == nullptr ) {
+		g_wait_stack.push_back( message );
+		return;
+	}
 	if ( g_wait_stack.empty() ) {
 		s_qe_every_second_timer.disable();
 
@@ -1026,6 +1030,7 @@ void ScreenUpdates_Disable( const char* message, const char* title ){
 void ScreenUpdates_Enable(){
 	ASSERT_MESSAGE( !ScreenUpdates_Enabled(), "screen updates already enabled" );
 	g_wait_stack.pop_back();
+	if ( g_pParentWnd == nullptr ) return;
 	if ( g_wait_stack.empty() ) {
 		s_qe_every_second_timer.enable();
 
