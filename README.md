@@ -5,107 +5,106 @@ The open-source, cross-platform level editor for id Tech based games.
 
 ## Features
 
+#### Editing
+
 * WASD camera binds
-* Fully supported editing in 3D view (brush and entity creation, all manipulating tools)
-* Uniform merge algorithm, merging selected brushes, components and clipper points
-* Free and robust vertex editing, also providing abilities to remove and insert vertices
-* UV Tool (edits texture alignment of selected face or patch)
-* Autocaulk
-* Model browser
+* Full 3D view editing (brush and entity creation, all manipulation tools)
+* Uniform merge algorithm for brushes, components, and clipper points
+* Vertex editing with add/remove vertices
+* UV Tool for texture alignment on faces and patches
 * Brush faces extrusion
-* Left mouse button click tunnel selector, paint selector
-* Numerous mouse shortcuts (see help->General->Mouse Shortcuts)
+* CSG Tool (shell modifier)
+* Brush resize (QE tool): reduce selected faces to most wanted ones
+* Arbitrary texture projections for brushes and curves
+* Texture lock supporting any affine transformation, including during vertex/edge manipulation
+* Brush formats: Axial projection, Brush primitives, Valve 220 (toggleable preference)
+* Autodetect brush type on map open; automatic conversion on Import and Paste
+* Support for "stupid quake bug" compatibility
+
+#### Selection & Manipulation
+
+* Tunnel selector and paint selector (left mouse)
 * Focus camera on selected (Tab)
-* Snapped modes of manipulators
-* Draggable renderable transform origin for manipulators
+* Snapped manipulator modes
+* Draggable transform origin for manipulators
 * Quick vertices drag / brush faces shear shortcut
+* QE tool component mode: drag without hitting handles
+* New bbox manipulator: move, rotate, scale, skew
+* Connected entities selector/walker
+
+#### Texturing
+
 * Simple shader editor
 * Texture painting by drag
-* Seamless brush face<->face, patch<->face texture paste
-* Customizable keyboard shortcuts
-* Customizable GUI themes, fonts
-* MeshTex plugin
-* Patch thicken
-* All patch prefabs are created aligned to active projection
-* Filters toolbar with extra functions on right mouse button click
-* Viewports zoom in to mouse pointer
-* \'all Supported formats\' default option in open dialogs
-* Opening *.map, sent via cmd line (can assign *.map files in OS to be opened with radiant)
-* Texture browser: show alpha transparency option
-* Texture browser: search in directories and tags trees
-* Texture browser: search in currently shown textures
-* CSG Tool (aka shell modifier)
-* Working region compilations (build a map with region enabled = compile regioned part only)
-* QE tool in a component mode: perform drag w/o hitting any handle too
-* Map info dialog: + Total patches, Ingame entities, Group entities, Ingame group entities counts
-* Connected entities selector/walker
-* Build->customize: list available build variables
-* 50x faster light radius rendering
-* Light power is adjustable by mouse drag
-* Anisotropic textures filtering
+* Seamless brush face↔face, patch↔face texture paste
+* Texture browser: alpha transparency, search in directories and tags, search shown textures
+
+#### View & Display
+
+* Viewports zoom to mouse pointer
+* 50× faster light radius rendering
+* Light power adjustable by mouse drag
+* Anisotropic texture filtering
 * Optional MSAA in viewports
-* New very fast entity names rendering system
-* Support \'stupid quake bug\'
-* Arbitrary texture projections for brushes and curves
-* Fully working texture lock, supporting any affine transformation
-* Texture locking during vertex and edge manipulations
-* Brush resize (QE tool): reduce selected faces amount to most wanted ones
-* Support brush formats, as toggleable preference: Axial projection, Brush primitives, Valve 220
-* Autodetect brush type on map opening
-* Automatic AP, BP and Valve220 brush types conversion on map Import and Paste
-* New bbox styled manipulator, allowing any affine transform (move, rotate, scale, skew)
-* rendering of Q3 shader based skyboxes
-* Incredible number of fixes and options
+* Fast entity names rendering
+* Q3 shader-based skybox rendering
+
+#### Workflow
+
+* Autocaulk
+* Model browser
+* Patch thicken; patch prefabs aligned to active projection
+* Filters toolbar with extra functions on right-click
+* "All supported formats" default in open dialogs
+* Open *.map via command line (associate *.map with Radiant)
+* Working region compilations (compile regioned part only)
+* Map info dialog: patches, entities, group entities counts
+* Build→Customize: list available build variables
+* Customizable keyboard shortcuts and GUI themes/fonts
+* Numerous mouse shortcuts (Help → General → Mouse Shortcuts)
+* MeshTex plugin
 
 #### Advanced Entity Systems
 
-* Built-in entity definitions for modern engine systems (fire, water, wind, physics, gravity, vehicles)
+* Built-in entity definitions for modern engines (fire, water, wind, physics, gravity, vehicles)
 * Loaded from `scripts/entities_advanced.def` in the editor installation
 * Includes: env_fire_emitter, env_water_volume, env_fan, prop_breakable, trigger_gravity, env_spawn_volume, info_vehicle, and more
-* Entity definitions also loaded from editor `scripts/` directory (alongside game base/mod dirs)
+* Entity definitions also loaded from editor `scripts/` directory
 
 #### Python Scripting
 
-* Python Script Editor workbench (Tools > Python Script Editor, Ctrl+Alt+Y)
-* Maya-like workflow: edit, run, and inspect output in a built-in dock
-* Scripts run in a subprocess with project paths in the environment
-* Non-blocking execution; editor stays responsive while scripts run
-* `radiant` module provides path helpers: app_path, engine_path, game_path, maps_path, scripts_path, current_map
-* Configurable Python executable in Preferences > Game
+* Python Script Editor workbench (Tools → Python Script Editor, Ctrl+Alt+Y)
+* Maya-like workflow: edit, run, inspect output in a built-in dock
+* Scripts run in a subprocess with project paths in the environment; non-blocking execution
+* `radiant` module: app_path, engine_path, game_path, maps_path, scripts_path, current_map
+* Configurable Python executable in Preferences → Game
 
 #### Performance
 
-* Layer operations use hash-based lookups for faster scene traversals
+* Hash-based layer lookups for faster scene traversals
 * Asynchronous update check (no UI freeze)
-* Non-blocking Python script execution
 
-#### Q3Map2:
+#### Q3Map2
 
-* q3map_remapshader remaps anything fine, on all stages
+* q3map_remapshader remaps on all stages
 * Automatic map packager (complete Q3 support)
-* Report full / full pk3 path on file syntax errors
-* Allowed simultaneous samples+filter use, makes sense
-* -brightness 0..alot, def 1: mimics q3map_lightmapBrightness globally
-* -contrast -255..255, def 0: lighting contrast
-* -saturation light option
-* -bouncecolorratio 0..1 (ratio of colorizing light sample by texture)
-* -nolm - no lightmaps
-* -novertex works, (0..1) sets globally
-* -vertexscale
-* New area lights backsplash algorithm (utilizing area lights instead of point ones)
-* -backsplash (float)scale (float)distance: adjust area lights globally (real area lights have no backsplash)
-* New slightly less careful, but much faster lightmaps packing algorithm (allocating... process)
-* -extlmhacksize zero effort external lightmaps for Q3
-* Valve220 mapformat autodetection and support
+* Full path reporting on file syntax errors
+* Simultaneous samples+filter use
+* -brightness 0..a lot (def 1), -contrast -255..255, -saturation
+* -bouncecolorratio 0..1, -nolm, -novertex 0..1, -vertexscale
+* Area lights backsplash algorithm; -backsplash (float)scale (float)distance
+* Faster lightmaps packing algorithm
+* -extlmhacksize for external lightmaps
+* Valve220 map format autodetection
 * Consistent brush content deduction with mixed face parameters
-* Model shaders paths deduction
-* Fixed model autoclip, added 20 new clipping modes
-* Support negative misc_model scale
-* Assimp model loading library (40+ formats)
-* -json bsp export/import
-* -mergebsp injects one bsp to another
+* Model shaders path deduction
+* Model autoclip with 20+ clipping modes; negative misc_model scale
+* Assimp model loading (40+ formats)
+* -json BSP export/import, -mergebsp
 * No shaderlist.txt mode: load all shaders
 
-###### see changelog-custom.txt for more
+See changelog-custom.txt for more.
 
-## [COMPILING](/COMPILING)
+## Building
+
+See [COMPILING](COMPILING) for build instructions.
