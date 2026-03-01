@@ -37,6 +37,7 @@
 
 #include "parse.h"
 #include "maparse.h"
+#include "usdparse.h"
 #include "write.h"
 
 
@@ -238,6 +239,8 @@ public:
 		GlobalFiletypesModule::getTable().addType( Type::Name, Name, filetype_t( "quake3 maps", "*.map", true, true, true ) );
 		GlobalFiletypesModule::getTable().addType( Type::Name, Name, filetype_t( "quake3 region", "*.reg", true, true, true ) );
 		GlobalFiletypesModule::getTable().addType( Type::Name, Name, filetype_t( "maya ascii scene", "*.ma", true, true, false ) );
+		GlobalFiletypesModule::getTable().addType( Type::Name, Name, filetype_t( "USD ascii scene", "*.usda", true, true, false ) );
+		GlobalFiletypesModule::getTable().addType( Type::Name, Name, filetype_t( "USD scene", "*.usd", true, true, false ) );
 		GlobalFiletypesModule::getTable().addType( Type::Name, Name, filetype_t( "quake3 compiled maps", "*.bsp", false, true, false ) );
 	}
 	MapFormat* getTable(){
@@ -301,7 +304,38 @@ public:
 		             || strstr( peekBuf, "requires maya" ) != nullptr
 		             || strstr( peekBuf, "createNode" ) != nullptr );
 
-		if ( isMaya ) {
+		bool isUsd = ( strstr( peekBuf, "#usda" ) != nullptr
+		            || strstr( peekBuf, "def Xform" ) != nullptr
+		            || strstr( peekBuf, "def Mesh" ) != nullptr
+		            || strstr( peekBuf, "def Scope" ) != nullptr );
+
+		if ( isUsd ) {
+			std::string content( peekBuf, peekLen );
+			char buf[65536];
+			for (;;){
+				std::size_t n = inputStream.read( buf, sizeof( buf ) );
+				if ( n == 0 ) break;
+				content.append( buf, n );
+			}
+
+			class MemTextInputStream2 : public TextInputStream {
+				const char* m_data;
+				std::size_t m_size;
+				std::size_t m_pos;
+			public:
+				MemTextInputStream2( const char* data, std::size_t size ) : m_data( data ), m_size( size ), m_pos( 0 ){}
+				std::size_t read( char* buffer, std::size_t length ) override {
+					std::size_t avail = m_size - m_pos;
+					std::size_t toRead = ( length < avail ) ? length : avail;
+					memcpy( buffer, m_data + m_pos, toRead );
+					m_pos += toRead;
+					return toRead;
+				}
+			} memStream( content.c_str(), content.size() );
+
+			UsdAscii_Read( root, memStream, entityTable );
+		}
+		else if ( isMaya ) {
 			std::string content( peekBuf, peekLen );
 			char buf[65536];
 			for (;;){
