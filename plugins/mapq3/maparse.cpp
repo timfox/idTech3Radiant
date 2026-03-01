@@ -409,6 +409,7 @@ bool isEntityClassName( const std::string& name ){
 
 void addBrushForMesh( scene::Node& worldspawn, const MaScene& scene, const MaMesh& mesh ){
 	if ( mesh.verts.empty() || mesh.edges.empty() || mesh.faces.empty() ) return;
+	if ( mesh.faces.size() < 4 ) return;
 
 	MaVec3 origin = getMeshParentOrigin( scene, mesh );
 
@@ -417,10 +418,9 @@ void addBrushForMesh( scene::Node& worldspawn, const MaScene& scene, const MaMes
 		worldVerts[i] = yUpToZUp( mesh.verts[i] + origin );
 	}
 
-	scene::Node& brushNode = GlobalBrushCreator().createBrush();
+	static const char shader[] = "textures/common/caulk";
 
-	const char* shader = "textures/common/caulk";
-
+	std::vector<_QERFaceData> faceDatas;
 	for ( const auto& face : mesh.faces ){
 		auto vi = resolveFaceVerts( mesh, face );
 		if ( vi.size() < 3 ) continue;
@@ -452,11 +452,17 @@ void addBrushForMesh( scene::Node& worldspawn, const MaScene& scene, const MaMes
 		faceData.flags = 0;
 		faceData.value = 0;
 
-		GlobalBrushCreator().Brush_addFace( brushNode, faceData );
+		faceDatas.push_back( faceData );
 	}
 
-	scene::Traversable* traversable = Node_getTraversable( worldspawn );
-	if ( traversable ) traversable->insert( brushNode );
+	if ( faceDatas.size() < 4 ) return;
+
+	scene::Node& brushNode = GlobalBrushCreator().createBrush();
+	for ( const auto& fd : faceDatas ){
+		GlobalBrushCreator().Brush_addFace( brushNode, fd );
+	}
+
+	Node_getTraversable( worldspawn )->insert( brushNode );
 }
 
 
@@ -538,31 +544,35 @@ void MayaAscii_Read( scene::Node& root, TextInputStream& inputStream, EntityCrea
 		addPatchForNurbs( worldspawn, scene, ns );
 	}
 
+	auto createPointEntity = [&]( const char* classname, const MaVec3& pos ){
+		EntityClass* ec = GlobalEntityClassManager().findOrInsert( classname, false );
+		scene::Node& ent = entityTable.createEntity( ec );
+		Node_getEntity( ent )->setKeyValue( "classname", classname );
+		char originStr[128];
+		snprintf( originStr, sizeof( originStr ), "%.0f %.0f %.0f", pos.x, pos.y, pos.z );
+		Node_getEntity( ent )->setKeyValue( "origin", originStr );
+		return &ent;
+	};
+
 	for ( const auto& light : scene.lights ){
 		MaVec3 origin = { 0, 0, 0 };
 		if ( !light.parent.empty() )
 			origin = getTransformOrigin( scene, light.parent );
 		MaVec3 pos = yUpToZUp( origin );
 
-		EntityClass* ec = GlobalEntityClassManager().findOrInsert( "light", false );
-		scene::Node& ent = entityTable.createEntity( ec );
-		Node_getEntity( ent )->setKeyValue( "classname", "light" );
-
-		char originStr[128];
-		snprintf( originStr, sizeof( originStr ), "%.0f %.0f %.0f", pos.x, pos.y, pos.z );
-		Node_getEntity( ent )->setKeyValue( "origin", originStr );
+		scene::Node* ent = createPointEntity( "light", pos );
 
 		int lightVal = static_cast<int>( light.intensity * 300.0 );
 		if ( lightVal < 1 ) lightVal = 300;
 		char lightStr[32];
 		snprintf( lightStr, sizeof( lightStr ), "%d", lightVal );
-		Node_getEntity( ent )->setKeyValue( "light", lightStr );
+		Node_getEntity( *ent )->setKeyValue( "light", lightStr );
 
 		char colorStr[64];
 		snprintf( colorStr, sizeof( colorStr ), "%.3f %.3f %.3f", light.color.x, light.color.y, light.color.z );
-		Node_getEntity( ent )->setKeyValue( "_color", colorStr );
+		Node_getEntity( *ent )->setKeyValue( "_color", colorStr );
 
-		Node_getTraversable( root )->insert( ent );
+		Node_getTraversable( root )->insert( *ent );
 	}
 
 	for ( const auto& xf : scene.transforms ){
@@ -575,22 +585,15 @@ void MayaAscii_Read( scene::Node& root, TextInputStream& inputStream, EntityCrea
 		if ( hasMesh ) continue;
 
 		MaVec3 pos = yUpToZUp( xf.translate );
-
-		EntityClass* ec = GlobalEntityClassManager().findOrInsert( xf.name.c_str(), false );
-		scene::Node& ent = entityTable.createEntity( ec );
-		Node_getEntity( ent )->setKeyValue( "classname", xf.name.c_str() );
-
-		char originStr[128];
-		snprintf( originStr, sizeof( originStr ), "%.0f %.0f %.0f", pos.x, pos.y, pos.z );
-		Node_getEntity( ent )->setKeyValue( "origin", originStr );
+		scene::Node* ent = createPointEntity( xf.name.c_str(), pos );
 
 		if ( xf.hasRotate && ( xf.rotate.x != 0 || xf.rotate.y != 0 || xf.rotate.z != 0 ) ){
 			char angleStr[32];
 			snprintf( angleStr, sizeof( angleStr ), "%.0f", xf.rotate.y );
-			Node_getEntity( ent )->setKeyValue( "angle", angleStr );
+			Node_getEntity( *ent )->setKeyValue( "angle", angleStr );
 		}
 
-		Node_getTraversable( root )->insert( ent );
+		Node_getTraversable( root )->insert( *ent );
 	}
 
 	globalOutputStream() << "Maya ASCII: map loaded successfully\n";
