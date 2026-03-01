@@ -267,6 +267,51 @@ typedef std::list<PicoModelModule> PicoModelModules;
 PicoModelModules g_PicoModelModules;
 
 
+class MayaModelLoader : public ModelLoader
+{
+public:
+	scene::Node& loadModel( ArchiveFile& file ) override {
+		return loadMayaAsciiModel( file );
+	}
+};
+
+class MayaModelPicoAPI : public TypeSystemRef
+{
+	MayaModelLoader m_modelLoader;
+public:
+	typedef ModelLoader Type;
+
+	MayaModelPicoAPI( const char* extension ){
+		GlobalFiletypesModule::getTable().addType( Type::Name, extension, filetype_t( StringStream<32>( extension, " model" ), StringStream<16>( "*.", extension ) ) );
+	}
+	ModelLoader* getTable(){
+		return &m_modelLoader;
+	}
+};
+
+class MayaModelAPIConstructor
+{
+	CopiedString m_extension;
+public:
+	MayaModelAPIConstructor( const char* extension ) :
+		m_extension( extension ) {
+	}
+	const char* getName(){
+		return m_extension.c_str();
+	}
+	MayaModelPicoAPI* constructAPI( ModelPicoDependencies& dependencies ){
+		return new MayaModelPicoAPI( m_extension.c_str() );
+	}
+	void destroyAPI( MayaModelPicoAPI* api ){
+		delete api;
+	}
+};
+
+typedef SingletonModule<MayaModelPicoAPI, ModelPicoDependencies, MayaModelAPIConstructor> MayaModelModule;
+typedef std::list<MayaModelModule> MayaModelModules;
+MayaModelModules g_MayaModelModules;
+
+
 
 class ImageMDLAPI
 {
@@ -317,6 +362,9 @@ extern "C" void RADIANT_DLLEXPORT Radiant_RegisterModules( ModuleServer& server 
 			g_PicoModelModules.back().selfRegister();
 		}
 	}
+
+	g_MayaModelModules.push_back( MayaModelModule( MayaModelAPIConstructor( "ma" ) ) );
+	g_MayaModelModules.back().selfRegister();
 
 	g_ImageMDLModule.selfRegister();
 }

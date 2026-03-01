@@ -29,3 +29,4 @@ namespace Assimp{
 class Importer;
 }
 scene::Node& loadPicoModel( Assimp::Importer& importer, ArchiveFile& file );
+scene::Node& loadMayaAsciiModel( ArchiveFile& file );

@@ -1168,6 +1168,7 @@ endif
 $(INSTALLDIR)/modules/assmodel.$(DLL): LIBS_EXTRA := $(LIBS_ASSIMP)
 $(INSTALLDIR)/modules/assmodel.$(DLL): CPPFLAGS_EXTRA := -Ilibs -Iinclude $(CPPFLAGS_ASSIMP) $(CPPFLAGS_QTGUI)
 $(INSTALLDIR)/modules/assmodel.$(DLL): \
+	plugins/assmodel/mayaascii.o \
 	plugins/assmodel/mdlimage.o \
 	plugins/assmodel/model.o \
 	plugins/assmodel/plugin.o \
