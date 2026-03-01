@@ -57,6 +57,27 @@ The open-source, cross-platform level editor for id Tech based games.
 * rendering of Q3 shader based skyboxes
 * Incredible number of fixes and options
 
+#### Advanced Entity Systems
+
+* Built-in entity definitions for modern engine systems (fire, water, wind, physics, gravity, vehicles)
+* Loaded from `scripts/entities_advanced.def` in the editor installation
+* Includes: env_fire_emitter, env_water_volume, env_fan, prop_breakable, trigger_gravity, env_spawn_volume, info_vehicle, and more
+* Entity definitions also loaded from editor `scripts/` directory (alongside game base/mod dirs)
+
+#### Python Scripting
+
+* Python Script Editor workbench (Tools > Python Script Editor, Ctrl+Alt+Y)
+* Maya-like workflow: edit, run, and inspect output in a built-in dock
+* Scripts run in a subprocess with project paths in the environment
+* Non-blocking execution; editor stays responsive while scripts run
+* `radiant` module provides path helpers: app_path, engine_path, game_path, maps_path, scripts_path, current_map
+* Configurable Python executable in Preferences > Game
+
+#### Performance
+
+* Layer operations use hash-based lookups for faster scene traversals
+* Asynchronous update check (no UI freeze)
+* Non-blocking Python script execution
 
 #### Q3Map2:
 
