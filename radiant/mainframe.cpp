@@ -2221,7 +2221,7 @@ void create_tools_menu( QMenuBar *menubar ){
 
 	create_menu_item_with_mnemonic( menu, "Id Tech 3 Tool Center...", "OpenIdTech3ToolCenter" );
 	create_menu_item_with_mnemonic( menu, "Music Player / Playlist Editor", "OpenAudioWorkbench" );
-	create_menu_item_with_mnemonic( menu, "Cinematic Video Player", "OpenCinematicPlayer" );
+	create_menu_item_with_mnemonic( menu, "Video Player", "OpenCinematicPlayer" );
 	create_menu_item_with_mnemonic( menu, "Spreadsheet Editor", "OpenSpreadsheetWorkbench" );
 	menu->addSeparator();
 	create_menu_item_with_mnemonic( menu, "Q3Map2++ Help", "ToolQ3Map2Help" );

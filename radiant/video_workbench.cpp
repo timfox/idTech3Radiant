@@ -89,7 +89,7 @@ QString VideoWorkbench_videoContentFolder(){
 }
 
 QStringList VideoWorkbench_videoExtensions(){
-	return { ".mp4", ".mkv", ".webm", ".avi", ".mov", ".ogv", ".m4v", ".roq" };
+	return { "*.mp4", "*.mkv", "*.webm", "*.avi", "*.mov", "*.ogv", "*.m4v", "*.roq", "*.RoQ", "*.ROQ" };
 }
 
 bool VideoWorkbench_isRoQ( const QString& path ){
@@ -247,6 +247,28 @@ void VideoWorkbench_addVideoItem( const QString& path ){
 	item->setData( Qt::UserRole, absolute );
 }
 
+void VideoWorkbench_persistMovieList( const QStringList& files ){
+	VideoWorkbench_setSetting( "CachedMovies", files );
+}
+
+QStringList VideoWorkbench_restoreMovieList(){
+	return VideoWorkbench_settings().value( StringStream( c_videoSettingsPrefix, "CachedMovies" ).c_str() ).toStringList();
+}
+
+void VideoWorkbench_populateList( const QStringList& files ){
+	if ( g_videoList == nullptr ) {
+		return;
+	}
+	g_videoList->clear();
+	for ( const auto& file : files )
+	{
+		VideoWorkbench_addVideoItem( file );
+	}
+	if ( g_videoStatusLabel != nullptr ) {
+		g_videoStatusLabel->setText( StringStream( "Movies: ", files.size() ).c_str() );
+	}
+}
+
 void VideoWorkbench_refreshVideoList( bool recursive ){
 	if ( g_videoList == nullptr ) {
 		return;
@@ -266,14 +288,8 @@ void VideoWorkbench_refreshVideoList( bool recursive ){
 		return;
 	}
 	const QStringList files = VideoWorkbench_collectVideoFiles( folder, recursive );
-	g_videoList->clear();
-	for ( const auto& file : files )
-	{
-		VideoWorkbench_addVideoItem( file );
-	}
-	if ( g_videoStatusLabel != nullptr ) {
-		g_videoStatusLabel->setText( StringStream( "Movies: ", files.size() ).c_str() );
-	}
+	VideoWorkbench_populateList( files );
+	VideoWorkbench_persistMovieList( files );
 }
 
 void VideoWorkbench_playRoQ( const QString& path ){
@@ -468,6 +484,10 @@ void VideoWorkbench_createDock( QMainWindow* window ){
 	if ( !lastFile.isEmpty() && QFileInfo::exists( lastFile ) ) {
 		VideoWorkbench_openFile( lastFile, false );
 	}
+	const QStringList cached = VideoWorkbench_restoreMovieList();
+	if ( !cached.isEmpty() ) {
+		VideoWorkbench_populateList( cached );
+	}
 	VideoWorkbench_refreshVideoList( true );
 	VideoWorkbench_updateTimeLabel();
 }
@@ -495,7 +515,7 @@ void VideoWorkbench_createDock( QMainWindow* ){
 void VideoWorkbench_open(){
 	QMessageBox::warning(
 	    MainFrame_getWindow(),
-	    "Cinematic Player",
+	    "Video Player",
 	    "This build does not include Qt Multimedia video widget support.\nInstall Qt5MultimediaWidgets development files and rebuild."
 	);
 }
