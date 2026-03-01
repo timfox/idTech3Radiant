@@ -152,7 +152,7 @@ void theme_set( ETheme theme ){
 		const QColor hover = rgb( 0.057805, 0.074214, 0.099899 );
 		const QColor hover2 = rgb( 0.149960, 0.191202, 0.266356 );
 		const QColor text = rgb( 0.527115, 0.527115, 0.527115 );
-		const QColor disabledText = rgb( 0.033105, 0.040915, 0.054480 );
+		const QColor disabledText = rgb( 0.200000, 0.210000, 0.230000 );
 		const QColor highlight = rgb( 0.527115, 1.000000, 0.304987 );
 		const QColor highlightText = rgb( 1.000000, 1.000000, 1.000000 );
 		const QColor selectInactive = rgb( 0.146666, 0.200000, 0.120000 );
@@ -198,7 +198,7 @@ void theme_set( ETheme theme ){
 		const QColor inputOutline = rgb( 0.021219, 0.027321, 0.015996 );
 		const QColor hover2 = rgb( 0.234375, 0.196017, 0.033579 );
 		const QColor text = rgb( 0.527115, 0.527115, 0.527115 );
-		const QColor disabledText = rgb( 0.083333, 0.069695, 0.011939 );
+		const QColor disabledText = rgb( 0.220000, 0.200000, 0.150000 );
 		const QColor highlight = rgb( 0.276042, 0.230865, 0.039549 );
 		const QColor highlightText = QColor::fromRgbF( 1.0, 1.0, 1.0 );
 		const QColor accentBlue = rgb( 0.019382, 0.496933, 1.000000 );
@@ -300,12 +300,12 @@ void theme_set( ETheme theme ){
 		const QColor highlight = rgb( 0.527115, 1.000000, 0.304987 );
 		const QColor accentBlue = rgb( 0.019382, 0.496933, 1.000000 );
 		const QColor accentYellow = rgb( 1.000000, 0.715693, 0.010330 );
-		const QColor disabledText = rgb( 0.050000, 0.050000, 0.050000 );
+		const QColor disabledText = rgb( 0.200000, 0.200000, 0.200000 );
 		greyPalette.setColor( QPalette::Window, background );
 		greyPalette.setColor( QPalette::WindowText, text );
 		greyPalette.setColor( QPalette::Base, dropdown );
 		greyPalette.setColor( QPalette::AlternateBase, panel );
-		greyPalette.setColor( QPalette::ToolTipBase, accentYellow );
+		greyPalette.setColor( QPalette::ToolTipBase, header );
 		greyPalette.setColor( QPalette::ToolTipText, text );
 		greyPalette.setColor( QPalette::Text, text );
 		greyPalette.setColor( QPalette::Button, panel );
@@ -347,12 +347,12 @@ void theme_set( ETheme theme ){
 		const QColor highlight = rgb( 0.527115, 1.000000, 0.304987 );
 		const QColor accentBlue = rgb( 0.019382, 0.496933, 1.000000 );
 		const QColor accentYellow = rgb( 1.000000, 0.715693, 0.010330 );
-		const QColor disabledText = rgb( 0.050000, 0.050000, 0.050000 );
+		const QColor disabledText = rgb( 0.200000, 0.200000, 0.200000 );
 		greyPalette.setColor( QPalette::Window, background );
 		greyPalette.setColor( QPalette::WindowText, text );
 		greyPalette.setColor( QPalette::Base, dropdown );
 		greyPalette.setColor( QPalette::AlternateBase, panel );
-		greyPalette.setColor( QPalette::ToolTipBase, accentYellow );
+		greyPalette.setColor( QPalette::ToolTipBase, header );
 		greyPalette.setColor( QPalette::ToolTipText, text );
 		greyPalette.setColor( QPalette::Text, text );
 		greyPalette.setColor( QPalette::Button, panel );
@@ -430,18 +430,18 @@ void theme_set( ETheme theme ){
 		darkPalette.setColor( QPalette::Disabled, QPalette::WindowText, disabledColor );
 		darkPalette.setColor( QPalette::Base, baseColor );
 		darkPalette.setColor( QPalette::AlternateBase, baseColor.darker( 130 ) );
-		darkPalette.setColor( QPalette::ToolTipBase, Qt::white );
+		darkPalette.setColor( QPalette::ToolTipBase, QColor( 77, 79, 75 ) );
 		darkPalette.setColor( QPalette::ToolTipText, Qt::white );
 		darkPalette.setColor( QPalette::Text, Qt::white );
 		darkPalette.setColor( QPalette::Disabled, QPalette::Text, disabledColor );
-		darkPalette.setColor( QPalette::Disabled, QPalette::Light, disabledColor ); // disabled menu text shadow
-		darkPalette.setColor( QPalette::Button, darkColor.lighter( 130 ) ); //<>
+		darkPalette.setColor( QPalette::Disabled, QPalette::Light, disabledColor );
+		darkPalette.setColor( QPalette::Button, darkColor.lighter( 130 ) );
 		darkPalette.setColor( QPalette::ButtonText, Qt::white );
-		darkPalette.setColor( QPalette::Disabled, QPalette::ButtonText, disabledColor.lighter( 130 ) ); //<>
+		darkPalette.setColor( QPalette::Disabled, QPalette::ButtonText, disabledColor.lighter( 130 ) );
 		darkPalette.setColor( QPalette::BrightText, Qt::red );
 		darkPalette.setColor( QPalette::Link, QColor( 42, 130, 218 ) );
 
-		darkPalette.setColor( QPalette::Highlight, QColor( 250, 203, 129 ) ); //<>
+		darkPalette.setColor( QPalette::Highlight, QColor( 250, 203, 129 ) );
 		darkPalette.setColor( QPalette::Inactive, QPalette::Highlight, disabledColor );
 		darkPalette.setColor( QPalette::HighlightedText, Qt::black );
 		darkPalette.setColor( QPalette::Disabled, QPalette::HighlightedText, disabledColor );
@@ -462,11 +462,11 @@ void theme_set( ETheme theme ){
 		darkPalette.setColor( QPalette::Disabled, QPalette::WindowText, disabledColor );
 		darkPalette.setColor( QPalette::Base, baseColor );
 		darkPalette.setColor( QPalette::AlternateBase, baseColor.darker( 130 ) );
-		darkPalette.setColor( QPalette::ToolTipBase, Qt::white );
+		darkPalette.setColor( QPalette::ToolTipBase, QColor( 50, 50, 50 ) );
 		darkPalette.setColor( QPalette::ToolTipText, Qt::white );
 		darkPalette.setColor( QPalette::Text, Qt::white );
 		darkPalette.setColor( QPalette::Disabled, QPalette::Text, disabledColor );
-		darkPalette.setColor( QPalette::Disabled, QPalette::Light, disabledColor ); // disabled menu text shadow
+		darkPalette.setColor( QPalette::Disabled, QPalette::Light, disabledColor );
 		darkPalette.setColor( QPalette::Button, darkColor );
 		darkPalette.setColor( QPalette::ButtonText, Qt::white );
 		darkPalette.setColor( QPalette::Disabled, QPalette::ButtonText, disabledColor );
