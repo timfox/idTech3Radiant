@@ -1169,9 +1169,14 @@ misc...
 	* .crn image format support
 	* .dpk .dpkdir game archives support
 	* .webp image format support
-
-
-
+	* Advanced entity systems: built-in definitions for fire, water, wind, physics, gravity, vehicles (scripts/entities_advanced.def)
+	* Entity definitions loaded from editor scripts/ directory alongside game base/mod dirs
+	* Python Script Editor workbench (Tools → Python Script Editor, Ctrl+Alt+Y)
+	* Python scripts run in subprocess with project paths; non-blocking execution
+	* radiant module: app_path, engine_path, game_path, maps_path, scripts_path, current_map
+	* Configurable Python executable in Preferences → Game
+	* Hash-based layer lookups for faster scene traversals
+	* Asynchronous update check (no UI freeze)
 
 
 
