@@ -1149,6 +1149,7 @@ $(INSTALLDIR)/modules/imagepng.$(DLL): \
 
 $(INSTALLDIR)/modules/mapq3.$(DLL): CPPFLAGS_EXTRA := -Ilibs -Iinclude
 $(INSTALLDIR)/modules/mapq3.$(DLL): \
+	plugins/mapq3/maparse.o \
 	plugins/mapq3/parse.o \
 	plugins/mapq3/plugin.o \
 	plugins/mapq3/write.o \

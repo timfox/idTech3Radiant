@@ -643,6 +643,34 @@ typedef SingletonModule<MapVMFAPI, MapDependencies> MapVMFModule;
 MapVMFModule g_MapVMFModule;
 
 
+#include "maparse.h"
+
+class MapMayaAPI final : public TypeSystemRef, public MapFormat
+{
+public:
+	typedef MapFormat Type;
+	STRING_CONSTANT( Name, "mapmaya" );
+
+	MapMayaAPI(){
+		GlobalFiletypesModule::getTable().addType( Type::Name, Name, filetype_t( "maya ascii maps", "*.ma", true, true, false ) );
+	}
+	MapFormat* getTable(){
+		return this;
+	}
+	void readGraph( scene::Node& root, TextInputStream& inputStream, EntityCreator& entityTable ) const override {
+		MayaAscii_Read( root, inputStream, entityTable );
+	}
+	void writeGraph( scene::Node& root, GraphTraversalFunc traverse, TextOutputStream& outputStream ) const override {
+		TokenWriter& writer = GlobalScripLibModule::getTable().m_pfnNewSimpleTokenWriter( outputStream );
+		Map_Write( root, traverse, writer, false );
+		writer.release();
+	}
+};
+
+typedef SingletonModule<MapMayaAPI, MapDependencies> MapMayaModule;
+
+MapMayaModule g_MapMayaModule;
+
 
 extern "C" void RADIANT_DLLEXPORT Radiant_RegisterModules( ModuleServer& server ){
 	initialiseModule( server );
@@ -654,4 +682,5 @@ extern "C" void RADIANT_DLLEXPORT Radiant_RegisterModules( ModuleServer& server 
 	g_MapQ2Module.selfRegister();
 	g_MapHalfLifeModule.selfRegister();
 	g_MapVMFModule.selfRegister();
+	g_MapMayaModule.selfRegister();
 }
