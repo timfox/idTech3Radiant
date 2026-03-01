@@ -1,0 +1,277 @@
+/* -----------------------------------------------------------------------------
+
+      ABOUT: Maya 2024 Qt Style Sheet for NetRadiant-Custom.
+             Faithfully replicates Autodesk Maya's UI appearance.
+
+       FILE: maya.qss
+    VERSION: 1.0
+
+----------------------------------------------------------------------------- */
+
+/* ---- QMenu ---- */
+
+QMenu {
+	background: rgb( 68, 68, 68 );
+	border: 1px solid rgb( 48, 48, 48 );
+}
+
+QMenu::item {
+	padding: 4px 28px 4px 20px;
+}
+
+QMenu::item:selected {
+	background: rgb( 82, 133, 166 );
+}
+
+QMenu::separator {
+	background: rgb( 85, 85, 85 );
+	margin: 3px 7px 3px 5px;
+	height: 1px;
+}
+
+QMenu::indicator {
+	width: 13px;
+	height: 13px;
+	padding-left: 5px;
+}
+
+/* ---- QToolTip ---- */
+
+QToolTip {
+	color: rgb( 0, 0, 0 );
+	background: rgb( 255, 255, 225 );
+	margin: 0px;
+	border: 1px solid rgb( 128, 128, 128 );
+	border-radius: 0px;
+	padding: 2px;
+}
+
+/* ---- QScrollBar ---- */
+
+QScrollBar:vertical {
+	width: 14px;
+	border: none;
+	background: rgb( 54, 54, 54 );
+}
+
+QScrollBar::handle:vertical {
+	background: rgb( 96, 96, 96 );
+	min-height: 20px;
+	border-radius: 3px;
+	margin: 2px;
+}
+
+QScrollBar::handle:vertical:hover {
+	background: rgb( 120, 120, 120 );
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+	height: 0px;
+}
+
+QScrollBar:horizontal {
+	height: 14px;
+	border: none;
+	background: rgb( 54, 54, 54 );
+}
+
+QScrollBar::handle:horizontal {
+	background: rgb( 96, 96, 96 );
+	min-width: 20px;
+	border-radius: 3px;
+	margin: 2px;
+}
+
+QScrollBar::handle:horizontal:hover {
+	background: rgb( 120, 120, 120 );
+}
+
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+	width: 0px;
+}
+
+/* ---- QToolBar ---- */
+
+QToolBar {
+	border: none;
+	spacing: 1px;
+	padding: 1px;
+}
+
+QToolBar::separator {
+	background: rgb( 85, 85, 85 );
+	width: 1px;
+	margin: 3px 2px;
+}
+
+/* ---- QToolButton ---- */
+
+QToolButton {
+	border: 1px solid transparent;
+	border-radius: 2px;
+	padding: 2px;
+}
+
+QToolButton:hover {
+	background: rgb( 90, 90, 90 );
+	border: 1px solid rgb( 100, 100, 100 );
+}
+
+QToolButton:pressed {
+	background: rgb( 60, 60, 60 );
+}
+
+QToolButton:checked {
+	background: rgb( 82, 133, 166 );
+	border: 1px solid rgb( 92, 143, 176 );
+}
+
+/* ---- QPushButton ---- */
+
+QPushButton {
+	border: 1px solid rgb( 48, 48, 48 );
+	border-radius: 2px;
+	padding: 3px 12px;
+	background: rgb( 85, 85, 85 );
+}
+
+QPushButton:hover {
+	background: rgb( 96, 96, 96 );
+	border: 1px solid rgb( 100, 100, 100 );
+}
+
+QPushButton:pressed {
+	background: rgb( 60, 60, 60 );
+}
+
+QPushButton:disabled {
+	color: rgb( 128, 128, 128 );
+	background: rgb( 64, 64, 64 );
+}
+
+/* ---- QTabBar ---- */
+
+QTabBar::tab {
+	background: rgb( 58, 58, 58 );
+	border: 1px solid rgb( 48, 48, 48 );
+	padding: 4px 10px;
+	margin-right: 1px;
+}
+
+QTabBar::tab:selected {
+	background: rgb( 68, 68, 68 );
+	border-bottom-color: rgb( 68, 68, 68 );
+}
+
+QTabBar::tab:hover:!selected {
+	background: rgb( 78, 78, 78 );
+}
+
+/* ---- QDockWidget ---- */
+
+QDockWidget {
+	titlebar-close-icon: none;
+	titlebar-normal-icon: none;
+}
+
+QDockWidget::title {
+	background: rgb( 58, 58, 58 );
+	padding: 4px;
+	border: 1px solid rgb( 48, 48, 48 );
+}
+
+/* ---- QLineEdit / QSpinBox ---- */
+
+QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {
+	border: 1px solid rgb( 48, 48, 48 );
+	border-radius: 2px;
+	padding: 2px 4px;
+	background: rgb( 43, 43, 43 );
+	selection-background-color: rgb( 82, 133, 166 );
+}
+
+QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {
+	border: 1px solid rgb( 82, 133, 166 );
+}
+
+/* ---- QGroupBox ---- */
+
+QGroupBox {
+	border: 1px solid rgb( 85, 85, 85 );
+	border-radius: 3px;
+	margin-top: 8px;
+	padding-top: 4px;
+}
+
+QGroupBox::title {
+	subcontrol-origin: margin;
+	left: 8px;
+	padding: 0 3px;
+}
+
+/* ---- QHeaderView ---- */
+
+QHeaderView::section {
+	background: rgb( 58, 58, 58 );
+	border: 1px solid rgb( 48, 48, 48 );
+	padding: 3px;
+}
+
+/* ---- QTreeView / QListView ---- */
+
+QTreeView, QListView, QTableView {
+	background: rgb( 43, 43, 43 );
+	alternate-background-color: rgb( 48, 48, 48 );
+	border: 1px solid rgb( 48, 48, 48 );
+}
+
+QTreeView::item:hover, QListView::item:hover {
+	background: rgb( 58, 58, 58 );
+}
+
+QTreeView::item:selected, QListView::item:selected {
+	background: rgb( 82, 133, 166 );
+}
+
+/* ---- QSlider ---- */
+
+QSlider::groove:horizontal {
+	height: 4px;
+	background: rgb( 48, 48, 48 );
+	border-radius: 2px;
+}
+
+QSlider::handle:horizontal {
+	background: rgb( 140, 140, 140 );
+	width: 12px;
+	margin: -4px 0;
+	border-radius: 6px;
+}
+
+QSlider::handle:horizontal:hover {
+	background: rgb( 82, 133, 166 );
+}
+
+/* ---- QStatusBar ---- */
+
+QStatusBar {
+	background: rgb( 58, 58, 58 );
+	border-top: 1px solid rgb( 48, 48, 48 );
+}
+
+/* ---- QCheckBox / QRadioButton indicators ---- */
+
+QCheckBox::indicator, QRadioButton::indicator {
+	width: 13px;
+	height: 13px;
+}
+
+QCheckBox::indicator:unchecked {
+	border: 1px solid rgb( 96, 96, 96 );
+	background: rgb( 43, 43, 43 );
+}
+
+QCheckBox::indicator:checked {
+	border: 1px solid rgb( 82, 133, 166 );
+	background: rgb( 82, 133, 166 );
+}

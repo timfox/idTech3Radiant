@@ -45,6 +45,7 @@ enum class ETheme{
 	OneGrayDarker,
 	OneGray,
 	Lighter,
+	Maya,
 };
 
 static ETheme s_theme = ETheme::Dark;
@@ -483,6 +484,45 @@ void theme_set( ETheme theme ){
 		qApp->setStyleSheet( load_qss( "darker.qss" ) );
 	}
 
+	else if( theme == ETheme::Maya ){
+		set_icon_theme( false );
+		qApp->setStyle( "Fusion" );
+		QPalette mayaPalette;
+		const QColor background( 68, 68, 68 );
+		const QColor panel( 58, 58, 58 );
+		const QColor input( 43, 43, 43 );
+		const QColor text( 204, 204, 204 );
+		const QColor disabledText( 128, 128, 128 );
+		const QColor highlight( 82, 133, 166 );
+		const QColor button( 85, 85, 85 );
+		const QColor border( 48, 48, 48 );
+		mayaPalette.setColor( QPalette::Window, background );
+		mayaPalette.setColor( QPalette::WindowText, text );
+		mayaPalette.setColor( QPalette::Base, input );
+		mayaPalette.setColor( QPalette::AlternateBase, QColor( 48, 48, 48 ) );
+		mayaPalette.setColor( QPalette::ToolTipBase, QColor( 255, 255, 225 ) );
+		mayaPalette.setColor( QPalette::ToolTipText, QColor( 0, 0, 0 ) );
+		mayaPalette.setColor( QPalette::Text, text );
+		mayaPalette.setColor( QPalette::Button, button );
+		mayaPalette.setColor( QPalette::ButtonText, text );
+		mayaPalette.setColor( QPalette::BrightText, QColor( 255, 128, 0 ) );
+		mayaPalette.setColor( QPalette::Link, QColor( 100, 180, 230 ) );
+		mayaPalette.setColor( QPalette::Highlight, highlight );
+		mayaPalette.setColor( QPalette::HighlightedText, Qt::white );
+		mayaPalette.setColor( QPalette::Light, QColor( 96, 96, 96 ) );
+		mayaPalette.setColor( QPalette::Mid, QColor( 78, 78, 78 ) );
+		mayaPalette.setColor( QPalette::Midlight, QColor( 90, 90, 90 ) );
+		mayaPalette.setColor( QPalette::Shadow, border );
+		mayaPalette.setColor( QPalette::Disabled, QPalette::WindowText, disabledText );
+		mayaPalette.setColor( QPalette::Disabled, QPalette::Text, disabledText );
+		mayaPalette.setColor( QPalette::Disabled, QPalette::ButtonText, disabledText );
+		mayaPalette.setColor( QPalette::Disabled, QPalette::Highlight, QColor( 64, 96, 112 ) );
+		mayaPalette.setColor( QPalette::Inactive, QPalette::Highlight, QColor( 64, 96, 112 ) );
+		mayaPalette.setColor( QPalette::Inactive, QPalette::HighlightedText, text );
+		qApp->setPalette( mayaPalette );
+		qApp->setStyleSheet( load_qss( "maya.qss" ) );
+	}
+
 	defaults.is1stThemeApplication = false;
 }
 
@@ -491,7 +531,7 @@ void theme_construct_menu( class QMenu *menu ){
 	m->setTearOffEnabled( g_Layout_enableDetachableMenus.m_value );
 	auto *group = new QActionGroup( m );
 
-	for( const auto *name : { "Default", "Fusion", "Light", "Dark", "Darker", "OneDark", "Steam", "Vaporwave", "OneGrayDarker", "OneGray", "Lighter" } )
+	for( const auto *name : { "Default", "Fusion", "Light", "Dark", "Darker", "OneDark", "Steam", "Vaporwave", "OneGrayDarker", "OneGray", "Lighter", "Maya" } )
 	{
 		auto *a = m->addAction( name );
 		a->setCheckable( true );
