@@ -12,7 +12,7 @@ Opening the Python Script Editor
 Features
 --------
 - Edit Python scripts in the built-in editor
-- Run scripts with the Run button
+- Run scripts with the Run button (non-blocking; editor stays responsive)
 - Output appears in the output pane below the editor
 - Save and load .py files
 - Scripts run in a subprocess with the current project paths in the environment
@@ -22,11 +22,12 @@ The radiant Module
 When run from the editor, scripts can "import radiant" for path helpers:
 
   import radiant
-  radiant.app_path()      # Editor installation path
-  radiant.engine_path()   # Game engine path
-  radiant.game_path()     # Current game/mod path
-  radiant.maps_path()     # Maps directory
-  radiant.current_map()   # Current map filename
+  radiant.app_path()         # Editor installation path
+  radiant.engine_path()      # Game engine path
+  radiant.game_path()       # Current game/mod path
+  radiant.maps_path()       # Maps directory
+  radiant.scripts_path()    # Scripts directory (app_path/scripts)
+  radiant.current_map()     # Current map filename
   radiant.current_map_path()  # Full path to current map
 
 The radiant module is in scripts/radiant/ and is added to PYTHONPATH
