@@ -221,10 +221,16 @@ bool NavMeshBuilder::buildInternal( const rcConfig& config, const std::vector<fl
 
 	m_navQuery = dtAllocNavMeshQuery();
 	if ( m_navQuery == 0 ) {
+		dtFreeNavMesh( m_navMesh );
+		m_navMesh = 0;
 		return false;
 	}
 	status = m_navQuery->init( m_navMesh, 2048 );
 	if ( dtStatusFailed( status ) ) {
+		dtFreeNavMeshQuery( m_navQuery );
+		m_navQuery = 0;
+		dtFreeNavMesh( m_navMesh );
+		m_navMesh = 0;
 		return false;
 	}
 

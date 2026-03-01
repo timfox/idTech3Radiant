@@ -562,7 +562,7 @@ void AudioWorkbench_removeSelected(){
 		}
 	}
 
-	if ( g_audioPlaylist->mediaCount() == 0 ) {
+	if ( g_audioPlaylist->mediaCount() == 0 && g_audioPlayer != nullptr ) {
 		g_audioPlayer->stop();
 	}
 	else if ( g_audioPlaylist->currentIndex() < 0 ) {
@@ -903,7 +903,7 @@ void AudioWorkbench_createDock( QMainWindow* window ){
 	} );
 	QObject::connect( clearPlaylistButton, &QPushButton::clicked, [](){
 		if ( g_audioPlaylist != nullptr ) {
-			g_audioPlayer->stop();
+			if ( g_audioPlayer != nullptr ) g_audioPlayer->stop();
 			g_audioPlaylist->clear();
 			AudioWorkbench_syncPlaylistView();
 			AudioWorkbench_updateTimeLabel();
