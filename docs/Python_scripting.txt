@@ -1,0 +1,49 @@
+Python Scripting in Radiant
+===========================
+
+Radiant includes a Python Script Editor that lets you run Python scripts
+similar to Maya's scripting workflow.
+
+Opening the Python Script Editor
+--------------------------------
+- Menu: Tools > Python Script Editor
+- Shortcut: Ctrl+Alt+Y
+
+Features
+--------
+- Edit Python scripts in the built-in editor
+- Run scripts with the Run button
+- Output appears in the output pane below the editor
+- Save and load .py files
+- Scripts run in a subprocess with the current project paths in the environment
+
+The radiant Module
+------------------
+When run from the editor, scripts can "import radiant" for path helpers:
+
+  import radiant
+  radiant.app_path()      # Editor installation path
+  radiant.engine_path()   # Game engine path
+  radiant.game_path()     # Current game/mod path
+  radiant.maps_path()     # Maps directory
+  radiant.current_map()   # Current map filename
+  radiant.current_map_path()  # Full path to current map
+
+The radiant module is in scripts/radiant/ and is added to PYTHONPATH
+when scripts are run from the editor.
+
+Configuration
+-------------
+- Python executable: Preferences > Game > Python executable
+  Default: python3 (Linux/macOS), python (Windows)
+
+Scripts run as subprocesses
+----------------------------
+Scripts execute in a separate Python process. They can:
+- Read/write map files (text format)
+- Run build tools
+- Process assets
+- Use the path helpers for file operations
+
+For direct control of the editor (selection, entities, etc.), future
+versions may add embedded Python support.

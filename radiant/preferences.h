@@ -377,6 +377,7 @@ extern CopiedString g_luaScriptEntities;
 extern CopiedString g_luaScriptItems;
 extern CopiedString g_luaScriptMain;
 extern CopiedString g_luaScriptObjectives;
+extern CopiedString g_pythonExecutable;
 
 void GlobalPreferences_Init();
 void Preferences_Init();

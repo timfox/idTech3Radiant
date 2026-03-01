@@ -27,6 +27,7 @@
 
 #include <array>
 #include <cstdio>
+#include <iterator>
 #include <list>
 #include <map>
 #include <string>
@@ -499,12 +500,7 @@ size_t Project_find( const Project& project, const Project::const_iterator itera
 }
 
 Build::iterator Build_find( Build& build, std::size_t index ){
-	Build::iterator i = build.begin();
-	while ( index-- != 0 && i != build.end() )
-	{
-		++i;
-	}
-	return i;
+	return index < build.size() ? std::next( build.begin(), index ) : build.end();
 }
 
 typedef std::map<CopiedString, Tool> Tools;

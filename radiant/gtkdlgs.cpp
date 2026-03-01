@@ -270,6 +270,7 @@ void Game_constructPreferences( PreferencesPage& page ){
 	page.appendPathEntry( "Lua items script", g_luaScriptItems, false );
 	page.appendPathEntry( "Lua main script", g_luaScriptMain, false );
 	page.appendPathEntry( "Lua objectives script", g_luaScriptObjectives, false );
+	page.appendPathEntry( "Python executable", g_pythonExecutable, false );
 }
 
 // =============================================================================

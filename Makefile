@@ -982,6 +982,7 @@ $(INSTALLDIR)/radiant.$(EXE): \
 	radiant/plugin.o \
 	radiant/plugintoolbar.o \
 	radiant/points.o \
+	radiant/python_script_workbench.o \
 	radiant/preferencedictionary.o \
 	radiant/preferences.o \
 	radiant/qe3.o \

@@ -1,0 +1,124 @@
+/*
+ * Advanced Engine Systems - Entity Definitions
+ * Modern gameplay and environmental systems for level design.
+ * These entities support advanced physics, dynamic encounters, and environmental effects.
+ */
+
+/*QUAKED env_fire_emitter (0.9 0.3 0) (-8 -8 -8) (8 8 8) START_ACTIVE SPREAD_ENABLED
+Dynamic fire system. Fire can spread to nearby objects based on temperature and distance.
+-------- KEYS --------
+"spread_rate" : rate of fire spread (default 1.0)
+"ignition_temp" : temperature at which objects ignite (default 200)
+"heat_radius" : radius of heat influence (default 256)
+"model" : optional model for emitter
+-------- SPAWNFLAGS --------
+START_ACTIVE : fire is burning when map loads
+SPREAD_ENABLED : fire can spread to other objects
+*/
+
+/*QUAKED env_water_volume (0.2 0.5 0.9) ?
+Brush entity. Full water physics volume with buoyancy and player interaction.
+Uses brush bounds as volume.
+-------- KEYS --------
+"density" : water density for buoyancy (default 1.0)
+"current" : flow direction "x y z"
+"damage" : damage per second when submerged (0 = none)
+*/
+
+/*QUAKED env_spill (0.4 0.3 0.1) (-16 -16 0) (16 16 8)
+Spill/puddle from leaks. Spawns when liquid leaks from container (pipe, barrel).
+-------- KEYS --------
+"liquid_type" : "water" or "oil"
+"source" : targetname of leak source entity
+"max_radius" : maximum spread radius (default 64)
+*/
+
+/*QUAKED env_waterfall_helper (0.2 0.6 0.9) (-32 -32 0) (32 32 128)
+Helper for level designers to easily add waterfalls. Defines waterfall volume and flow.
+-------- KEYS --------
+"width" : waterfall width (default 64)
+"height" : waterfall height (default 128)
+"flow_speed" : speed of water flow (default 100)
+*/
+
+/*QUAKED env_fan (0.6 0.6 0.6) (-16 -16 -16) (16 16 16) PULL_MODE BLOCK_ENTITIES ROTOR_WASH
+Directional wind/fan. Blows in set direction, can pull objects or block movement.
+-------- KEYS --------
+"direction" : "x y z" or use angles
+"strength" : wind force (default 100)
+"particle_type" : "fan" "rotor" or "radial"
+"model" : optional model
+-------- SPAWNFLAGS --------
+PULL_MODE : pulls objects toward fan instead of pushing
+BLOCK_ENTITIES : blocks player and NPC movement
+ROTOR_WASH : helicopter rotor wash particle style
+*/
+
+/*QUAKED prop_breakable (0.5 0.4 0.5) (-8 -8 -8) (8 8 8) SPAWN_DEBRIS CONTAINS_ITEMS
+Breakable physics prop. Spawns debris on break and can contain items.
+-------- KEYS --------
+"model" : model path
+"health" : hit points before break (default 25)
+"debris_model" : model for spawned debris
+"debris_count" : number of debris pieces (default 4)
+"contained_item" : item classname to spawn on break
+"contained_count" : number of items (default 1)
+*/
+
+/*QUAKED prop_physics (0.5 0.5 0.5) (-8 -8 -8) (8 8 8) PICKUP_ALLOWED PUNT_ALLOWED IGNORE_MASS
+Physics prop with interaction flags. Control pickup, punt, and mass behavior.
+-------- KEYS --------
+"model" : model path
+"mass" : physics mass (default from model)
+-------- SPAWNFLAGS --------
+PICKUP_ALLOWED : can be picked up by physics manipulator
+PUNT_ALLOWED : can be punted/launched
+IGNORE_MASS : physics manipulator ignores mass for this object
+*/
+
+/*QUAKED trigger_gravity (0.3 0.7 0.9) ?
+Brush entity. Gravity-shifting volume. Walk on ceilings, warp surfaces, orbit.
+Uses brush bounds as volume.
+-------- KEYS --------
+"gravity_dir" : "x y z" direction of gravity
+"gravity_magnitude" : strength (default 800)
+"type" : "direction" "surface" or "orbit"
+*/
+
+/*QUAKED env_spawn_volume (0.7 0.8 0.3) ?
+Brush entity. Dynamic encounter volume. Alters environment based on player state for replayability.
+-------- KEYS --------
+"targetname" : name for trigger
+"variant_blocked" : entity/state when path blocked
+"variant_open" : entity/state when path open
+"variant_contents" : "crate" "enemy" "friendly" "empty"
+"weight" : probability weight (default 1)
+*/
+
+/*QUAKED trigger_level_stream (0.5 0.4 0.8) ?
+Brush entity. Level streaming zone. Loads/unloads map sections without loading screens.
+Uses brush bounds as trigger volume.
+-------- KEYS --------
+"stream_target" : targetname of map section to stream
+"stream_action" : "load" or "unload"
+"priority" : load priority (higher = sooner)
+*/
+
+/*QUAKED info_vehicle (0.8 0.5 0.2) (-32 -16 -8) (32 16 8)
+Vehicle spawn point. Physics-based vehicle with multi-passenger support.
+-------- KEYS --------
+"model" : vehicle model
+"vehicle_type" : vehicle configuration name
+"allow_exit_midair" : 1 = can exit when airborne (default 0)
+"allow_exit_blocked" : 1 = can exit when blocked (default 0)
+"max_enter_speed" : max speed to enter (default 100)
+"max_exit_speed" : max speed to exit (default 50)
+*/
+
+/*QUAKED func_vehicle_seat (0.8 0.5 0.2) (-8 -8 -8) (8 8 8) DRIVER SEAT_PASSENGER
+Vehicle seat within a vehicle brush. Defines seating position and role.
+-------- KEYS --------
+"parent" : targetname of info_vehicle
+"seat_type" : "driver" "passenger" "rear" "front" "top"
+"weapons_allowed" : 1 = can use weapons (default 1)
+*/

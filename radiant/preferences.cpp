@@ -859,6 +859,13 @@ CopiedString g_luaScriptEntities = "scripts/entities.lua";
 CopiedString g_luaScriptItems = "scripts/items.lua";
 CopiedString g_luaScriptMain = "scripts/main.lua";
 CopiedString g_luaScriptObjectives = "scripts/objectives.lua";
+CopiedString g_pythonExecutable =
+#ifdef WIN32
+	"python"
+#else
+	"python3"
+#endif
+	;
 
 void RegisterPreferences( PreferenceSystem& preferences ){
 	preferences.registerPreference( "CustomShaderEditorCommand", CopiedStringImportStringCaller( g_TextEditor_editorCommand ), CopiedStringExportStringCaller( g_TextEditor_editorCommand ) );
@@ -870,6 +877,7 @@ void RegisterPreferences( PreferenceSystem& preferences ){
 	preferences.registerPreference( "LuaScriptItems", CopiedStringImportStringCaller( g_luaScriptItems ), CopiedStringExportStringCaller( g_luaScriptItems ) );
 	preferences.registerPreference( "LuaScriptMain", CopiedStringImportStringCaller( g_luaScriptMain ), CopiedStringExportStringCaller( g_luaScriptMain ) );
 	preferences.registerPreference( "LuaScriptObjectives", CopiedStringImportStringCaller( g_luaScriptObjectives ), CopiedStringExportStringCaller( g_luaScriptObjectives ) );
+	preferences.registerPreference( "PythonExecutable", CopiedStringImportStringCaller( g_pythonExecutable ), CopiedStringExportStringCaller( g_pythonExecutable ) );
 }
 
 void Preferences_Init(){

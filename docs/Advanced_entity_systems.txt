@@ -1,0 +1,38 @@
+Advanced Entity Systems
+========================
+
+The level editor includes built-in entity definitions for modern engine systems.
+These are loaded from scripts/entities_advanced.def in the editor installation.
+
+FIRE & ENVIRONMENT
+------------------
+env_fire_emitter    - Dynamic fire that spreads based on temperature and distance
+env_water_volume    - Full water physics with buoyancy (brush entity)
+env_spill           - Spills/puddles from leaks (water, oil)
+env_waterfall_helper - Easy waterfall placement for level designers
+
+WIND & PHYSICS
+--------------
+env_fan             - Directional wind; push, pull, or block modes
+prop_breakable      - Breakable props with debris spawn and contained items
+prop_physics        - Physics props with pickup/punt/mass interaction flags
+
+GRAVITY & SPACE
+---------------
+trigger_gravity     - Gravity-shifting volumes (brush entity)
+
+DYNAMIC ENCOUNTERS
+------------------
+env_spawn_volume    - Director-style volumes that vary per playthrough (brush entity)
+
+LEVEL STREAMING
+---------------
+trigger_level_stream - Stream map sections without loading screens (brush entity)
+
+VEHICLES
+--------
+info_vehicle       - Physics-based vehicle spawn
+func_vehicle_seat   - Seat definition within vehicle
+
+These entities are designed for engines that support advanced systems.
+Game/mod code must implement the runtime behavior.

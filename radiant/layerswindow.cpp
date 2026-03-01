@@ -23,6 +23,8 @@
 
 #include "layers.h"
 #include <QApplication>
+#include <iterator>
+#include <unordered_set>
 #include <QTreeWidget>
 #include <QHeaderView>
 #include <QBoxLayout>
@@ -92,13 +94,13 @@ public:
 
 class LayerHideWalker : public scene::Graph::Walker
 {
-	const std::vector<Layer*>& m_layers;
+	const std::unordered_set<Layer*>& m_layers;
 public:
-	LayerHideWalker( const std::vector<Layer*>& layers ) : m_layers( layers ){
+	LayerHideWalker( const std::unordered_set<Layer*>& layers ) : m_layers( layers ){
 	}
 	bool pre( const scene::Path& path, scene::Instance& instance ) const override {
 		scene::Node& node = path.top().get();
-		if( std::ranges::find( m_layers, node.m_layer ) != m_layers.cend() ){
+		if( m_layers.count( node.m_layer ) ){
 			node.enable( scene::Node::eLayerHidden );
 			if( Selectable* selectable = Instance_getSelectable( instance ) )
 				selectable->setSelected( false );
@@ -115,13 +117,13 @@ public:
 };
 class LayerShowWalker : public scene::Graph::Walker
 {
-	const std::vector<Layer*>& m_layers;
+	const std::unordered_set<Layer*>& m_layers;
 public:
-	LayerShowWalker( const std::vector<Layer*>& layers ) : m_layers( layers ){
+	LayerShowWalker( const std::unordered_set<Layer*>& layers ) : m_layers( layers ){
 	}
 	bool pre( const scene::Path& path, scene::Instance& instance ) const override {
 		scene::Node& node = path.top().get();
-		if( std::ranges::find( m_layers, node.m_layer ) != m_layers.cend() ){
+		if( m_layers.count( node.m_layer ) ){
 			node.disable( scene::Node::eLayerHidden );
 		}
 		return true;
@@ -138,14 +140,14 @@ public:
 
 class LayerSelectWalker : public scene::Graph::Walker
 {
-	const std::vector<Layer*>& m_layers;
+	const std::unordered_set<Layer*>& m_layers;
 	const bool m_select;
 public:
-	LayerSelectWalker( const std::vector<Layer*>& layers, bool select ) : m_layers( layers ), m_select( select ){
+	LayerSelectWalker( const std::unordered_set<Layer*>& layers, bool select ) : m_layers( layers ), m_select( select ){
 	}
 	bool pre( const scene::Path& path, scene::Instance& instance ) const override {
 		scene::Node& node = path.top().get();
-		if( node.visible() && std::ranges::find( m_layers, node.m_layer ) != m_layers.cend() ){
+		if( node.visible() && m_layers.count( node.m_layer ) ){
 			Instance_setSelected( instance, m_select );
 		}
 		return true;
@@ -154,14 +156,14 @@ public:
 
 class LayerDeletetWalker : public scene::Graph::Walker
 {
-	const std::vector<Layer*>& m_layers;
+	const std::unordered_set<Layer*>& m_layers;
 	Layer *m_currentLayer;
 public:
-	LayerDeletetWalker( const std::vector<Layer*>& layers, Layer *currentLayer ) : m_layers( layers ), m_currentLayer( currentLayer ){
+	LayerDeletetWalker( const std::unordered_set<Layer*>& layers, Layer *currentLayer ) : m_layers( layers ), m_currentLayer( currentLayer ){
 	}
 	bool pre( const scene::Path& path, scene::Instance& instance ) const override {
 		scene::Node& node = path.top().get();
-		if( std::ranges::find( m_layers, node.m_layer ) != m_layers.cend() ){
+		if( m_layers.count( node.m_layer ) ){
 			node.m_layer = m_currentLayer;
 		}
 		return true;
@@ -216,6 +218,11 @@ Layer* item_getLayer( QTreeWidgetItem *item ){
 std::vector<Layer*> item_getLayers( QTreeWidgetItem *item ){
 	std::vector<Layer*> layers;
 	items_iterate_recursively( item, [&]( QTreeWidgetItem *item ){ layers.push_back( item_getLayer( item ) ); } );
+	return layers;
+}
+std::unordered_set<Layer*> item_getLayersSet( QTreeWidgetItem *item ){
+	std::unordered_set<Layer*> layers;
+	items_iterate_recursively( item, [&]( QTreeWidgetItem *item ){ layers.insert( item_getLayer( item ) ); } );
 	return layers;
 }
 std::vector<Layer::iterator> item_getLayersIterators( QTreeWidgetItem *item ){
@@ -381,12 +388,12 @@ void context_menu( const QPoint& pos ){
 	} );
 
 	menu->addAction( new_local_icon( "delete.png" ), "Delete", [&](){
-		auto dels = item_getLayers( item );
+		auto dels = item_getLayersSet( item );
 		auto it = item_getLayerIterator( item );
 
 		delete item;
 		// handle possible deletion of layers.m_currentLayer 1st, as it will be used as a destination later
-		if( std::ranges::find( dels, layers.m_currentLayer ) != dels.cend() )
+		if( dels.count( layers.m_currentLayer ) )
 			item_setCurrent( tree->topLevelItem( LAYERIDX0 ) );
 
 		GlobalSceneGraph().traverse( LayerDeletetWalker( dels, layers.m_currentLayer ) );
@@ -435,12 +442,12 @@ void context_moveto_menu(){
 class LayersSetVisible
 {
 	const bool m_setVisible;
-	std::vector<Layer *> m_layers;
+	std::unordered_set<Layer *> m_layers;
 public:
 	LayersSetVisible( bool setVisible ) : m_setVisible( setVisible ){
 	}
 	void operator()( QTreeWidgetItem *item ){
-		m_layers.push_back( item_getLayer( item ) );
+		m_layers.insert( item_getLayer( item ) );
 		item->setData( Column::visible, Qt::ItemDataRole::UserRole, m_setVisible );
 		item_setIcons( item );
 	}
@@ -474,7 +481,7 @@ void itemClicked( QTreeWidgetItem *item, int column ){
 			if( kb == Qt::KeyboardModifier::NoModifier || kb == Qt::KeyboardModifier::ControlModifier || kb == Qt::KeyboardModifier::AltModifier ){
 				if( kb != Qt::KeyboardModifier::ControlModifier && kb != Qt::KeyboardModifier::AltModifier)
 					GlobalSelectionSystem().setSelectedAll( false );
-				GlobalSceneGraph().traverse( LayerSelectWalker( item_getLayers( item ), kb != Qt::KeyboardModifier::AltModifier ) );
+				GlobalSceneGraph().traverse( LayerSelectWalker( item_getLayersSet( item ), kb != Qt::KeyboardModifier::AltModifier ) );
 			}
 			else if( kb == Qt::KeyboardModifier::ShiftModifier ){
 				GlobalSelectionSystem().foreachSelected( LayerAssignVisitor( item_getLayer( item ) ) );
@@ -565,14 +572,17 @@ void LayersBrowser_destroyWindow(){
 
 void Scene_ExpandSelectionToLayers(){
 	std::vector<Layer*> layers;
+	std::unordered_set<Layer*> layersSet;
 	GlobalSelectionSystem().foreachSelected( LayerCollectVisitor( layers ) );
-	for( size_t i = 0, end = layers.size(); i < end; ++i ){ // vector may be changed during loop
+	for( Layer* layer : layers )
+		layersSet.insert( layer );
+	for( size_t i = 0; i < layers.size(); ++i ){
 		layers[ i ]->forEach( [&]( Layer& layer ){
-			if( std::ranges::find( layers, &layer ) == layers.cend() )
+			if( layersSet.insert( &layer ).second )
 				layers.push_back( &layer );
 		} );
 	}
-	GlobalSceneGraph().traverse( LayerSelectWalker( layers, true ) );
+	GlobalSceneGraph().traverse( LayerSelectWalker( layersSet, true ) );
 }
 
 #include "commands.h"

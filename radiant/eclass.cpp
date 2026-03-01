@@ -36,6 +36,7 @@
 
 #include "preferences.h"
 #include "mainframe.h"
+#include "os/file.h"
 
 
 namespace
@@ -181,24 +182,30 @@ void EntityClassQuake3_constructDirectory( const char* directory, const char* ex
    all base & mod files of the same type are alpha sorted together
    equal file name in mod is ignored
    equal eclass name inserted later is ignored
+   app scripts path loads built-in advanced entity definitions
 */
 void EntityClassQuake3_Construct(){
 	const auto baseDirectory = StringStream( GlobalRadiant().getGameToolsPath(), GlobalRadiant().getRequiredGameDescriptionKeyValue( "basegame" ), '/' );
 	const auto gameDirectory = StringStream( GlobalRadiant().getGameToolsPath(), GlobalRadiant().getGameName(), '/' );
+	const auto appScriptsDirectory = StringStream( GlobalRadiant().getAppPath(), "scripts/" );
 
 	class LoadEntityDefinitionsVisitor : public EClassModules::Visitor
 	{
 		const char* baseDirectory;
 		const char* gameDirectory;
+		const char* appScriptsDirectory;
 	public:
-		LoadEntityDefinitionsVisitor( const char* baseDirectory, const char* gameDirectory )
-			: baseDirectory( baseDirectory ), gameDirectory( gameDirectory ){
+		LoadEntityDefinitionsVisitor( const char* baseDirectory, const char* gameDirectory, const char* appScriptsDirectory )
+			: baseDirectory( baseDirectory ), gameDirectory( gameDirectory ), appScriptsDirectory( appScriptsDirectory ){
 		}
 		void visit( const char* name, const EntityClassScanner& table ) const override {
 			Paths paths;
 			EntityClassQuake3_constructDirectory( baseDirectory, table.getExtension(), paths );
 			if ( !string_equal( baseDirectory, gameDirectory ) ) {
 				EntityClassQuake3_constructDirectory( gameDirectory, table.getExtension(), paths );
+			}
+			if ( file_exists( appScriptsDirectory ) ) {
+				EntityClassQuake3_constructDirectory( appScriptsDirectory, table.getExtension(), paths );
 			}
 
 			for ( const auto& [ name, path ] : paths )
@@ -210,7 +217,7 @@ void EntityClassQuake3_Construct(){
 		}
 	};
 
-	EntityClassManager_getEClassModules().foreachModule( LoadEntityDefinitionsVisitor( baseDirectory, gameDirectory ) );
+	EntityClassManager_getEClassModules().foreachModule( LoadEntityDefinitionsVisitor( baseDirectory, gameDirectory, appScriptsDirectory ) );
 }
 
 EntityClass *Eclass_ForName( const char *name, bool has_brushes ){

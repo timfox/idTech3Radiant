@@ -156,6 +156,7 @@
 #include "audio_workbench.h"
 #include "video_workbench.h"
 #include "spreadsheet_workbench.h"
+#include "python_script_workbench.h"
 
 #include "colors.h"
 #include "tools.h"
@@ -788,105 +789,112 @@ constexpr const char* c_idTech3WebsiteUrl = "https://idtech3.com";
 constexpr const char* c_idTech3DocumentationUrl = "https://idtech3.com/documentation";
 constexpr const char* c_idTech3LinksUrl = "https://idtech3.com/links";
 
-void CheckForUpdate(){
+static void CheckForUpdate_showResult( QByteArray payload, QString fetchError, int tryNext );
+
+static void CheckForUpdate_tryFetch( int index ){
 	const char* releaseApiUrl = "https://api.github.com/repos/Garux/netradiant-custom/releases/latest";
 	const QString acceptHeader = "Accept: application/vnd.github+json";
 	const QString userAgentHeader = StringStream( "User-Agent: NetRadiant-Custom/", RADIANT_VERSION ).c_str();
-
-	QByteArray payload;
-	QString fetchError;
-
-	struct FetchCommand
-	{
-		const char* executable;
-		QStringList arguments;
-	};
-
+	struct FetchCommand { const char* executable; QStringList arguments; };
 	const FetchCommand commands[] = {
 		{ "wget", { "-qO-", "--header", acceptHeader, "--header", userAgentHeader, releaseApiUrl } },
 		{ "curl", { "-fsSL", "-H", acceptHeader, "-H", userAgentHeader, releaseApiUrl } },
 	};
+	if ( index >= static_cast<int>( std::size( commands ) ) ) {
+		CheckForUpdate_showResult( {}, "Neither wget nor curl could fetch release information.", index );
+		return;
+	}
+	auto* process = new QProcess( MainFrame_getWindow() );
+	const auto& command = commands[index];
+	QObject::connect( process, QOverload<int, QProcess::ExitStatus>::of( &QProcess::finished ), [process, index]( int exitCode, QProcess::ExitStatus status ){
+		QByteArray payload;
+		QString fetchError;
+		if ( status == QProcess::NormalExit && exitCode == 0 ) {
+			payload = process->readAllStandardOutput();
+		}
+		else{
+			const auto stderrText = process->readAllStandardError();
+			fetchError = stderrText.isEmpty()
+				? StringStream( process->program().toUtf8().constData(), " failed with exit code ", exitCode, "." ).c_str()
+				: StringStream( process->program().toUtf8().constData(), " failed: ", stderrText.constData() ).c_str();
+		}
+		process->deleteLater();
+		CheckForUpdate_showResult( payload, fetchError, index + 1 );
+	} );
+	process->start( command.executable, command.arguments );
+	if ( !process->waitForStarted( 3000 ) ) {
+		process->deleteLater();
+		CheckForUpdate_tryFetch( index + 1 );
+	}
+}
 
-	for ( const auto& command : commands )
-	{
-		QProcess process;
-		process.start( command.executable, command.arguments );
-		if ( !process.waitForStarted( 3000 ) ) {
-			continue;
-		}
-		if ( !process.waitForFinished( 12000 ) ) {
-			process.kill();
-			fetchError = StringStream( command.executable, " timed out." ).c_str();
-			continue;
-		}
-		if ( process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0 ) {
-			payload = process.readAllStandardOutput();
-			if ( !payload.isEmpty() ) {
-				break;
+static void CheckForUpdate_showResult( QByteArray payload, QString fetchError, int tryNext ){
+	struct FetchCommand { const char* executable; QStringList arguments; };
+	const FetchCommand commands[] = {
+		{ "wget", { "-qO-", "dummy" } },
+		{ "curl", { "-fsSL", "dummy" } },
+	};
+	(void)commands;
+
+	if ( !payload.isEmpty() ) {
+		const auto json = QJsonDocument::fromJson( payload );
+		if ( !json.isObject() ) {
+			if ( QMessageBox::question( MainFrame_getWindow(), "Check for Update",
+			                            "Could not parse update response.\nOpen the releases page instead?",
+			                            QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes ) == QMessageBox::Yes ) {
+				OpenUpdateURL();
 			}
-			fetchError = StringStream( command.executable, " returned an empty response." ).c_str();
-			continue;
+			return;
 		}
-
-		const auto stderrText = process.readAllStandardError();
-		fetchError = stderrText.isEmpty()
-		    ? StringStream( command.executable, " failed with exit code ", process.exitCode(), "." ).c_str()
-		    : StringStream( command.executable, " failed: ", stderrText.constData() ).c_str();
-	}
-
-	if ( payload.isEmpty() ) {
-		if ( fetchError.isEmpty() ) {
-			fetchError = "Neither wget nor curl could fetch release information.";
+		const auto object = json.object();
+		const QString latestTag = object.value( "tag_name" ).toString();
+		const QString latestName = object.value( "name" ).toString( latestTag );
+		const QString latestUrl = object.value( "html_url" ).toString( "https://github.com/Garux/netradiant-custom/releases/latest" );
+		const QString publishedAt = object.value( "published_at" ).toString();
+		const QString currentVersion = RADIANT_VERSION;
+		bool comparable = false;
+		const int comparison = UpdateCheck_compareVersions( latestTag, currentVersion, comparable );
+		if ( comparable && comparison > 0 ) {
+			const auto message = StringStream(
+			    "Update available.\n\nCurrent: ", currentVersion.toUtf8().constData(),
+			    "\nLatest: ", latestTag.toUtf8().constData(),
+			    latestName.isEmpty() ? "" : StringStream( " (", latestName.toUtf8().constData(), ")" ).c_str(),
+			    publishedAt.isEmpty() ? "" : StringStream( "\nPublished: ", publishedAt.toUtf8().constData() ).c_str(),
+			    "\n\nOpen release page?"
+			);
+			if ( QMessageBox::question( MainFrame_getWindow(), "Check for Update", message.c_str(),
+			                            QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes ) == QMessageBox::Yes ) {
+				OpenURL( latestUrl.toUtf8().constData() );
+			}
 		}
-		const auto message = StringStream( "Update check failed:\n", fetchError.toUtf8().constData(), "\n\nOpen the releases page instead?" );
-		if ( QMessageBox::question( MainFrame_getWindow(), "Check for Update", message.c_str(),
-		                            QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes ) == QMessageBox::Yes ) {
-			OpenUpdateURL();
+		else{
+			const auto summary = comparable
+				? StringStream( "You are up to date.\n\nCurrent: ", currentVersion.toUtf8().constData(),
+				                "\nLatest: ", latestTag.toUtf8().constData() ).c_str()
+				: StringStream( "Latest release: ", latestTag.toUtf8().constData(),
+				                "\nCurrent build version: ", currentVersion.toUtf8().constData() ).c_str();
+			QMessageBox::information( MainFrame_getWindow(), "Check for Update", summary );
 		}
 		return;
 	}
 
-	const auto json = QJsonDocument::fromJson( payload );
-	if ( !json.isObject() ) {
-		if ( QMessageBox::question( MainFrame_getWindow(), "Check for Update",
-		                            "Could not parse update response.\nOpen the releases page instead?",
-		                            QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes ) == QMessageBox::Yes ) {
-			OpenUpdateURL();
-		}
+	if ( tryNext < static_cast<int>( std::size( commands ) ) ) {
+		CheckForUpdate_tryFetch( tryNext );
 		return;
 	}
 
-	const auto object = json.object();
-	const QString latestTag = object.value( "tag_name" ).toString();
-	const QString latestName = object.value( "name" ).toString( latestTag );
-	const QString latestUrl = object.value( "html_url" ).toString( "https://github.com/Garux/netradiant-custom/releases/latest" );
-	const QString publishedAt = object.value( "published_at" ).toString();
-	const QString currentVersion = RADIANT_VERSION;
-
-	bool comparable = false;
-	const int comparison = UpdateCheck_compareVersions( latestTag, currentVersion, comparable );
-
-	if ( comparable && comparison > 0 ) {
-		const auto message = StringStream(
-		    "Update available.\n\nCurrent: ", currentVersion.toUtf8().constData(),
-		    "\nLatest: ", latestTag.toUtf8().constData(),
-		    latestName.isEmpty() ? "" : StringStream( " (", latestName.toUtf8().constData(), ")" ).c_str(),
-		    publishedAt.isEmpty() ? "" : StringStream( "\nPublished: ", publishedAt.toUtf8().constData() ).c_str(),
-		    "\n\nOpen release page?"
-		);
-		if ( QMessageBox::question( MainFrame_getWindow(), "Check for Update", message.c_str(),
-		                            QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes ) == QMessageBox::Yes ) {
-			OpenURL( latestUrl.toUtf8().constData() );
-		}
+	if ( fetchError.isEmpty() ) {
+		fetchError = "Neither wget nor curl could fetch release information.";
 	}
-	else{
-		const auto summary = comparable
-			? StringStream( "You are up to date.\n\nCurrent: ", currentVersion.toUtf8().constData(),
-			                "\nLatest: ", latestTag.toUtf8().constData() ).c_str()
-			: StringStream( "Latest release: ", latestTag.toUtf8().constData(),
-			                "\nCurrent build version: ", currentVersion.toUtf8().constData() ).c_str();
-		QMessageBox::information( MainFrame_getWindow(), "Check for Update", summary );
+	const auto message = StringStream( "Update check failed:\n", fetchError.toUtf8().constData(), "\n\nOpen the releases page instead?" );
+	if ( QMessageBox::question( MainFrame_getWindow(), "Check for Update", message.c_str(),
+	                            QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes ) == QMessageBox::Yes ) {
+		OpenUpdateURL();
 	}
+}
+
+void CheckForUpdate(){
+	CheckForUpdate_tryFetch( 0 );
 }
 
 // open the Q3Rad manual
@@ -2223,6 +2231,7 @@ void create_tools_menu( QMenuBar *menubar ){
 	create_menu_item_with_mnemonic( menu, "Music Player / Playlist Editor", "OpenAudioWorkbench" );
 	create_menu_item_with_mnemonic( menu, "Cinematic Video Player", "OpenCinematicPlayer" );
 	create_menu_item_with_mnemonic( menu, "Spreadsheet Editor", "OpenSpreadsheetWorkbench" );
+	create_menu_item_with_mnemonic( menu, "Python Script Editor", "OpenPythonScript" );
 	menu->addSeparator();
 	create_menu_item_with_mnemonic( menu, "Q3Map2++ Help", "ToolQ3Map2Help" );
 	create_menu_item_with_mnemonic( menu, "QData3++ Help", "ToolQData3Help" );
@@ -2917,6 +2926,7 @@ void MainFrame::Create(){
 	AudioWorkbench_createDock( window );
 	VideoWorkbench_createDock( window );
 	Spreadsheet_createDock( window );
+	PythonScript_createDock( window );
 
 	s_qe_every_second_timer.enable();
 
@@ -2973,6 +2983,7 @@ void MainFrame::Shutdown(){
 	AudioWorkbench_stopAndRelease();
 	VideoWorkbench_stopAndRelease();
 	Spreadsheet_stopAndRelease();
+	PythonScript_stopAndRelease();
 
 	user_shortcuts_save();
 }
