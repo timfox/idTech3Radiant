@@ -653,7 +653,8 @@ mapDrawSurface_t *DrawSurfaceForSide( const entity_t& e, const brush_t& b, const
 
 	/* ydnar: sky hack/fix for GL_CLAMP borders on ati cards */
 	if ( skyFixHack && !si->skyParmsImageBase.empty() ) {
-		//%	Sys_FPrintf( SYS_VRB, "Enabling sky hack for shader %s using env %s\n", si->shader, si->skyParmsImageBase );
+		/* ensure cube faces exist (converts equirectangular if needed) */
+		ImageLoadSkyboxFaces( si->skyParmsImageBase.c_str() );
 		for( const auto *suffix : { "_lf", "_rt", "_ft", "_bk", "_up", "_dn" } )
 			DrawSurfaceForShader( String64( si->skyParmsImageBase, suffix ) );
 	}

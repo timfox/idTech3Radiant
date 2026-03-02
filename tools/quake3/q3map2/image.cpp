@@ -30,6 +30,7 @@
 
 /* dependencies */
 #include "q3map2.h"
+#include "math/pi.h"
 #include "png.h"
 #include "ddslib.h"
 #include "crnlib/crnlib.h"
@@ -382,4 +383,114 @@ const image_t *ImageLoad( const char *name ){
 
 	/* return the image */
 	return &image;
+}
+
+
+/*
+   EquirectangularToCubeFace()
+   samples equirectangular image to produce one cube face
+   face order: _lf(-X), _rt(+X), _ft(+Y), _bk(-Y), _up(+Z), _dn(-Z)
+ */
+static void EquirectangularToCubeFace( const byte *equirectPixels, int eqWidth, int eqHeight,
+                                       int faceSize, byte *facePixels, int faceIndex ){
+	/* direction from (u,v) on cube face to world direction */
+	const auto dirFromFace = []( float u, float v, int face ) -> Vector3 {
+		const float fu = 2.f * u - 1.f;
+		const float fv = 2.f * v - 1.f;
+		switch ( face ) {
+		case 0: return Vector3( -1, fu, 1 - fv );   /* _lf -X */
+		case 1: return Vector3( 1, 1 - fu, 1 - fv ); /* _rt +X */
+		case 2: return Vector3( fu, 1, 1 - fv );    /* _ft +Y */
+		case 3: return Vector3( 1 - fu, -1, 1 - fv ); /* _bk -Y */
+		case 4: return Vector3( 1 - fu, 1 - fv, 1 ); /* _up +Z */
+		case 5: return Vector3( fu, 1 - fv, -1 );   /* _dn -Z */
+		default: return Vector3( 0, 0, 1 );
+		}
+	};
+
+	for ( int v = 0; v < faceSize; ++v ) {
+		for ( int u = 0; u < faceSize; ++u ) {
+			const Vector3 dir = vector3_normalised( dirFromFace( ( u + 0.5f ) / faceSize, ( v + 0.5f ) / faceSize, faceIndex ) );
+			/* direction to equirectangular UV */
+			const float lon = atan2( dir.y(), dir.x() );
+			const float lat = asin( std::max( -1.f, std::min( 1.f, dir.z() ) ) );
+			const float eqU = ( float )( lon * ( 1.0 / ( 2.0 * c_pi ) ) + 0.5 ) * eqWidth;
+			const float eqV = ( float )( 0.5 - lat / c_pi ) * eqHeight;
+			const int x0 = std::max( 0, std::min( eqWidth - 1, (int)eqU ) );
+			const int y0 = std::max( 0, std::min( eqHeight - 1, (int)eqV ) );
+			const int x1 = std::min( eqWidth - 1, x0 + 1 );
+			const int y1 = std::min( eqHeight - 1, y0 + 1 );
+			const float fx = eqU - x0;
+			const float fy = eqV - y0;
+			/* bilinear sample */
+			Vector3 color( 0 );
+			for ( int dy = 0; dy <= 1; ++dy ) {
+				for ( int dx = 0; dx <= 1; ++dx ) {
+					const int x = dx ? x1 : x0;
+					const int y = dy ? y1 : y0;
+					const float w = ( dx ? fx : ( 1 - fx ) ) * ( dy ? fy : ( 1 - fy ) );
+					const byte *p = equirectPixels + 4 * ( y * eqWidth + x );
+					color += w * Vector3( p[0], p[1], p[2] );
+				}
+			}
+			byte *out = facePixels + 4 * ( v * faceSize + u );
+			out[0] = (byte)std::max( 0, std::min( 255, (int)color.x() ) );
+			out[1] = (byte)std::max( 0, std::min( 255, (int)color.y() ) );
+			out[2] = (byte)std::max( 0, std::min( 255, (int)color.z() ) );
+			out[3] = 255;
+		}
+	}
+}
+
+static constexpr int SKYBOX_FACE_SIZE = 512;
+static constexpr const char *SKYBOX_SUFFIXES[] = { "_lf", "_rt", "_ft", "_bk", "_up", "_dn" };
+
+/* returns true if equirectangular (roughly 2:1 aspect) */
+static bool ImageIsEquirectangular( int width, int height ){
+	return width > 0 && height > 0 && width >= height && ( width * 3 ) <= ( height * 8 );
+}
+
+const image_t *const *ImageLoadSkyboxFaces( const char *basePath ){
+	static std::array<const image_t *, 6> s_faces;
+	static std::array<image_t, 6> s_faceImages;
+
+	/* try loading 6 cube faces first */
+	bool allLoaded = true;
+	for ( int i = 0; i < 6; ++i ) {
+		if ( nullptr == ( s_faces[i] = ImageLoad( StringStream<64>( basePath, SKYBOX_SUFFIXES[i] ) ) ) ) {
+			allLoaded = false;
+			break;
+		}
+	}
+	if ( allLoaded ) {
+		return s_faces.data();
+	}
+
+	/* try equirectangular image */
+	const image_t *equirect = ImageLoad( basePath );
+	if ( equirect == nullptr || !ImageIsEquirectangular( equirect->width, equirect->height ) ) {
+		return nullptr;
+	}
+
+	Sys_Printf( "Converting equirectangular skybox %s to cube faces (%dx%d)\n", basePath, equirect->width, equirect->height );
+
+	const char *writeDir = vfsGetWriteDir();
+	const bool canWrite = writeDir[0] != '\0';
+
+	for ( int i = 0; i < 6; ++i ) {
+		byte *pixels = (byte*)safe_malloc( SKYBOX_FACE_SIZE * SKYBOX_FACE_SIZE * 4 );
+		EquirectangularToCubeFace( equirect->pixels, equirect->width, equirect->height, SKYBOX_FACE_SIZE, pixels, i );
+		CopiedString faceName( StringStream<64>( basePath, SKYBOX_SUFFIXES[i] ) );
+		s_faceImages[i] = image_t( faceName.c_str(), StringStream<64>( faceName, ".tga" ).c_str(), SKYBOX_FACE_SIZE, SKYBOX_FACE_SIZE, pixels );
+		s_faces[i] = &s_faceImages[i];
+
+		if ( canWrite ) {
+			const CopiedString outPath( StringStream( writeDir, faceName, ".tga" ) );
+			Q_mkdir( PathFilenameless( outPath.c_str() ) );
+			WriteTGA( outPath.c_str(), pixels, SKYBOX_FACE_SIZE, SKYBOX_FACE_SIZE );
+			Sys_FPrintf( SYS_VRB, "Wrote %s\n", outPath.c_str() );
+		}
+	}
+
+	return s_faces.data();
 }

@@ -129,14 +129,12 @@ public:
 	SkyProbes() = default;
 	SkyProbes( const String64& skyParmsImageBase ){
 		if( !skyParmsImageBase.empty() ){
-			std::vector<const image_t*> images;
-			for( const auto *suffix : { "_lf", "_rt", "_ft", "_bk", "_up", "_dn" } )
-			{
-				if( nullptr == images.emplace_back( ImageLoad( StringStream<64>( skyParmsImageBase, suffix ) ) ) ){
-					Sys_Warning( "Couldn't find image %s\n", StringStream<64>( skyParmsImageBase, suffix ).c_str() );
-					return;
-				}
+			const image_t *const *faces = ImageLoadSkyboxFaces( skyParmsImageBase.c_str() );
+			if( faces == nullptr ){
+				Sys_Warning( "Couldn't load skybox images for %s (need 6 cube faces or equirectangular)\n", skyParmsImageBase.c_str() );
+				return;
 			}
+			std::vector<const image_t*> images( faces, faces + 6 );
 
 			const size_t res = 64;
 			m_probes.reserve( res * res * 6 );
