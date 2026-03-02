@@ -7,6 +7,7 @@
 <item name="Complete list of entity keys" url="docs/Complete_list_of_entity_keys.htm"/>
 <item name="Advanced entity systems" url="docs/Advanced_entity_systems.txt"/>
 <item name="Python scripting" url="docs/Python_scripting.txt"/>
+<item name="Build menu" url="docs/Build_menu.txt"/>
 <item name="Pandas data analysis" url="docs/Pandas_analysis.txt"/>
 <!--item name="Complete list of shader keywords" url="docs/Complete_list_of_shader_keywords.htm"/-->
 <item name="Shader Manual" url="docs/shaderManual/contents.html"/>

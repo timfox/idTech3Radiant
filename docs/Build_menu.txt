@@ -1,0 +1,54 @@
+Build Menu XML Format
+====================
+
+The build menu is fully customizable via Build > Customize. Edit build_menu.xml
+or use the Customize dialog to add commands, menus, and variables.
+
+File location
+-------------
+- Custom: settings folder (e.g. ~/.radiant/<version>/<game>/build_menu.xml)
+- Default: gamepack's default_build_menu.xml or AppPath/<game>/default_build_menu.xml
+
+XML structure
+-------------
+Root element: <project version="2.0">
+
+  <tool name="name">...</tool>   - custom variable definition
+  <build name="Menu Name">      - menu item
+    <cmd>...</cmd>              - command line (can have multiple)
+  </build>
+
+Variables (use [Name] in commands)
+----------------------------------
+Predefined:
+  RadiantPath    - editor installation path
+  ExecutableType - platform suffix (e.g. x86_64)
+  EnginePath     - game engine path
+  UserEnginePath - user-configured engine path
+  ExtraResourcePaths - -fs_pakpath args for extra resources
+  GameName       - current game name
+  MapFile        - full path to current map (.map or .reg for region)
+  MapDir         - directory containing the map
+  MapName        - map filename only
+  BspFile        - output .bsp path (same base as MapFile)
+  MapName        - map filename
+  MonitorAddress - build monitor (when enabled)
+  VolumetricFogConfig - path to fog config (when applicable)
+
+Custom (define in <tool>):
+  <tool name="q3map2">"[RadiantPath]q3map2.[ExecutableType]"</tool>
+  <tool name="arghrad">"[RadiantPath]arghrad"</tool>
+
+Example command
+---------------
+  [q3map2] -bsp "[MapFile]"
+
+Becomes:
+  "C:\Radiant\q3map2.exe" -bsp "C:\maps\mymap.map"
+
+Use quotes around paths (MapFile, etc.) in case of spaces.
+
+Legacy format (buildmenu)
+-------------------------
+Older <buildmenu> root with <menu name="..."> and <command cmd="..."> is
+supported for compatibility. Prefer the <project> format for new configs.

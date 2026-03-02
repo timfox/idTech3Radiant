@@ -12,7 +12,6 @@
 - paint-select or equivalent (e.g. area-selection with occlusion)
 - select-complete-tall or equivalent (e.g. subtract-from-selection modifier key)
 - texture pane names are often illegible – long names overlap each other and overlap the outline rectangles
-- Build: document build-menu xml format (customize via Build > Customize...)
 - Entity: option to filter non-world entities (e.g. not func_group or func_static)
 - Rotate Tool: if more than one object is selected, with different local orientations, use parent-space rotation pivot instead of local-space
 - Brush: MMB+ctrl to paint texture on whole brush/patch
@@ -30,7 +29,6 @@
 - Textures: add anisotropic filtering
 - Preferences: allow preference settings to be shared across games
 - Preferences: add colour 'theme' files using prefs format
-- Preferences: sensible default size for prefs window
 - Surface Inspector: add button for 'axial' projection for doom3
 - Build: fix hardcoded engine-launch commands – use similar system to build-menu command description
 - Filters: use q2/heretic2 content flags to filter brushes

@@ -64,7 +64,7 @@ The open-source, cross-platform level editor for id Tech based games.
 * Open *.map via command line (associate *.map with Radiant)
 * Working region compilations (compile regioned part only)
 * Map info dialog: patches, entities, group entities counts
-* Build→Customize: list available build variables
+* Build→Customize: list available build variables (see docs/Build_menu.txt)
 * Console: build progress bar, elapsed time, Find Error/Warning buttons
 * Customizable keyboard shortcuts and GUI themes/fonts
 * Numerous mouse shortcuts (Help → General → Mouse Shortcuts)

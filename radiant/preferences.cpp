@@ -618,7 +618,7 @@ void PrefsDlg::BuildDialog(){
 
 	{
 		auto *grid = new QGridLayout( GetWidget() );
-		grid->setSizeConstraint( QLayout::SizeConstraint::SetFixedSize );
+		grid->setSizeConstraint( QLayout::SizeConstraint::SetMinimumSize );
 		{
 			auto *buttons = new QDialogButtonBox( QDialogButtonBox::StandardButton::Ok | QDialogButtonBox::StandardButton::Cancel );
 			grid->addWidget( buttons, 1, 1 );
@@ -731,6 +731,8 @@ void PrefsDlg::BuildDialog(){
 			}
 		}
 	}
+	GetWidget()->setMinimumSize( 520, 400 );
+	GetWidget()->resize( 700, 550 );
 }
 
 preferences_globals_t g_preferences_globals;
