@@ -1849,6 +1849,9 @@ int                         ExportEntitiesMain( Args& args );
 
 /* image.c */
 const image_t               *ImageLoad( const char *name );
+/// \brief Load 6 skybox cube faces; if not found, try equirectangular image and convert
+/// \return Array of 6 image_t* or nullptr if failed
+const image_t               *const *ImageLoadSkyboxFaces( const char *basePath );
 
 
 /* shaders.c */

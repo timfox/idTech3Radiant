@@ -70,6 +70,7 @@ The open-source, cross-platform level editor for id Tech based games.
 * Numerous mouse shortcuts (Help → General → Mouse Shortcuts)
 * MeshTex plugin
 * Modelling maps in Blender/Maya: export brush template to OBJ, model in 3D app, use misc_model (see docs/Modelling_maps_in_Blender.txt)
+* Skybox setup: shader skyParms, _skybox entity, image formats, HDR/EXR conversion (see docs/Skybox_setup.txt)
 * Video player: looks for movies in gamepack `content/movies` folder
 
 #### Advanced Entity Systems

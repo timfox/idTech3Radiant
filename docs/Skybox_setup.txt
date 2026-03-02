@@ -1,0 +1,218 @@
+================================================================================
+Skybox Setup and Configuration
+================================================================================
+
+This document explains how to change the skybox in id Tech 3 maps, the different
+skybox types, and supported image formats (including HDR/EXR workflows).
+
+================================================================================
+1. Skybox Types
+================================================================================
+
+There are two main skybox approaches in id Tech 3 / Q3Map2:
+
+  A) Standard skybox (skyParms)
+     - Uses a shader with the skyParms directive
+     - Applied to brush faces with surfaceparm sky
+     - Six cube faces loaded from image files
+
+  B) Portal sky (_skybox entity)
+     - Uses an info_null-derived _skybox entity in the map
+     - Generates "portal sky" surfaces at compile time
+     - Supports scale and rotation via entity keys
+
+================================================================================
+2. Changing the Skybox via Shaders (skyParms)
+================================================================================
+
+To change the skybox, edit or create a shader that uses skyParms:
+
+  skyParms <farbox> <cloudheight> <nearbox>
+
+  farbox     - Base path to the six skybox images (without suffix)
+               Use "-" for no farbox.
+  cloudheight - Curvature of cloud layers (64-256 typical; higher = flatter)
+  nearbox   - Near box for alpha blend; usually "-" (not fully supported)
+
+Example shader:
+
+  textures/skies/mysky
+  {
+      skyParms textures/skies/mysky 128 -
+      surfaceparm sky
+      surfaceparm noimpact
+      surfaceparm nolightmap
+      surfaceparm nodlight
+  }
+
+The farbox path "textures/skies/mysky" tells the engine to load six images
+with the following suffixes:
+
+  _ft  - front  (+Y)
+  _bk  - back   (-Y)
+  _lf  - left   (-X)
+  _rt  - right  (+X)
+  _up  - up     (+Z)
+  _dn  - down   (-Z)
+
+So the engine looks for:
+  textures/skies/mysky_ft.tga (or .jpg, .png)
+  textures/skies/mysky_bk.tga
+  textures/skies/mysky_lf.tga
+  textures/skies/mysky_rt.tga
+  textures/skies/mysky_up.tga
+  textures/skies/mysky_dn.tga
+
+Apply this shader to brush faces that form the sky boundary (e.g. a large
+hollow box or dome around the playable area).
+
+================================================================================
+3. Portal Sky (_skybox Entity)
+================================================================================
+
+For games without native portal sky support, Q3Map2 can generate sky surfaces
+from an _skybox entity.
+
+  - Create an info_null (or similar) entity
+  - Set its classname to "_skybox"
+  - Place it where the sky should be centered (e.g. inside the map)
+
+Entity keys:
+
+  _scale   - Scale of the skybox (default 64). Use a single value or
+             "x y z" for non-uniform scale.
+  angle    - Yaw rotation in degrees (optional)
+  angles   - "pitch yaw roll" in degrees (optional)
+
+The _skybox entity defines a volume; all brush faces that can "see" the sky
+through portals will use the sky shader. The skyParms images from the shader
+applied to those faces are used for the skybox.
+
+================================================================================
+4. Supported Image Formats
+================================================================================
+
+Q3Map2 (compiler) supports these formats for skybox images:
+  - TGA (primary)
+  - PNG
+  - JPG
+  - DDS
+  - KTX
+  - CRN
+  - WEBP
+
+Radiant (editor) loads images via plugins:
+  - TGA
+  - JPG
+  - PNG
+
+The game engine (id Tech 3) typically supports:
+  - TGA
+  - JPG
+
+Format choice:
+  - Use TGA for lossless, alpha, or compatibility
+  - Use JPG for smaller size (no alpha)
+  - Use PNG for lossless with alpha (Q3Map2 supports it)
+
+================================================================================
+5. HDR and EXR Skybox Images
+================================================================================
+
+id Tech 3 does not natively support HDR (.hdr) or EXR (.exr) textures. To use
+HDR/EXR skyboxes you must convert them to a supported format.
+
+Workflow for HDR/EXR skyboxes:
+
+  1) Obtain or create HDR/EXR environment maps (e.g. from polyhaven.com,
+     sIBL Archive, or render from Blender).
+
+  2) Convert to LDR (low dynamic range) for standard engines:
+     - Use Blender, GIMP, ImageMagick, or a script to tone-map and export
+       as TGA, PNG, or JPG.
+     - For Blender: Render or load HDR, then Image > Save As > PNG/TGA.
+
+  3) Split into six faces if you have an equirectangular or lat-long map:
+     - Blender: Use an Environment Texture node and a "Texture Coordinate"
+       node; render six views (front, back, left, right, up, down) or use
+       a script/addon to batch export.
+     - Tools like cmftStudio or IBL Baker can convert HDR
+       to cube faces.
+
+  4) Name the six faces with the skyParms suffixes:
+     base_ft, base_bk, base_lf, base_rt, base_up, base_dn
+
+  5) Place in your textures folder (e.g. textures/skies/...) and reference
+     the base path in skyParms.
+
+For engines with HDR/EXR support (e.g. some ioq3 forks or custom engines):
+  - Check your engine's documentation for supported formats.
+  - If the engine supports HDR cube maps, you may use .hdr or .exr directly
+    in the shader; the shader syntax and skyParms path would follow the
+    engine's conventions.
+
+================================================================================
+6. Skybox Layout Conventions
+================================================================================
+
+Cube map orientation (Quake 3 convention):
+
+  _rt  +X  right
+  _lf  -X  left
+  _ft  +Y  front (forward)
+  _bk  -Y  back
+  _up  +Z  up
+  _dn  -Z  down
+
+Image orientation:
+  - Faces are typically viewed from outside the cube looking in.
+  - Ensure seams align; adjacent edges of _rt/_ft, _ft/_lf, etc. should match.
+
+================================================================================
+7. Lighting from Skybox (Q3Map2)
+================================================================================
+
+Q3Map2 can sample skybox images for lighting:
+
+  q3map_skylight <amount> <iterations>
+  q3map_lightImage <path>     // override which image to sample
+  q3map_sun / q3map_sunExt    // directional sun
+
+With q3map_skylight and skyParms, the _up image is used by default for
+sky light color. Set q3map_lightImage to use a different image.
+
+  sample_color (q3map_skylight)
+  - 1: sample color from skybox images
+  - 0: use shader color (q3map_lightRGB / q3map_lightImage)
+
+================================================================================
+8. Foghull Skybox
+================================================================================
+
+For foghull (distance culling with fog), use a skybox shader whose images
+match the fog color. Typically six small (e.g. 8x8) identical images.
+Set _foghull on worldspawn to the shader name (without "textures/").
+
+================================================================================
+9. Quick Reference
+================================================================================
+
+  Shader:
+    skyParms <basepath> <cloudheight> -
+    surfaceparm sky
+
+  Six faces:
+    <basepath>_ft, _bk, _lf, _rt, _up, _dn
+
+  Formats (standard):
+    TGA, JPG, PNG
+
+  HDR/EXR:
+    Convert to TGA/PNG/JPG before use in id Tech 3.
+
+  _skybox entity:
+    classname _skybox
+    _scale 64 (or "x y z")
+    angle / angles (optional)
+
+================================================================================

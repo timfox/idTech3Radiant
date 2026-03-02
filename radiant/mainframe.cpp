@@ -2277,9 +2277,9 @@ void create_tools_menu( QMenuBar *menubar ){
 
 	menu->setTearOffEnabled( g_Layout_enableDetachableMenus.m_value );
 
-	create_menu_item_with_mnemonic( menu, "Id Tech 3 Tool Center", "OpenIdTech3ToolCenter" );
+	create_menu_item_with_mnemonic( menu, "Tool Center", "OpenIdTech3ToolCenter" );
 	create_menu_item_with_mnemonic( menu, "Music Player / Playlist Editor", "OpenAudioWorkbench" );
-	create_menu_item_with_mnemonic( menu, "Cinematic Video Player", "OpenCinematicPlayer" );
+	create_menu_item_with_mnemonic( menu, "Video Player", "OpenCinematicPlayer" );
 	create_menu_item_with_mnemonic( menu, "Spreadsheet Editor", "OpenSpreadsheetWorkbench" );
 	create_menu_item_with_mnemonic( menu, "Python Script Editor", "OpenPythonScript" );
 	menu->addSeparator();
@@ -2315,14 +2315,13 @@ void create_help_menu( QMenuBar *menubar ){
 	create_game_help_menu( menu );
 
 	create_menu_item_with_mnemonic( menu, "Bug report", makeCallbackF( OpenBugReportURL ) );
-	create_menu_item_with_mnemonic( menu, "Check for Radiant update", "CheckForUpdate" );
+	create_menu_item_with_mnemonic( menu, "Check for update", "CheckForUpdate" );
 	create_menu_item_with_mnemonic( menu, "&About", makeCallbackF( DoAbout ) );
 }
 
 void create_main_menu( QMenuBar *menubar, MainFrame::EViewStyle style ){
-	create_layout_menu( menubar, style );
 	create_file_menu( menubar );
- 	create_edit_menu( menubar );
+	create_edit_menu( menubar );
 	create_add_menu( menubar );
 	create_view_menu( menubar, style );
 	create_selection_menu( menubar );
@@ -2335,6 +2334,7 @@ void create_main_menu( QMenuBar *menubar, MainFrame::EViewStyle style ){
 		create_patch_menu( menubar );
 	create_tools_menu( menubar );
 	create_plugins_menu( menubar );
+	create_layout_menu( menubar, style );
 	create_help_menu( menubar );
 }
 

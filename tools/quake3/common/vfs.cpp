@@ -233,6 +233,10 @@ void vfsShutdown(){
 	g_pakFiles.clear();
 }
 
+const char *vfsGetWriteDir(){
+	return g_strDirs.empty() ? "" : g_strDirs.front().c_str();
+}
+
 // return the number of files that match
 int vfsGetFileCount( const char *filename ){
 	int count = 0;

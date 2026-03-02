@@ -41,6 +41,8 @@ int vfsGetFileCount( const char *filename );
 /// \return non-empty \c MemBuffer on success
 MemBuffer vfsLoadFile( const char *filename, int index = 0, bool script = false );
 std::vector<CopiedString> vfsListShaderFiles( const char *shaderPath );
+/// \return First writable base path for output files, or empty if none
+const char *vfsGetWriteDir();
 bool vfsPackFile( const char *filename, const char *packname, const int compLevel );
 bool vfsPackFile_Absolute_Path( const char *filepath, const char *filename, const char *packname, const int compLevel );
 

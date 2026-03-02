@@ -22,6 +22,7 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QProcess>
+#include <QStandardPaths>
 
 #include <limits>
 
@@ -85,11 +86,11 @@ QString VideoWorkbench_videoContentFolder(){
 	if ( !override.isEmpty() ) {
 		return override;
 	}
-	return QString::fromLatin1( GameToolsPath_get() ) + "/content/movies";
+	return QString::fromLatin1( GameToolsPath_get() ) + "content/video";
 }
 
 QStringList VideoWorkbench_videoExtensions(){
-	return { ".mp4", ".mkv", ".webm", ".avi", ".mov", ".ogv", ".m4v", ".roq" };
+	return { "*.mp4", "*.mkv", "*.webm", "*.avi", "*.mov", "*.ogv", "*.m4v", "*.roq" };
 }
 
 bool VideoWorkbench_isRoQ( const QString& path ){
@@ -108,6 +109,10 @@ QString VideoWorkbench_roqPlayerPath(){
 	const QString candidate2 = QString::fromLatin1( StringStream( EnginePath_get(), "../tools/roqplayer" ).c_str() );
 	if ( QFile::exists( candidate2 ) ) {
 		return candidate2;
+	}
+	const QString ffplay = QStandardPaths::findExecutable( "ffplay" );
+	if ( !ffplay.isEmpty() ) {
+		return ffplay;
 	}
 	return {};
 }
@@ -202,7 +207,7 @@ void VideoWorkbench_showContextMenu( const QPoint& pos ){
 		return;
 	}
 	QMenu menu( g_videoWidget );
-	auto* openAction = menu.addAction( "Open Video..." );
+	auto* openAction = menu.addAction( "Open Video" );
 	menu.addSeparator();
 	auto* playAction = menu.addAction( "Play" );
 	auto* pauseAction = menu.addAction( "Pause" );
@@ -279,10 +284,19 @@ void VideoWorkbench_refreshVideoList( bool recursive ){
 void VideoWorkbench_playRoQ( const QString& path ){
 	const QString player = VideoWorkbench_roqPlayerPath();
 	if ( player.isEmpty() ) {
-		QMessageBox::warning( MainFrame_getWindow(), "Play RoQ", "RoQ player not found in the tools directory." );
+		QMessageBox::warning( MainFrame_getWindow(), "Play RoQ",
+			"RoQ player not found. Install roqplay/roqplayer in the engine tools directory, "
+			"or install FFmpeg (ffplay) for RoQ playback." );
 		return;
 	}
-	QProcess::startDetached( player, { path } );
+	QStringList args;
+	if ( player.contains( "ffplay" ) ) {
+		args << "-autoexit" << path;
+	}
+	else {
+		args << path;
+	}
+	QProcess::startDetached( player, args );
 }
 
 void VideoWorkbench_openVideoFile( const QString& path ){
@@ -322,7 +336,7 @@ void VideoWorkbench_createDock( QMainWindow* window ){
 	auto* layout = new QVBoxLayout( root );
 
 	auto* topButtons = new QHBoxLayout();
-	auto* openButton = new QPushButton( "Open Video...", root );
+	auto* openButton = new QPushButton( "Open Video", root );
 	auto* refreshButton = new QPushButton( "Refresh Movies", root );
 	auto* playButton = new QPushButton( "Play", root );
 	auto* pauseButton = new QPushButton( "Pause", root );
@@ -495,7 +509,7 @@ void VideoWorkbench_createDock( QMainWindow* ){
 void VideoWorkbench_open(){
 	QMessageBox::warning(
 	    MainFrame_getWindow(),
-	    "Cinematic Player",
+	    "Video Player",
 	    "This build does not include Qt Multimedia video widget support.\nInstall Qt5MultimediaWidgets development files and rebuild."
 	);
 }
