@@ -456,7 +456,6 @@ binaries-radiant-plugins: \
 	$(INSTALLDIR)/plugins/sunplug.$(DLL) \
 	$(INSTALLDIR)/plugins/ufoaiplug.$(DLL) \
 	$(INSTALLDIR)/plugins/meshtex.$(DLL) \
-	$(INSTALLDIR)/plugins/bkgrnd2d.$(DLL) \
 
 .PHONY: binaries-radiant
 binaries-radiant-core: \
