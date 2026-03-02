@@ -53,6 +53,8 @@
 #include "points.h"
 #include "camwindow.h"
 #include "mainframe.h"
+#include "selection.h"
+#include "math/aabb.h"
 #include "preferences.h"
 #include "watchbsp.h"
 #include "autosave.h"
@@ -116,6 +118,19 @@ void QE_brushCountChange(){
 		if( counts[i] != 0 )
 			snprintf( buffer, sizeof( buffer ), "%zu", counts[i] );
 		g_pParentWnd->SetStatusText( c_status_brushcount + i, buffer );
+	}
+	// Size of selection bounds
+	{
+		char sizeBuf[64];
+		sizeBuf[0] = '\0';
+		if( GlobalSelectionSystem().countSelected() != 0 ){
+			const AABB bounds = GlobalSelectionSystem().getBoundsSelected();
+			if( aabb_valid( bounds ) ){
+				const Vector3 size = bounds.extents * 2;
+				snprintf( sizeBuf, sizeof( sizeBuf ), "%.0f×%.0f×%.0f", size.x(), size.y(), size.z() );
+			}
+		}
+		g_pParentWnd->SetStatusText( c_status_brushsize, sizeBuf );
 	}
 }
 

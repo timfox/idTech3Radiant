@@ -41,7 +41,6 @@
 - Selection: need 'add to selection' and 'subtract from selection' modifiers
 - Selection: Finish scale manipulator
 - FaceCopy/PasteTexture: Make face-copy/paste-texture shortcuts customisable
-- Manual: add documentation about search paths for .ent/.def/.fgd, shaders etc for each game
 - VFS: add ability to browse VFS from file-open dialogs
 - Map: add conversion between map formats
 - Map: add conversion between entity definition formats
@@ -55,7 +54,6 @@
 - Autosave/Snapshots: Add support for multi-file maps
 - Shortcuts: make shortcut list editable within radiant
 - Shortcuts: convert shortcuts.ini to xml
-- Shortcuts: warn when duplicate shortcuts are registered
 - Shortcuts: rename commands in order to group shortcuts list better
 
 ## LOW PRIORITY
@@ -77,5 +75,4 @@
 - Filtering: Add customisable filter presets to set/unset multiple filters at once
 - Texdef: Make texdef formats abstract, add conversion between texdef formats
 - Textures Window: Precise display of texture size when selecting (tooltip)
-- Status: 'Size of brush' display on status bar
 - Colours: maya scheme default?

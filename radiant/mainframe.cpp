@@ -2641,6 +2641,10 @@ void create_main_statusbar( QStatusBar *statusbar, QLabel *pStatusLabel[c_status
 				statusbar->addPermanentWidget( label, 0 );
 				label->setToolTip( " <b>G</b>: <u>G</u>rid size<br> <b>F</b>: map <u>F</u>ormat<br> <b>C</b>: camera <u>C</u>lip distance <br> <b>L</b>: texture <u>L</u>ock" );
 			}
+			else if( i == c_status_brushsize ){
+				statusbar->addPermanentWidget( label, 0 );
+				label->setToolTip( "Size of selection bounds (W×H×D)" );
+			}
 			else
 				statusbar->addPermanentWidget( label, 1 );
 			pStatusLabel[i] = label;
@@ -3056,6 +3060,7 @@ void MainFrame::Create(){
 	TrayIcon_construct();
 
 	//GlobalShortcuts_reportUnregistered();
+	GlobalShortcuts_reportDuplicates();
 }
 
 void MainFrame::SaveGuiState(){

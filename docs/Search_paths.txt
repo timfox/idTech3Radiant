@@ -1,0 +1,50 @@
+Radiant Search Paths
+===================
+
+This document describes where the editor looks for entity definitions, shaders,
+textures, and other game-specific content. Paths are game-dependent and use
+the gamepack's basegame and mod (fs_game) settings.
+
+Entity definitions (.def, .fgd, .ent)
+-------------------------------------
+Loaded in alpha order: .def, .fgd, .ent (xml). Same-type files from base and
+mod are merged; duplicate entity names from later files are ignored.
+
+Search order:
+  1. <GameToolsPath>/<basegame>/     e.g. baseq3/
+  2. <GameToolsPath>/<fs_game>/     e.g. mymod/ (if different from base)
+  3. <AppPath>/scripts/              Editor installation scripts/ (built-in)
+
+Extensions: *.def (Quake-style), *.fgd (Half-Life style), *.ent (XML)
+
+To add custom entities: place YourMod.def or YourMod.ent in your game's
+directory under the gamepack path (see Preferences → Game for paths).
+
+Shaders
+-------
+Shader files are loaded from the game's VFS (virtual file system), which
+includes .pk3 contents and loose files. Paths depend on the game; common
+locations:
+  - scripts/ or shaders/ inside .pk3
+  - textures/ for texture definitions
+  - Game-specific (e.g. Doom 3 materials/)
+
+Textures
+--------
+Textures are loaded from the game VFS. The editor searches:
+  - textures/ in game directories
+  - Shader-defined paths
+  - Content loaded via -fs_basepath, -fs_game, and extra resource paths
+
+Build menu
+----------
+  - Custom: <SettingsPath>/<game>/build_menu.xml
+  - Default: <GameToolsPath>/default_build_menu.xml or
+    <AppPath>/<game>/default_build_menu.xml
+  See docs/Build_menu.txt for format.
+
+Game tools path
+---------------
+Set in Preferences → Game. Typically points to the game installation or
+mod directory. Used for entity defs, default build menu, and game-specific
+content.

@@ -24,6 +24,7 @@
 #include "debugging/debugging.h"
 
 #include <map>
+#include <vector>
 #include "string/string.h"
 #include "versionlib.h"
 #include "gtkutil/accelerator.h"
@@ -62,6 +63,20 @@ void GlobalShortcuts_reportUnregistered(){
 	for ( const auto& [name, shortcut] : g_shortcuts )
 		if ( !shortcut.accelerator.isEmpty() && shortcut.type == 0 )
 			globalWarningStream() << "shortcut not registered: " << name << '\n';
+}
+
+void GlobalShortcuts_reportDuplicates(){
+	std::map<QKeySequence, std::vector<CopiedString>> byAccel;
+	for ( const auto& [name, shortcut] : g_shortcuts )
+		if ( !shortcut.accelerator.isEmpty() )
+			byAccel[shortcut.accelerator].push_back( name );
+	for ( const auto& [accel, names] : byAccel )
+		if ( names.size() > 1 ){
+			globalWarningStream() << "duplicate shortcut " << accel.toString().toLatin1().constData() << ":";
+			for ( const auto& n : names )
+				globalWarningStream() << " " << n;
+			globalWarningStream() << '\n';
+		}
 }
 
 typedef std::map<CopiedString, Command> Commands;
