@@ -141,7 +141,7 @@ ifeq ($(OS),Windows_NT)
 	OS = Win32
 endif
 
-CFLAGS_COMMON = -MMD -W -Wall -Wcast-align -Wcast-qual -Wno-unused-parameter -Wno-unused-function -fno-strict-aliasing
+CFLAGS_COMMON = -MMD -MP -W -Wall -Wcast-align -Wcast-qual -Wno-unused-parameter -Wno-unused-function -fno-strict-aliasing
 CPPFLAGS_COMMON =
 LDFLAGS_COMMON =
 LIBS_COMMON =

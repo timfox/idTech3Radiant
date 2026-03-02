@@ -110,9 +110,7 @@ bool NavMeshBuilder::buildInternal( const rcConfig& config, const std::vector<fl
 	}
 
 	std::vector<unsigned char> triAreas( triCount, RC_WALKABLE_AREA );
-	if ( !rcMarkWalkableTriangles( &m_ctx, config.walkableSlopeAngle, vertices.data(), vertCount, triangles.data(), triCount, triAreas.data() ) ) {
-		return false;
-	}
+	rcMarkWalkableTriangles( &m_ctx, config.walkableSlopeAngle, vertices.data(), vertCount, triangles.data(), triCount, triAreas.data() );
 	if ( !rcRasterizeTriangles( &m_ctx, vertices.data(), vertCount, triangles.data(), triAreas.data(), triCount, *m_heightfield, config.walkableClimb ) ) {
 		return false;
 	}

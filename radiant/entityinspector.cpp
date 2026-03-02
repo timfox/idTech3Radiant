@@ -524,7 +524,7 @@ namespace
 			updateFromValue( m_default );
 		}
 
-		~FogSliderAttribute() override {
+		~FogSliderAttribute() {
 			delete m_widget;
 		}
 
@@ -532,7 +532,11 @@ namespace
 			return m_widget;
 		}
 
-		void apply() override {
+		void release() override {
+			delete this;
+		}
+
+		void apply() {
 			applyValue( m_spin->value() );
 		}
 		typedef MemberCaller<FogSliderAttribute, void(), &FogSliderAttribute::apply> ApplyCaller;

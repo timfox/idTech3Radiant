@@ -44,6 +44,7 @@
 typedef std::map<CopiedString, CopiedString> Variables;
 Variables g_build_variables;
 CopiedString g_volumetricFogConfigPath;
+const char* build_get_variable( const char* name );
 
 namespace
 {
@@ -190,7 +191,7 @@ void updateVolumetricFogConfig( const char* mapFile ){
 
 	const char* candidate = pathStream.c_str();
 	if ( string_empty( candidate ) ) {
-		g_volumetricFogConfigPath.clear();
+		g_volumetricFogConfigPath = "";
 		build_set_variable( "VolumetricFogConfig", "" );
 		return;
 	}

@@ -63,6 +63,7 @@ The open-source, cross-platform level editor for id Tech based games.
 * Customizable keyboard shortcuts and GUI themes/fonts
 * Numerous mouse shortcuts (Help → General → Mouse Shortcuts)
 * MeshTex plugin
+* Modelling maps in Blender/Maya: export brush template to OBJ, model in 3D app, use misc_model (see docs/Modelling_maps_in_Blender.txt)
 
 #### Advanced Entity Systems
 

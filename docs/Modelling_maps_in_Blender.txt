@@ -1,0 +1,68 @@
+Modelling A Map In Blender (or Maya, etc.)
+
+This document describes how to author id Tech 3 / Quake III maps using a 3D modelling
+application (Blender, Maya, etc.) instead of brush-only construction in Radiant.
+The workflow is based on techniques from KatsBits.com and similar tutorials.
+
+OVERVIEW
+--------
+You build the visible geometry in your 3D app, export it as ASE (or OBJ/FBX), then
+place it in Radiant as misc_model entities. A brush "template" provides the BSP
+structure for VIS and physical boundaries.
+
+WORKFLOW
+
+1. Create a brush template in NetRadiant
+   - Block out the map layout with brushes (rooms, boundaries, etc.)
+   - Texture faces you want to keep; caulk faces are ignored on export
+   - Compile to BSP (Build > BSP) so you have a .bsp file
+
+2. Export the template for your 3D app
+   Option A - Direct OBJ export (easiest):
+   - Select the brushes you want as a template
+   - Plugins > Brush export > Export .obj
+   - Saves selected brushes as Wavefront OBJ
+
+   Option B - BSP to ASE/OBJ via q3map2:
+   - Run: q3map2 -convert -format ase yourmap.bsp
+   - Or:  q3map2 -convert -format obj yourmap.bsp
+   - Produces yourmap_converted.ase or .obj
+
+3. Import into Blender (or Maya, etc.)
+   - Import the OBJ or ASE
+   - Use it as a guide for dimensions and layout
+   - Model your actual map geometry on top of / around it
+
+4. UV map and texture in your 3D app
+   - Apply textures, UV unwrap
+   - For AlphaMOD blending, see shader docs (q3map_alphaMod, etc.)
+
+5. Export to ASE
+   - Blender: use an ASE exporter (e.g. goofos script, USMase)
+   - Maya: export to OBJ or FBX; NetRadiant's assmodel plugin also loads OBJ/FBX
+
+6. Place in Radiant
+   - Add misc_model entities
+   - Set the "model" key to your .ase (or .obj/.fbx) path
+   - Position over the brush template
+   - Re-texture the template brushes with caulk to avoid z-fighting
+
+7. Optimisation
+   - Split large meshes into sections that follow the template layout
+   - This helps VIS: the brush template controls what gets drawn
+   - Without a template, the whole model may be drawn at once (slow)
+
+8. Bot support
+   - Add playerClip / botClip brushes for navigation
+   - Block "dead space" (e.g. sky) with botClip to reduce AAS size
+
+SUPPORTED MODEL FORMATS (misc_model)
+------------------------------------
+The assmodel plugin loads: ASE, OBJ, FBX, DAE, MD3, MDL, 3DS, and many more via Assimp.
+Maya can export OBJ or FBX; Blender can export ASE or OBJ.
+
+REFERENCES
+----------
+- KatsBits: "Modelling A Map In Blender" (Quake III workflow)
+- sock's AlphaMOD tutorials for texture blending on ASE models
+- docs/shaderManual/ for q3map_alphaMod and terrain blending

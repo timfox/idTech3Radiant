@@ -42,6 +42,7 @@
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QMessageBox>
+#include <QScrollBar>
 #include <QSplitter>
 #include <QDir>
 #include <QFont>
