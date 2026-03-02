@@ -1,0 +1,44 @@
+Pandas Data Analysis in Radiant
+===============================
+
+Radiant supports using the pandas library for data analysis in Python scripts.
+
+Setup
+-----
+Install pandas:
+  pip install pandas
+
+The radiant.dataframe Module
+----------------------------
+Import from your scripts:
+
+  import radiant.dataframe as rdf
+
+  rdf.available()       # True if pandas is installed
+  rdf.read_csv(path)   # Load CSV as DataFrame
+  rdf.read_spreadsheet(path)  # Alias for read_csv
+
+Example
+-------
+  import radiant.dataframe as rdf
+
+  if rdf.available():
+      df = rdf.read_csv("path/to/data.csv")
+      print(df.describe())
+      print(df.head())
+  else:
+      print("Install pandas: pip install pandas")
+
+Spreadsheet Integration
+-----------------------
+- Open Spreadsheet (Tools > Spreadsheet Editor, Ctrl+Alt+E)
+- Right-click in the table > "Copy as pandas code"
+- Paste into Python Script Editor and run
+- The copied code loads the current spreadsheet (or a placeholder path) as a DataFrame
+
+Use Cases
+---------
+- Analyze entity/brush counts from exported data
+- Process build logs or map statistics
+- Merge/filter spreadsheet data before re-import
+- Generate reports from CSV exports

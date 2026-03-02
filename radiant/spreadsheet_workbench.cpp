@@ -13,6 +13,7 @@
 #include <QLineEdit>
 #include <QTableWidget>
 #include <QTableWidgetItem>
+#include <QDir>
 #include <QFileDialog>
 #include <QFile>
 #include <QFileInfo>
@@ -672,6 +673,27 @@ void Spreadsheet_applyFormulaEdit(){
 	Spreadsheet_markDirty();
 }
 
+void Spreadsheet_copyPandasCode(){
+	QString path = g_spreadsheetCurrentPath;
+	if ( path.isEmpty() ) {
+		path = "path/to/your/file.csv";
+	}
+	else{
+		path = path.replace( "\\", "/" );
+	}
+	QString escaped = path;
+	escaped.replace( "\"", "\\\"" );
+	QString code = QString(
+		"import radiant.dataframe as rdf\n"
+		"if rdf.available():\n"
+		"    df = rdf.read_csv(\"%1\")\n"
+		"    print(df.head())\n"
+		"else:\n"
+		"    print(\"Install pandas: pip install pandas\")\n"
+	).arg( escaped );
+	QApplication::clipboard()->setText( code );
+}
+
 void Spreadsheet_showContextMenu( const QPoint& pos ){
 	if ( g_spreadsheetTable == nullptr ) {
 		return;
@@ -680,6 +702,9 @@ void Spreadsheet_showContextMenu( const QPoint& pos ){
 	auto* copyAction = menu.addAction( "Copy" );
 	auto* pasteAction = menu.addAction( "Paste" );
 	auto* clearAction = menu.addAction( "Clear Selection" );
+	menu.addSeparator();
+	auto* pandasAction = menu.addAction( "Copy as pandas code" );
+	pandasAction->setToolTip( "Copy Python code to load this spreadsheet as a pandas DataFrame" );
 	menu.addSeparator();
 	auto* recalcAction = menu.addAction( "Recalculate" );
 
@@ -692,6 +717,9 @@ void Spreadsheet_showContextMenu( const QPoint& pos ){
 		}
 		else if ( chosen == clearAction ) {
 			Spreadsheet_clearSelection();
+		}
+		else if ( chosen == pandasAction ) {
+			Spreadsheet_copyPandasCode();
 		}
 		else if ( chosen == recalcAction ) {
 			Spreadsheet_recalculateAll();

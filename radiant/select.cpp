@@ -1587,6 +1587,7 @@ class RotateDialog : public QObject
 	void construct(){
 		m_window = new QWidget( MainFrame_getWindow(), Qt::Dialog | Qt::WindowCloseButtonHint );
 		m_window->setWindowTitle( "Arbitrary rotation" );
+		m_window->setWindowModality( Qt::NonModal );
 		m_window->installEventFilter( this );
 
 		auto *grid = new QGridLayout( m_window );
@@ -1679,6 +1680,7 @@ class ScaleDialog : public QObject
 	void construct(){
 		m_window = new QWidget( MainFrame_getWindow(), Qt::Dialog | Qt::WindowCloseButtonHint );
 		m_window->setWindowTitle( "Arbitrary scale" );
+		m_window->setWindowModality( Qt::NonModal );
 		m_window->installEventFilter( this );
 
 		auto *grid = new QGridLayout( m_window );

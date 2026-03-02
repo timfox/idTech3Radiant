@@ -87,6 +87,7 @@ The open-source, cross-platform level editor for id Tech based games.
 * Scripts run in a subprocess with project paths in the environment; non-blocking execution
 * `radiant` module: app_path, engine_path, game_path, maps_path, scripts_path, current_map
 * Configurable Python executable in Preferences → Game
+* Pandas integration: radiant.dataframe for CSV/DataFrame analysis; Spreadsheet right-click > Copy as pandas code
 
 #### Performance
 

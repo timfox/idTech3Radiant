@@ -33,6 +33,9 @@ When run from the editor, scripts can "import radiant" for path helpers:
 The radiant module is in scripts/radiant/ and is added to PYTHONPATH
 when scripts are run from the editor.
 
+Pandas integration: radiant.dataframe provides read_csv(), read_spreadsheet().
+See docs/Pandas_analysis.txt. Spreadsheet: right-click > Copy as pandas code.
+
 Configuration
 -------------
 - Python executable: Preferences > Game > Python executable
