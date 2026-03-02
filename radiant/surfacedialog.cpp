@@ -43,6 +43,7 @@
 #include <QToolButton>
 #include <QGroupBox>
 #include <QCheckBox>
+#include <QAction>
 
 #include "signal/isignal.h"
 #include "math/vector.h"
@@ -170,6 +171,11 @@ public:
 
 	void ApplyFlags();
 	typedef MemberCaller<SurfaceInspector, void(), &SurfaceInspector::ApplyFlags> ApplyFlagsCaller;
+
+	void setTextureFromShader( const char* shader ){
+		m_textureEntry->setText( string_equal_prefix_nocase( shader, "textures/" ) ? shader + 9 : shader );
+		ApplyShader();
+	}
 };
 
 namespace
@@ -228,8 +234,7 @@ void SurfaceInspector_SelectionChanged( const Selectable& selectable ){
 }
 
 void SurfaceInspector_texturePicked( const char* shader ){
-	getSurfaceInspector().m_textureEntry->setText( string_equal_prefix_nocase( shader, "textures/" ) ? shader + 9 : shader );
-	getSurfaceInspector().ApplyShader();
+	getSurfaceInspector().setTextureFromShader( shader );
 	TextureBrowser_setTextureSelectedCallback( nullptr );
 }
 
@@ -1286,6 +1291,8 @@ public:
 			return PatchEdgeIter( *this, eRowForward );
 		case eColBack:
 			return PatchEdgeIter( *this, eRowBack );
+		default:
+			__builtin_unreachable();
 		}
 	}
 };

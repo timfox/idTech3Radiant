@@ -66,9 +66,7 @@ static void tray_toggleVisibility(){
 
 static void tray_executeCommand( const char* name ){
 	const Command& cmd = GlobalCommands_find( name );
-	if ( cmd.m_callback ) {
-		cmd.m_callback();
-	}
+	cmd.m_callback();
 }
 
 bool TrayIcon_isAvailable(){
