@@ -48,3 +48,9 @@ void TextureBrowser_setBackgroundColour( const Vector3& colour );
 
 void TextureBrowser_addActiveShadersChangedCallback( const SignalHandler& handler );
 void TextureBrowser_addShadersRealiseCallback( const SignalHandler& handler );
+
+/// Temporarily override texture selection callback (e.g. for surface inspector browse).
+/// Pass null to restore the previous callback.
+void TextureBrowser_setTextureSelectedCallback( void (*callback)(const char*) );
+/// True when a custom callback is active (e.g. surface inspector pick mode).
+bool TextureBrowser_isTextureSelectedCallbackOverridden();

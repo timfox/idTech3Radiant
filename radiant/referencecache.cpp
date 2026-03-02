@@ -639,12 +639,14 @@ public:
 #endif
 
 void SaveReferences(){
+	SaveStatus_notifySaving();
 	ScopeDisableScreenUpdates disableScreenUpdates( "Processing...", "Saving Map" );
 	for ( auto& ref : g_referenceCache )
 	{
 		ref.value->save();
 	}
 	MapChanged();
+	SaveStatus_notifySaved( Map_Valid( g_map ) ? Map_Name( g_map ) : nullptr );
 }
 
 bool References_Saved(){

@@ -1365,7 +1365,12 @@ public:
 
 bool Map_SaveRegion( const char *filename ){
 	ScopeRegionBrushes tmp;
-	return MapResource_saveFile( MapFormat_forFile( filename ), GlobalSceneGraph().root(), Map_Traverse_Region, filename );
+	SaveStatus_notifySaving();
+	const bool ok = MapResource_saveFile( MapFormat_forFile( filename ), GlobalSceneGraph().root(), Map_Traverse_Region, filename );
+	if ( ok ) {
+		SaveStatus_notifySaved( filename );
+	}
+	return ok;
 }
 
 
@@ -1638,8 +1643,13 @@ tryDecompile:
    ===========
  */
 bool Map_SaveFile( const char* filename ){
+	SaveStatus_notifySaving();
 	ScopeDisableScreenUpdates disableScreenUpdates( "Processing...", "Saving Map" );
-	return MapResource_saveFile( MapFormat_forFile( filename ), GlobalSceneGraph().root(), Map_Traverse, filename );
+	const bool ok = MapResource_saveFile( MapFormat_forFile( filename ), GlobalSceneGraph().root(), Map_Traverse, filename );
+	if ( ok ) {
+		SaveStatus_notifySaved( filename );
+	}
+	return ok;
 }
 
 //
@@ -1650,7 +1660,12 @@ bool Map_SaveFile( const char* filename ){
 // Saves selected world brushes and whole entities with partial/full selections
 //
 bool Map_SaveSelected( const char* filename ){
-	return MapResource_saveFile( MapFormat_forFile( filename ), GlobalSceneGraph().root(), Map_Traverse_Selected, filename );
+	SaveStatus_notifySaving();
+	const bool ok = MapResource_saveFile( MapFormat_forFile( filename ), GlobalSceneGraph().root(), Map_Traverse_Selected, filename );
+	if ( ok ) {
+		SaveStatus_notifySaved( filename );
+	}
+	return ok;
 }
 
 class ParentSelectedBrushesToEntityWalker : public scene::Graph::Walker

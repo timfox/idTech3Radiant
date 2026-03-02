@@ -21,6 +21,7 @@
 
 #include "console.h"
 
+#include <chrono>
 #include <ctime>
 
 #include "gtkutil/accelerator.h"
@@ -36,6 +37,13 @@
 #include <QMenu>
 #include <QApplication>
 #include <QClipboard>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QProgressBar>
+#include <QLabel>
+#include <QPushButton>
+#include <QTimer>
+#include <QRegularExpression>
 
 #ifndef WIN32
 #include <unistd.h> // write()
@@ -83,6 +91,15 @@ void Sys_LogFile( bool enable ){
 
 QPlainTextEdit* g_console = 0;
 
+namespace
+{
+QWidget* g_consoleContainer = nullptr;
+QProgressBar* g_buildProgressBar = nullptr;
+QLabel* g_buildProgressLabel = nullptr;
+QTimer* g_buildElapsedTimer = nullptr;
+std::chrono::steady_clock::time_point g_buildStartTime;
+}
+
 class QPlainTextEdit_console : public QPlainTextEdit
 {
 protected:
@@ -90,6 +107,9 @@ protected:
 		QMenu *menu = createStandardContextMenu();
 		connect( menu->addAction( "Copy All" ), &QAction::triggered, [this](){ QApplication::clipboard()->setText( toPlainText() ); } );
 		connect( menu->addAction( "Clear" ), &QAction::triggered, this, &QPlainTextEdit::clear );
+		menu->addSeparator();
+		connect( menu->addAction( "Find next error" ), &QAction::triggered, [](){ Console_findNext( "error|Error|ERROR|leak|Leak|LEAK|fail|Fail|FAIL" ); } );
+		connect( menu->addAction( "Find next warning" ), &QAction::triggered, [](){ Console_findNext( "warning|Warning|WARNING" ); } );
 		menu->exec( event->globalPos() );
 		delete menu;
 	}
@@ -97,6 +117,58 @@ protected:
 
 
 QWidget* Console_constructWindow(){
+	auto *container = new QWidget;
+	auto *vbox = new QVBoxLayout( container );
+	vbox->setContentsMargins( 0, 0, 0, 0 );
+
+	{
+		auto *progressFrame = new QWidget;
+		auto *progressHbox = new QHBoxLayout( progressFrame );
+		progressHbox->setContentsMargins( 4, 2, 4, 2 );
+		g_buildProgressBar = new QProgressBar;
+		g_buildProgressBar->setRange( 0, 100 );
+		g_buildProgressBar->setTextVisible( true );
+		g_buildProgressBar->setMinimumWidth( 120 );
+		g_buildProgressBar->setVisible( false );
+		g_buildProgressLabel = new QLabel( "Ready" );
+		g_buildProgressLabel->setStyleSheet( "QLabel { color: #888; }" );
+		progressHbox->addWidget( g_buildProgressLabel );
+
+		auto *findErrorBtn = new QPushButton( "Find Error" );
+		findErrorBtn->setToolTip( "Jump to next error, leak, or failure in output" );
+		QObject::connect( findErrorBtn, &QPushButton::clicked, [](){ Console_findNext( "error|Error|ERROR|leak|Leak|LEAK|fail|Fail|FAIL" ); } );
+		progressHbox->addWidget( findErrorBtn );
+
+		auto *findWarningBtn = new QPushButton( "Find Warning" );
+		findWarningBtn->setToolTip( "Jump to next warning in output" );
+		QObject::connect( findWarningBtn, &QPushButton::clicked, [](){ Console_findNext( "warning|Warning|WARNING" ); } );
+		progressHbox->addWidget( findWarningBtn );
+
+		progressHbox->addWidget( g_buildProgressBar, 1 );
+		progressFrame->addLayout( progressHbox );
+		vbox->addWidget( progressFrame );
+
+		g_consoleContainer = container;
+		g_buildElapsedTimer = new QTimer( container );
+		g_buildElapsedTimer->setInterval( 1000 );
+		QObject::connect( g_buildElapsedTimer, &QTimer::timeout, [](){
+			if ( g_buildProgressLabel && g_buildProgressBar->isVisible() ) {
+				const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>( std::chrono::steady_clock::now() - g_buildStartTime ).count();
+				const int min = static_cast<int>( elapsed / 60 );
+				const int sec = static_cast<int>( elapsed % 60 );
+				QString timeStr = QString( "%1:%2" ).arg( min, 2, 10, QChar( '0' ) ).arg( sec, 2, 10, QChar( '0' ) );
+				QString text = g_buildProgressLabel->text();
+				// Update elapsed in the label (format: "Step X/Y: Name | 1:23")
+				if ( text.contains( " | " ) ) {
+					text = text.left( text.indexOf( " | " ) ) + " | " + timeStr;
+				} else {
+					text = text + " | " + timeStr;
+				}
+				g_buildProgressLabel->setText( text );
+			}
+		} );
+	}
+
 	QPlainTextEdit *text = new QPlainTextEdit_console();
 	text->setReadOnly( true );
 	text->setUndoRedoEnabled( false );
@@ -105,13 +177,56 @@ QWidget* Console_constructWindow(){
 
 	{
 		g_console = text;
-
-		//globalExtendedASCIICharacterSet().print();
-
 		text->connect( text, &QObject::destroyed, [](){ g_console = nullptr; } );
 	}
 
-	return text;
+	vbox->addWidget( text, 1 );
+
+	return container;
+}
+
+void Console_buildProgressUpdate( int step, int total, const char* stepName ){
+	if ( g_buildProgressBar == nullptr || g_buildProgressLabel == nullptr ) {
+		return;
+	}
+	if ( step < 0 ) {
+		g_buildProgressBar->setVisible( false );
+		g_buildProgressLabel->setText( "Ready" );
+		g_buildProgressLabel->setStyleSheet( "QLabel { color: #888; }" );
+		if ( g_buildElapsedTimer ) {
+			g_buildElapsedTimer->stop();
+		}
+		return;
+	}
+	g_buildProgressBar->setVisible( true );
+	g_buildProgressLabel->setStyleSheet( "QLabel { color: #35ff6b; font-weight: bold; }" );
+	g_buildProgressBar->setValue( total > 0 ? ( step * 100 / total ) : 0 );
+	g_buildProgressLabel->setText( QString( "Step %1/%2: %3" ).arg( step + 1 ).arg( total ).arg( stepName ? stepName : "" ) );
+	if ( step == 0 ) {
+		g_buildStartTime = std::chrono::steady_clock::now();
+		if ( g_buildElapsedTimer ) {
+			g_buildElapsedTimer->start();
+		}
+	}
+}
+
+void Console_findNext( const char* pattern ){
+	if ( g_console == nullptr ) {
+		return;
+	}
+	QRegularExpression re( pattern, QRegularExpression::CaseInsensitiveOption );
+	QTextCursor cursor = g_console->textCursor();
+	cursor.movePosition( QTextCursor::MoveOperation::NextCharacter );
+	g_console->setTextCursor( cursor );
+	bool found = g_console->find( re );
+	if ( !found ) {
+		g_console->moveCursor( QTextCursor::MoveOperation::Start );
+		found = g_console->find( re );
+	}
+	if ( found ) {
+		g_console->ensureCursorVisible();
+		g_console->setFocus();
+	}
 }
 
 //#pragma GCC push_options

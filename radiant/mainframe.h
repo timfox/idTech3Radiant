@@ -162,6 +162,9 @@ bool Layout_expiramentalFeaturesEnabled();
 
 void Sys_Status( const char* status );
 
+void SaveStatus_notifySaving();
+void SaveStatus_notifySaved( const char* filename );
+
 
 void ScreenUpdates_Disable( const char* message, const char* title );
 void ScreenUpdates_Enable();
@@ -212,6 +215,8 @@ const char* GameToolsPath_get();
 
 extern CopiedString g_strGamePacksPath;
 const char* GamePacksPath_get();
+
+extern bool g_bMayaNavigation;
 void GamePacksPath_setDefault();
 void GamePacksPath_set( const char* path );
 
@@ -283,7 +288,11 @@ void Add_createLight();
 void Add_createInfoPlayerStart();
 void Add_createInfoPlayerDeathmatch();
 void Add_createMiscModel();
+void Layout_setRegular();
+void Layout_setRegularLeft();
 void Layout_setHammerFourPane();
+void Layout_setFloating();
+void Layout_saveWorkspace();
 void IdTech3Tool_openHubDialog();
 void Lua_editProps();
 void Lua_editEntities();

@@ -39,3 +39,8 @@ class QWidget* Console_constructWindow();
 
 // will open/close the log file based on the parameter
 void Sys_LogFile( bool enable );
+
+/// Build progress: show step X of Y, elapsed time. Call with step<0 to hide.
+void Console_buildProgressUpdate( int step, int total, const char* stepName );
+/// Find next error/warning/leak in console output.
+void Console_findNext( const char* pattern );

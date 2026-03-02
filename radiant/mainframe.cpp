@@ -55,6 +55,8 @@
 #include <QCheckBox>
 #include <QToolBar>
 #include <QStatusBar>
+#include <QProgressBar>
+#include <QDateTime>
 #include <QBoxLayout>
 #include <QDialog>
 #include <QCloseEvent>
@@ -455,6 +457,8 @@ void GamePacksPath_set( const char* path ){
    and also q3map, bspc
  */
 CopiedString g_strGameToolsPath;           ///< this is set by g_GamesDialog
+
+bool g_bMayaNavigation = false;
 
 const char* GameToolsPath_get(){
 	return g_strGameToolsPath.c_str();
@@ -1348,7 +1352,7 @@ void Experimental_createDocks( QMainWindow* window ){
 	{
 		auto* root = new QWidget( g_exp_usdDock );
 		auto* vbox = new QVBoxLayout( root );
-		auto* importButton = new QPushButton( "Import USD Structure...", root );
+		auto* importButton = new QPushButton( "Import USD Structure", root );
 		g_exp_usdTree = new QTreeWidget( root );
 		g_exp_usdTree->setHeaderLabels( QStringList( "Prim" ) );
 		vbox->addWidget( importButton );
@@ -1384,6 +1388,18 @@ void Experimental_destroyDocks(){
 }
 
 
+
+void create_layout_menu( QMenuBar *menubar, MainFrame::EViewStyle style ){
+	QMenu *menu = menubar->addMenu( "&Layout" );
+	menu->setTearOffEnabled( g_Layout_enableDetachableMenus.m_value );
+
+	create_menu_item_with_mnemonic( menu, "&Regular", "LayoutRegular" );
+	create_menu_item_with_mnemonic( menu, "Regular &Left", "LayoutRegularLeft" );
+	create_menu_item_with_mnemonic( menu, "&4-pane", "LayoutHammerFourPane" );
+	create_menu_item_with_mnemonic( menu, "&Floating viewports", "LayoutFloating" );
+	menu->addSeparator();
+	create_menu_item_with_mnemonic( menu, "&Save workspace", "LayoutSaveWorkspace" );
+}
 
 void create_file_menu( QMenuBar *menubar ){
 	// File menu
@@ -1443,8 +1459,8 @@ void create_edit_menu( QMenuBar *menubar ){
 	create_menu_item_with_mnemonic( menu, "Select Connected Entities", "SelectConnectedEntities" );
 
 	menu->addSeparator();
-	create_menu_item_with_mnemonic( menu, "&Shortcuts...", "Shortcuts" );
-	create_menu_item_with_mnemonic( menu, "Pre&ferences...", "Preferences" );
+	create_menu_item_with_mnemonic( menu, "&Shortcuts", "Shortcuts" );
+	create_menu_item_with_mnemonic( menu, "Pre&ferences", "Preferences" );
 }
 
 Vector3 Add_entitySpawnOrigin(){
@@ -1686,8 +1702,23 @@ void Layout_setStyleAndRequestRestart( MainFrame::EViewStyle style, const char* 
 	}
 }
 
+void Layout_setRegular(){
+	Layout_setStyleAndRequestRestart( MainFrame::eRegular, "Regular" );
+}
+void Layout_setRegularLeft(){
+	Layout_setStyleAndRequestRestart( MainFrame::eRegularLeft, "Regular Left" );
+}
 void Layout_setHammerFourPane(){
 	Layout_setStyleAndRequestRestart( MainFrame::eSplit, "4-pane" );
+}
+void Layout_setFloating(){
+	Layout_setStyleAndRequestRestart( MainFrame::eFloating, "Floating viewports" );
+}
+void Layout_saveWorkspace(){
+	if ( g_pParentWnd != nullptr ) {
+		g_pParentWnd->SaveGuiState();
+	}
+	Preferences_Save();
 }
 
 void Lua_openScript( const CopiedString& scriptPath, const char* title, bool externalEditor ){
@@ -1921,19 +1952,19 @@ void create_add_menu( QMenuBar *menubar ){
 
 	menu->setTearOffEnabled( g_Layout_enableDetachableMenus.m_value );
 
-	create_menu_item_with_mnemonic( menu, "Entity...", "AddEntityByName" );
+		create_menu_item_with_mnemonic( menu, "Entity", "AddEntityByName" );
 	menu->addSeparator();
 	create_menu_item_with_mnemonic( menu, "Light", "AddLight" );
 	create_menu_item_with_mnemonic( menu, "Player Start", "AddInfoPlayerStart" );
 	create_menu_item_with_mnemonic( menu, "Player Deathmatch", "AddInfoPlayerDeathmatch" );
-	create_menu_item_with_mnemonic( menu, "Model...", "AddMiscModel" );
+		create_menu_item_with_mnemonic( menu, "Model", "AddMiscModel" );
 	menu->addSeparator();
 
 	QMenu* brushMenu = menu->addMenu( "Brush Primitive" );
 	brushMenu->setTearOffEnabled( g_Layout_enableDetachableMenus.m_value );
-	create_menu_item_with_mnemonic( brushMenu, "Prism...", "BrushPrism" );
-	create_menu_item_with_mnemonic( brushMenu, "Cone...", "BrushCone" );
-	create_menu_item_with_mnemonic( brushMenu, "Sphere...", "BrushSphere" );
+		create_menu_item_with_mnemonic( brushMenu, "Prism", "BrushPrism" );
+		create_menu_item_with_mnemonic( brushMenu, "Cone", "BrushCone" );
+		create_menu_item_with_mnemonic( brushMenu, "Sphere", "BrushSphere" );
 }
 
 void create_view_menu( QMenuBar *menubar, MainFrame::EViewStyle style ){
@@ -2140,8 +2171,8 @@ void create_selection_menu( QMenuBar *menubar ){
 		create_menu_item_with_mnemonic( submenu, "Flip Vertically", "MirrorSelectionVertically" );
 	}
 	menu->addSeparator();
-	create_menu_item_with_mnemonic( menu, "Arbitrary rotation...", "ArbitraryRotation" );
-	create_menu_item_with_mnemonic( menu, "Arbitrary scale...", "ArbitraryScale" );
+	create_menu_item_with_mnemonic( menu, "Arbitrary rotation", "ArbitraryRotation" );
+	create_menu_item_with_mnemonic( menu, "Arbitrary scale", "ArbitraryScale" );
 	menu->addSeparator();
 	{
 		QMenu* submenu = menu->addMenu( "Repeat" );
@@ -2170,7 +2201,7 @@ void create_bsp_menu( QMenuBar *menubar ){
 
 	menu->setTearOffEnabled( g_Layout_enableDetachableMenus.m_value );
 
-	create_menu_item_with_mnemonic( menu, "Customize...", "BuildMenuCustomize" );
+	create_menu_item_with_mnemonic( menu, "Customize", "BuildMenuCustomize" );
 	create_menu_item_with_mnemonic( menu, "Run recent build", "Build_runRecentExecutedBuild" );
 
 	menu->addSeparator();
@@ -2200,13 +2231,13 @@ void create_misc_menu( QMenuBar *menubar ){
 #endif
 	create_colours_menu( menu );
 
-	create_menu_item_with_mnemonic( menu, "Find brush...", "FindBrush" );
-	create_menu_item_with_mnemonic( menu, "Map Info...", "MapInfo" );
+	create_menu_item_with_mnemonic( menu, "Find brush", "FindBrush" );
+	create_menu_item_with_mnemonic( menu, "Map Info", "MapInfo" );
 	create_menu_item_with_mnemonic( menu, "&Refresh models", "RefreshReferences" );
 	if ( g_Layout_expiramentalFeatures.m_value ) {
-		create_menu_item_with_mnemonic( menu, "Import USD structure...", "ImportUSDStructure" );
+		create_menu_item_with_mnemonic( menu, "Import USD structure", "ImportUSDStructure" );
 	}
-	create_menu_item_with_mnemonic( menu, "Set 2D &Background image...", makeCallbackF( WXY_SetBackgroundImage ) );
+	create_menu_item_with_mnemonic( menu, "Set 2D &Background image", makeCallbackF( WXY_SetBackgroundImage ) );
 	create_menu_item_with_mnemonic( menu, "Fullscreen", "Fullscreen" );
 	create_menu_item_with_mnemonic( menu, "Maximize view", "MaximizeView" );
 }
@@ -2243,7 +2274,7 @@ void create_tools_menu( QMenuBar *menubar ){
 
 	menu->setTearOffEnabled( g_Layout_enableDetachableMenus.m_value );
 
-	create_menu_item_with_mnemonic( menu, "Id Tech 3 Tool Center...", "OpenIdTech3ToolCenter" );
+	create_menu_item_with_mnemonic( menu, "Id Tech 3 Tool Center", "OpenIdTech3ToolCenter" );
 	create_menu_item_with_mnemonic( menu, "Music Player / Playlist Editor", "OpenAudioWorkbench" );
 	create_menu_item_with_mnemonic( menu, "Cinematic Video Player", "OpenCinematicPlayer" );
 	create_menu_item_with_mnemonic( menu, "Spreadsheet Editor", "OpenSpreadsheetWorkbench" );
@@ -2286,6 +2317,7 @@ void create_help_menu( QMenuBar *menubar ){
 }
 
 void create_main_menu( QMenuBar *menubar, MainFrame::EViewStyle style ){
+	create_layout_menu( menubar, style );
 	create_file_menu( menubar );
  	create_edit_menu( menubar );
 	create_add_menu( menubar );
@@ -2506,8 +2538,72 @@ void create_main_toolbar( QToolBar *toolbar,  MainFrame::EViewStyle style ){
 }
 
 
+namespace
+{
+QWidget* g_saveStatusWidget = nullptr;
+QProgressBar* g_saveStatusBar = nullptr;
+QLabel* g_saveStatusLabel = nullptr;
+}
+
+void SaveStatus_notifySaving(){
+	if ( g_saveStatusBar && g_saveStatusLabel ) {
+		g_saveStatusBar->setRange( 0, 0 ); // indeterminate
+		g_saveStatusBar->setVisible( true );
+		g_saveStatusLabel->setText( "Saving..." );
+		g_saveStatusLabel->setToolTip( "Saving map..." );
+		g_saveStatusWidget->setVisible( true );
+		QApplication::processEvents();
+	}
+}
+
+void SaveStatus_notifySaved( const char* filename ){
+	if ( g_saveStatusBar && g_saveStatusLabel ) {
+		g_saveStatusBar->setRange( 0, 100 );
+		g_saveStatusBar->setValue( 100 );
+		g_saveStatusBar->setVisible( true );
+		const QDateTime now = QDateTime::currentDateTime();
+		const QString timeStr = now.toString( "hh:mm:ss" );
+		const QString dateStr = now.toString( "yyyy-MM-dd" );
+		g_saveStatusLabel->setText( "Saved" );
+		g_saveStatusLabel->setToolTip(
+			QString( "Last saved at %1 on %2\n%3" )
+				.arg( timeStr )
+				.arg( dateStr )
+				.arg( filename ? QString::fromUtf8( path_get_filename_start( filename ) ) : QString() )
+		);
+		g_saveStatusWidget->setToolTip(
+			QString( "Last saved at %1 on %2\n%3" )
+				.arg( timeStr )
+				.arg( dateStr )
+				.arg( filename ? QString::fromUtf8( path_get_filename_start( filename ) ) : QString() )
+		);
+		g_saveStatusWidget->setVisible( true );
+	}
+}
+
 void create_main_statusbar( QStatusBar *statusbar, QLabel *pStatusLabel[c_status__count] ){
 	statusbar->setSizeGripEnabled( false );
+	{
+		g_saveStatusWidget = new QWidget;
+		auto *hbox = new QHBoxLayout( g_saveStatusWidget );
+		hbox->setContentsMargins( 0, 0, 8, 0 );
+		hbox->setSpacing( 4 );
+		g_saveStatusBar = new QProgressBar;
+		g_saveStatusBar->setRange( 0, 100 );
+		g_saveStatusBar->setValue( 0 );
+		g_saveStatusBar->setTextVisible( false );
+		g_saveStatusBar->setMinimumWidth( 60 );
+		g_saveStatusBar->setMaximumWidth( 80 );
+		g_saveStatusBar->setFixedHeight( 12 );
+		g_saveStatusBar->setVisible( false );
+		g_saveStatusLabel = new QLabel( "—" );
+		g_saveStatusLabel->setMinimumWidth( g_saveStatusLabel->fontMetrics().horizontalAdvance( "Saved" ) );
+		g_saveStatusLabel->setToolTip( "Save status" );
+		hbox->addWidget( g_saveStatusLabel );
+		hbox->addWidget( g_saveStatusBar );
+		g_saveStatusWidget->setToolTip( "Save status — last saved time shown in tooltip" );
+		statusbar->addWidget( g_saveStatusWidget );
+	}
 	{
 		auto *label = new QLabel;
 		statusbar->addPermanentWidget( label, 1 );
@@ -3126,6 +3222,7 @@ void Layout_constructPreferences( PreferencesPage& page ){
 	    LatchedImportCaller( g_Layout_expiramentalFeatures ),
 	    BoolExportCaller( g_Layout_expiramentalFeatures.m_latched )
 	);
+	page.appendCheckBox( "", "Industry Standard (Maya-style) navigation", g_bMayaNavigation );
 }
 
 void Layout_constructPage( PreferenceGroup& group ){
@@ -3154,6 +3251,7 @@ void MainFrame_Construct(){
 	GlobalPreferenceSystem().registerPreference( "BuiltInGroupDialog", makeBoolStringImportCallback( LatchedAssignCaller( g_Layout_builtInGroupDialog ) ), BoolExportStringCaller( g_Layout_builtInGroupDialog.m_latched ) );
 	GlobalPreferenceSystem().registerPreference( "ExperimentalFeatures", makeBoolStringImportCallback( LatchedAssignCaller( g_Layout_expiramentalFeatures ) ), BoolExportStringCaller( g_Layout_expiramentalFeatures.m_latched ) );
 	GlobalPreferenceSystem().registerPreference( "ExpiramentalFeatures", makeBoolStringImportCallback( LatchedAssignCaller( g_Layout_expiramentalFeatures ) ), BoolExportStringCaller( g_Layout_expiramentalFeatures.m_latched ) );
+	GlobalPreferenceSystem().registerPreference( "MayaNavigation", BoolImportStringCaller( g_bMayaNavigation ), BoolExportStringCaller( g_bMayaNavigation ) );
 	GlobalPreferenceSystem().registerPreference( "ToolbarHiddenButtons", CopiedStringImportStringCaller( g_toolbarHiddenButtons ), CopiedStringExportStringCaller( g_toolbarHiddenButtons ) );
 	GlobalPreferenceSystem().registerPreference( "OpenGLFont", CopiedStringImportStringCaller( g_OpenGLFont ), CopiedStringExportStringCaller( g_OpenGLFont ) );
 	GlobalPreferenceSystem().registerPreference( "OpenGLFontSize", IntImportStringCaller( g_OpenGLFontSize ), IntExportStringCaller( g_OpenGLFontSize ) );

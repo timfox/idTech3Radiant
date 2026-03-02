@@ -85,7 +85,7 @@ QString VideoWorkbench_videoContentFolder(){
 	if ( !override.isEmpty() ) {
 		return override;
 	}
-	return QString::fromLatin1( EnginePath_get() ) + "/content/movies";
+	return QString::fromLatin1( GameToolsPath_get() ) + "/content/movies";
 }
 
 QStringList VideoWorkbench_videoExtensions(){

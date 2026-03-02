@@ -770,7 +770,7 @@ void Entity_constructMenu( QMenu* menu ){
 		create_menu_item_with_mnemonic( menu, "&KillConnect Entities", "EntitiesKillConnect" );
 	}
 	create_menu_item_with_mnemonic( menu, "&Move Primitives to Entity", "EntityMovePrimitivesToLast" );
-	create_menu_item_with_mnemonic( menu, "&Select Color...", "EntityColorSet" );
+	create_menu_item_with_mnemonic( menu, "&Select Color", "EntityColorSet" );
 	create_menu_item_with_mnemonic( menu, "&Normalize Color", "EntityColorNormalize" );
 	menu->addSeparator();
 	create_menu_item_with_mnemonic( menu, "Apply Next-Gen Volumetric Fog Preset", "EntityApplyNextGenVolumetricFogPreset" );

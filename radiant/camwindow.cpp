@@ -27,6 +27,7 @@
 
 #include "camwindow.h"
 
+#include "mainframe.h"
 #include "debugging/debugging.h"
 
 #include "iscenegraph.h"
@@ -723,6 +724,13 @@ static void Camera_motionDelta( int x, int y, const QMouseEvent *event, camera_t
 		return;
 	}
 
+	// Maya navigation: Alt+Middle = pan (strafe)
+	if( g_bMayaNavigation && ( event->modifiers() & Qt::KeyboardModifier::AltModifier ) && ( event->buttons() & Qt::MouseButton::MiddleButton ) ){
+		cam.m_strafe = true;
+		cam.m_strafe_forward = false;
+		return;
+	}
+
 	cam.m_strafe_forward_invert = false;
 
 	switch ( g_camwindow_globals_private.m_strafeMode )
@@ -1133,11 +1141,18 @@ inline bool ORBIT_EVENT( const QMouseEvent& event ){
 inline bool M2_EVENT( const QMouseEvent& event ){
 	return event.button() == Qt::MouseButton::RightButton && modifiers_for_state( event.modifiers() ) == c_modifierNone;
 }
+inline bool PAN_EVENT( const QMouseEvent& event ){
+	return g_bMayaNavigation && event.button() == Qt::MouseButton::MiddleButton && modifiers_for_state( event.modifiers() ) == c_modifierAlt;
+}
+inline bool PAN_RELEASE_EVENT( const QMouseEvent& event ){
+	return g_bMayaNavigation && event.button() == Qt::MouseButton::MiddleButton;
+}
 
 static void enable_freelook_button_press( const QMouseEvent& event, CamWnd& camwnd ){
 	const bool m2    = M2_EVENT( event );
 	const bool m2alt = ORBIT_EVENT( event );
-	if ( m2 || m2alt ) {
+	const bool pan   = PAN_EVENT( event );
+	if ( m2 || m2alt || pan ) {
 		camwnd.m_bFreeMove_entering = true;
 		if( m2 && context_menu_try( camwnd ) ){
 			context_menu_show();
@@ -1173,11 +1188,15 @@ static void disable_freelook_button_press( const QMouseEvent& event, CamWnd& cam
 static void disable_freelook_button_release( const QMouseEvent& event, CamWnd& camwnd ){
 	const bool m2    = M2_EVENT( event );
 	const bool m2alt = ORBIT_EVENT( event );
+	const bool pan_release = PAN_RELEASE_EVENT( event );
 	if ( m2 || m2alt ) {
 		camwnd.getCamera().m_orbit = false;
 		if( ( ( camwnd.m_rightClickTimer.elapsed_msec() < 300 && camwnd.m_rightClickMove < 56 ) == !camwnd.m_bFreeMove_entering ) ){
 			camwnd.DisableFreeMove();
 		}
+	}
+	else if ( pan_release ) {
+		camwnd.DisableFreeMove();
 	}
 }
 
@@ -1287,6 +1306,11 @@ static void camera_zoom( CamWnd& camwnd, float x, float y, float step ){
 
 static void wheelmove_scroll( const QWheelEvent& event, CamWnd& camwnd ){
 	camera_t& cam = camwnd.getCamera();
+
+	// Maya navigation: zoom only with Alt+scroll
+	if( g_bMayaNavigation && !( event.modifiers() & Qt::KeyboardModifier::AltModifier ) ){
+		return;
+	}
 
 	const int angleDelta = ( std::abs( event.angleDelta().y() ) > std::abs( event.angleDelta().x() ) ) // normal y() goes to x() with ALT pressed
 	                      ? event.angleDelta().y()

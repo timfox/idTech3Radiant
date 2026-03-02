@@ -42,6 +42,7 @@
 #include <QTimer>
 
 #include "commandlib.h"
+#include "console.h"
 #include "string/string.h"
 #include "stream/stringstream.h"
 
@@ -556,6 +557,15 @@ static xmlSAXHandler saxParser = {
 
 // ------------------------------------------------------------------------------------------------
 
+static const char* WatchBSP_stepNameFromCommand( const char* cmd ){
+	if ( !cmd ) return "Build";
+	if ( strstr( cmd, "-bsp" ) ) return "BSP";
+	if ( strstr( cmd, "-vis" ) ) return "VIS";
+	if ( strstr( cmd, "-light" ) ) return "LIGHT";
+	if ( strstr( cmd, "-meta" ) ) return "BSP (meta)";
+	return "Build";
+}
+
 void CWatchBSP::Reset(){
 	if ( m_pInSocket ) {
 		Net_Disconnect( m_pInSocket );
@@ -571,6 +581,7 @@ void CWatchBSP::Reset(){
 	}
 	m_eState = EIdle;
 	m_monitoring_timer.stop();
+	Console_buildProgressUpdate( -1, 0, nullptr );
 }
 
 bool CWatchBSP::SetupListening(){
@@ -594,6 +605,7 @@ void CWatchBSP::DoEBeginStep(){
 	Reset();
 
 	if( m_iCurrentStep == m_commands.size() ){ // finita
+		Console_buildProgressUpdate( -1, 0, nullptr );
 		if( g_WatchBSP_RunQuake )
 			runEngine( runEngineCmd( m_sBSPName.c_str() ).c_str() );
 		return;
@@ -620,7 +632,9 @@ void CWatchBSP::DoEBeginStep(){
 	m_timeout_timer.start();
 
 	if ( !m_bBSPPlugin ) {
-		globalOutputStream() << "=== running build command ===\n"
+		const char* stepName = WatchBSP_stepNameFromCommand( m_commands[m_iCurrentStep].c_str() );
+		Console_buildProgressUpdate( static_cast<int>( m_iCurrentStep ), static_cast<int>( m_commands.size() ), stepName );
+		globalOutputStream() << "=== Step " << ( m_iCurrentStep + 1 ) << "/" << m_commands.size() << ": " << stepName << " ===\n"
 		                     << m_commands[m_iCurrentStep] << '\n';
 
 		if ( !Q_Exec( nullptr, const_cast<char*>( m_commands[m_iCurrentStep].c_str() ), nullptr, true, false ) ) {

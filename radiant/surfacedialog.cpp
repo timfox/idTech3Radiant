@@ -73,6 +73,9 @@
 #include "stream/stringstream.h"
 #include "grid.h"
 #include "textureentry.h"
+#include "texwindow.h"
+#include "groupdialog.h"
+#include "gtkutil/image.h"
 
 
 class Increment
@@ -222,6 +225,12 @@ void SurfaceInspector_updateSelection(){
 
 void SurfaceInspector_SelectionChanged( const Selectable& selectable ){
 	SurfaceInspector_updateSelection();
+}
+
+void SurfaceInspector_texturePicked( const char* shader ){
+	getSurfaceInspector().m_textureEntry->setText( string_equal_prefix_nocase( shader, "textures/" ) ? shader + 9 : shader );
+	getSurfaceInspector().ApplyShader();
+	TextureBrowser_setTextureSelectedCallback( nullptr );
 }
 
 void SurfaceInspector_SetCurrent_FromSelected(){
@@ -650,6 +659,14 @@ void SurfaceInspector::BuildDialog(){
 			{
 				m_textureEntry = new NonModalEntry( ApplyShaderCaller( *this ), UpdateCaller( *this ) );
 				GlobalTextureEntryCompletion::instance().connect( m_textureEntry );
+				auto *browseBtn = m_textureEntry->addAction( new_local_icon( "texture_browser.png" ), QLineEdit::ActionPosition::TrailingPosition );
+				browseBtn->setToolTip( "Browse textures with preview" );
+				QObject::connect( browseBtn, &QAction::triggered, [this](){
+					TextureBrowser_setTextureSelectedCallback( SurfaceInspector_texturePicked );
+					if ( g_page_textures != nullptr ) {
+						GroupDialog_showPage( g_page_textures );
+					}
+				} );
 				form->addRow( "Texture", m_textureEntry );
 			}
 		}

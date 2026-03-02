@@ -1495,11 +1495,11 @@ void Brush_registerCommands(){
 }
 
 void Brush_constructMenu( QMenu* menu ){
-	create_menu_item_with_mnemonic( menu, "Prism...", "BrushPrism" );
-	create_menu_item_with_mnemonic( menu, "Cone...", "BrushCone" );
-	create_menu_item_with_mnemonic( menu, "Sphere...", "BrushSphere" );
-	create_menu_item_with_mnemonic( menu, "Rock...", "BrushRock" );
-	create_menu_item_with_mnemonic( menu, "Icosahedron...", "BrushIcosahedron" );
+	create_menu_item_with_mnemonic( menu, "Prism", "BrushPrism" );
+	create_menu_item_with_mnemonic( menu, "Cone", "BrushCone" );
+	create_menu_item_with_mnemonic( menu, "Sphere", "BrushSphere" );
+	create_menu_item_with_mnemonic( menu, "Rock", "BrushRock" );
+	create_menu_item_with_mnemonic( menu, "Icosahedron", "BrushIcosahedron" );
 	menu->addSeparator();
 	{
 		QMenu* submenu = menu->addMenu( "CSG" );

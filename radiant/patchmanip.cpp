@@ -736,16 +736,16 @@ void Patch_constructToolbar( QToolBar* toolbar ){
 }
 
 void Patch_constructMenu( QMenu* menu ){
-	create_menu_item_with_mnemonic( menu, "Simple Patch Mesh...", "SimplePatchMesh" );
+	create_menu_item_with_mnemonic( menu, "Simple Patch Mesh", "SimplePatchMesh" );
 	create_menu_item_with_mnemonic( menu, "Bevel", "PatchBevel" );
 	create_menu_item_with_mnemonic( menu, "End cap", "PatchEndCap" );
 	create_menu_item_with_mnemonic( menu, "Cylinder (9x3)", "PatchCylinder" );
 	create_menu_item_with_mnemonic( menu, "Square Cylinder (9x3)", "PatchSquareCylinder" );
-	create_menu_item_with_mnemonic( menu, "Exact Cylinder...", "PatchXactCylinder" );
+	create_menu_item_with_mnemonic( menu, "Exact Cylinder", "PatchXactCylinder" );
 	create_menu_item_with_mnemonic( menu, "Cone (9x3)", "PatchCone" );
-	create_menu_item_with_mnemonic( menu, "Exact Cone...", "PatchXactCone" );
+	create_menu_item_with_mnemonic( menu, "Exact Cone", "PatchXactCone" );
 	create_menu_item_with_mnemonic( menu, "Sphere (9x5)", "PatchSphere" );
-	create_menu_item_with_mnemonic( menu, "Exact Sphere...", "PatchXactSphere" );
+	create_menu_item_with_mnemonic( menu, "Exact Sphere", "PatchXactSphere" );
 //	{
 //		QMenu* submenu = menu->addMenu( "More Cylinders" );
 
@@ -818,8 +818,8 @@ void Patch_constructMenu( QMenu* menu ){
 //		create_menu_item_with_mnemonic( submenu, "Clear", "ClearPatchOverlays" );
 //	}
 	menu->addSeparator();
-	create_menu_item_with_mnemonic( menu, "Deform...", "PatchDeform" );
-	create_menu_item_with_mnemonic( menu, "Thicken...", "PatchThicken" );
+	create_menu_item_with_mnemonic( menu, "Deform", "PatchDeform" );
+	create_menu_item_with_mnemonic( menu, "Thicken", "PatchThicken" );
 }
 
 

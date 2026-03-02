@@ -334,6 +334,21 @@ bool TextureBrowser::wads = false;
 static TextureBrowser g_TexBro;
 
 void ( *TextureBrowser_textureSelected )( const char* shader );
+static void ( *s_savedTextureSelected )( const char* shader ) = nullptr;
+
+void TextureBrowser_setTextureSelectedCallback( void (*callback)(const char*) ){
+	if ( callback != nullptr ) {
+		s_savedTextureSelected = TextureBrowser_textureSelected;
+		TextureBrowser_textureSelected = callback;
+	} else if ( s_savedTextureSelected != nullptr ) {
+		TextureBrowser_textureSelected = s_savedTextureSelected;
+		s_savedTextureSelected = nullptr;
+	}
+}
+
+bool TextureBrowser_isTextureSelectedCallbackOverridden(){
+	return s_savedTextureSelected != nullptr;
+}
 
 
 inline const char* TextureBrowser_getCommonShadersName(){
@@ -850,7 +865,7 @@ void SelectTexture( TextureBrowser& textureBrowser, int mx, int my, bool texturi
 		TextureBrowser_SetSelectedShader( textureBrowser, shader->getName() );
 		TextureBrowser_textureSelected( shader->getName() );
 
-		if ( !FindTextureDialog_isOpen() && !texturizeSelection ) {
+		if ( !FindTextureDialog_isOpen() && !TextureBrowser_isTextureSelectedCallbackOverridden() && !texturizeSelection ) {
 			Select_SetShader_Undo( shader->getName() );
 		}
 	}
@@ -1795,7 +1810,7 @@ QWidget* TextureBrowser_constructWindow( QWidget* toplevel ){
 		//view menu button
 		toolbar_append_button( toolbar, "View", "texbro_view.png", PointerCaller<QMenu, void(), +[]( QMenu *menu ){ menu->popup( QCursor::pos() ); }>( menu_view ) );
 
-		toolbar_append_button( toolbar, "Find / Replace...", "texbro_find-replace.png", "FindReplaceTextures" );
+		toolbar_append_button( toolbar, "Find / Replace", "texbro_find-replace.png", "FindReplaceTextures" );
 
 		toolbar_append_button( toolbar, "Flush & Reload Shaders", "texbro_refresh.png", "RefreshShaders" );
 	}

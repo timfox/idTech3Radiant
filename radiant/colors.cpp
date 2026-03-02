@@ -151,23 +151,23 @@ Vector3 ModelBrowserColour_get(){
 
 
 std::array g_ColoursMenu{
-	ChooseColour( makeCallbackF  ( TextureBrowserColour_get )              , makeCallbackF( TextureBrowser_setBackgroundColour )    , "Texture Browser Background..."    , "ColorTexBroBackground" ),
-	ChooseColour( makeCallbackF  ( ModelBrowserColour_get )                , makeCallbackF( ModelBrowser_setBackgroundColour )      , "Model Browser Background..."      , "ColorModBroBackground" ),
-	ChooseColour( ColourGetCaller( g_camwindow_globals.color_cameraback )  , ColourSetCaller( g_camwindow_globals.color_cameraback ), "Camera Background..."             , "ColorCameraBackground" ),
-	ChooseColour( ColourGetCaller( g_xywindow_globals.color_gridback )     , ColourSetCaller( g_xywindow_globals.color_gridback )   , "Grid Background..."               , "ColorGridBackground" ),
-	ChooseColour( ColourGetCaller( g_xywindow_globals.color_gridmajor )    , ColourSetCaller( g_xywindow_globals.color_gridmajor )  , "Grid Major..."                    , "ColorGridMajor" ),
-	ChooseColour( ColourGetCaller( g_xywindow_globals.color_gridminor )    , ColourSetCaller( g_xywindow_globals.color_gridminor )  , "Grid Minor..."                    , "ColorGridMinor" ),
-	ChooseColour( ColourGetCaller( g_xywindow_globals.color_gridtext )     , ColourSetCaller( g_xywindow_globals.color_gridtext )   , "Grid Text..."                     , "ColorGridText" ), // coords and inactive name
-	ChooseColour( ColourGetCaller( g_xywindow_globals.color_gridblock )    , ColourSetCaller( g_xywindow_globals.color_gridblock )  , "Grid _blocksize Blocks..."        , "ColorGridBlocks" ),
-	ChooseColour( ColourGetCaller( g_xywindow_globals.color_brushes )      , makeCallbackF( BrushColour_set )                       , "Grid Worldspawn..."               , "ColorGridWorldspawn" ),
-	ChooseColour( ColourGetCaller( g_xywindow_globals.color_selbrushes )   , makeCallbackF( SelectedBrushColour_set )               , "Grid Selection and Sizing..."     , "ColorGridSelection" ),
-	ChooseColour( ColourGetCaller( g_camwindow_globals.color_selbrushes3d ), makeCallbackF( SelectedBrush3dColour_set )             , "Camera Selection..."              , "ColorCameraSelection" ),
-	ChooseColour( ColourGetCaller( g_xywindow_globals.color_clipper )      , makeCallbackF( ClipperColour_set )                     , "Clipper Split..."                 , "ColorClipperSplit" ),
-	ChooseColour( ColourGetCaller( g_xywindow_globals.color_viewname )     , ColourSetCaller( g_xywindow_globals.color_viewname )   , "Active Grid Name and Outline..."  , "ColorGridActive" ), // also grid stats
-	ChooseColour( ColourGetCaller( g_xywindow_globals.color_camera )       , ColourSetCaller( g_xywindow_globals.color_camera )     , "Camera Icon..."                   , "ColorCameraIcon" ),
-	ChooseColour( Colour4bGetCaller( g_colour_x )                          , Colour4bSetCaller( g_colour_x )                        , "Axis X..."                        , "ColorAxisX" ),
-	ChooseColour( Colour4bGetCaller( g_colour_y )                          , Colour4bSetCaller( g_colour_y )                        , "Axis Y..."                        , "ColorAxisY" ),
-	ChooseColour( Colour4bGetCaller( g_colour_z )                          , Colour4bSetCaller( g_colour_z )                        , "Axis Z..."                        , "ColorAxisZ" ),
+	ChooseColour( makeCallbackF  ( TextureBrowserColour_get )              , makeCallbackF( TextureBrowser_setBackgroundColour )    , "Texture Browser Background"    , "ColorTexBroBackground" ),
+	ChooseColour( makeCallbackF  ( ModelBrowserColour_get )                , makeCallbackF( ModelBrowser_setBackgroundColour )      , "Model Browser Background"      , "ColorModBroBackground" ),
+	ChooseColour( ColourGetCaller( g_camwindow_globals.color_cameraback )  , ColourSetCaller( g_camwindow_globals.color_cameraback ), "Camera Background"             , "ColorCameraBackground" ),
+	ChooseColour( ColourGetCaller( g_xywindow_globals.color_gridback )     , ColourSetCaller( g_xywindow_globals.color_gridback )   , "Grid Background"               , "ColorGridBackground" ),
+	ChooseColour( ColourGetCaller( g_xywindow_globals.color_gridmajor )    , ColourSetCaller( g_xywindow_globals.color_gridmajor )  , "Grid Major"                    , "ColorGridMajor" ),
+	ChooseColour( ColourGetCaller( g_xywindow_globals.color_gridminor )    , ColourSetCaller( g_xywindow_globals.color_gridminor )  , "Grid Minor"                    , "ColorGridMinor" ),
+	ChooseColour( ColourGetCaller( g_xywindow_globals.color_gridtext )     , ColourSetCaller( g_xywindow_globals.color_gridtext )   , "Grid Text"                     , "ColorGridText" ), // coords and inactive name
+	ChooseColour( ColourGetCaller( g_xywindow_globals.color_gridblock )    , ColourSetCaller( g_xywindow_globals.color_gridblock )  , "Grid _blocksize Blocks"        , "ColorGridBlocks" ),
+	ChooseColour( ColourGetCaller( g_xywindow_globals.color_brushes )      , makeCallbackF( BrushColour_set )                       , "Grid Worldspawn"               , "ColorGridWorldspawn" ),
+	ChooseColour( ColourGetCaller( g_xywindow_globals.color_selbrushes )   , makeCallbackF( SelectedBrushColour_set )               , "Grid Selection and Sizing"     , "ColorGridSelection" ),
+	ChooseColour( ColourGetCaller( g_camwindow_globals.color_selbrushes3d ), makeCallbackF( SelectedBrush3dColour_set )             , "Camera Selection"              , "ColorCameraSelection" ),
+	ChooseColour( ColourGetCaller( g_xywindow_globals.color_clipper )      , makeCallbackF( ClipperColour_set )                     , "Clipper Split"                 , "ColorClipperSplit" ),
+	ChooseColour( ColourGetCaller( g_xywindow_globals.color_viewname )     , ColourSetCaller( g_xywindow_globals.color_viewname )   , "Active Grid Name and Outline"  , "ColorGridActive" ), // also grid stats
+	ChooseColour( ColourGetCaller( g_xywindow_globals.color_camera )       , ColourSetCaller( g_xywindow_globals.color_camera )     , "Camera Icon"                   , "ColorCameraIcon" ),
+	ChooseColour( Colour4bGetCaller( g_colour_x )                          , Colour4bSetCaller( g_colour_x )                        , "Axis X"                        , "ColorAxisX" ),
+	ChooseColour( Colour4bGetCaller( g_colour_y )                          , Colour4bSetCaller( g_colour_y )                        , "Axis Y"                        , "ColorAxisY" ),
+	ChooseColour( Colour4bGetCaller( g_colour_z )                          , Colour4bSetCaller( g_colour_z )                        , "Axis Z"                        , "ColorAxisZ" ),
 };
 
 static void load_colors_theme( const char *filepath ){
@@ -228,7 +228,7 @@ void create_colours_menu( QMenu *menu ){
 
 	theme_construct_menu( menu );
 
-	create_menu_item_with_mnemonic( menu, "OpenGL Font...", "OpenGLFont" );
+	create_menu_item_with_mnemonic( menu, "OpenGL Font", "OpenGLFont" );
 
 	menu->addSeparator();
 

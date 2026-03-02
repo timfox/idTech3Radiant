@@ -527,6 +527,9 @@ protected:
 		if( !m_xywnd.Active() ){
 			g_pParentWnd->SetActiveXY( &m_xywnd );
 		}
+		if ( g_bMayaNavigation && !( event->modifiers() & Qt::KeyboardModifier::AltModifier ) ) {
+			return; // Maya: zoom only with Alt+scroll
+		}
 		if ( event->angleDelta().y() > 0 ) {
 			m_xywnd.ZoomInWithMouse( event->position().x() * m_scale, event->position().y() * m_scale );
 		}
@@ -625,7 +628,7 @@ void XYWnd::SetCustomPivotOrigin( int x, int y ) const {
 }
 
 unsigned int MoveCamera_buttons(){
-	return RAD_CONTROL | RAD_MBUTTON;
+	return g_bMayaNavigation ? ( RAD_ALT | RAD_MBUTTON ) : ( RAD_CONTROL | RAD_MBUTTON );
 }
 
 void XYWnd_PositionCamera( XYWnd* xywnd, int x, int y, CamWnd& camwnd ){
@@ -881,7 +884,7 @@ void XYWnd::OnContextMenu(){
 static FreezePointer g_xywnd_freezePointer;
 
 unsigned int Move_buttons(){
-	return RAD_RBUTTON;
+	return g_bMayaNavigation ? ( RAD_ALT | RAD_MBUTTON ) : RAD_RBUTTON;
 }
 
 void XYWnd::Move_Begin(){
