@@ -26,3 +26,4 @@
 void SetWorldspawnColour( const Vector3& colour );
 void Colors_registerCommands();
 void create_colours_menu( class QMenu *menu );
+void Colors_ApplyMayaTheme();

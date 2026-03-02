@@ -2241,6 +2241,26 @@ void GlobalCamera_FocusOnSelected(){
 	Camera_setOrigin( *g_camwnd, Camera_getFocusPos( g_camwnd->getCamera() ) );
 }
 
+void Camera_CycleBackground(){
+	// Maya-style Alt+B: cycle through preset viewport background colors
+	static const Vector3 presets[] = {
+		{ 0.25f, 0.25f, 0.25f },  // dark gray (Maya default)
+		{ 0.1f, 0.1f, 0.1f },    // near black
+		{ 0.4f, 0.4f, 0.4f },    // medium gray
+		{ 0.55f, 0.55f, 0.55f }, // light gray
+	};
+	const Vector3& current = g_camwindow_globals.color_cameraback;
+	constexpr std::size_t n = 4;
+	std::size_t idx = 0;
+	for ( std::size_t i = 0; i < n; ++i )
+		if ( std::abs( presets[i].x() - current.x() ) < 0.02f ) {
+			idx = ( i + 1 ) % n;
+			break;
+		}
+	g_camwindow_globals.color_cameraback = presets[idx];
+	CamWnd_reconstructStatic();
+}
+
 void Camera_ChangeFloorUp(){
 	CamWnd& camwnd = *g_camwnd;
 	camwnd.Cam_ChangeFloor( true );
@@ -2523,6 +2543,7 @@ void CameraSpeed_decrease(){
 void CamWnd_Construct(){
 	GlobalCommands_insert( "CenterView", makeCallbackF( GlobalCamera_ResetAngles ), QKeySequence( "End" ) );
 	GlobalCommands_insert( "CameraFocusOnSelected", makeCallbackF( GlobalCamera_FocusOnSelected ), QKeySequence( "Tab" ) );
+	GlobalCommands_insert( "CameraCycleBackground", makeCallbackF( Camera_CycleBackground ), QKeySequence( "Alt+B" ) );
 
 	GlobalToggles_insert( "ToggleCubicClip", makeCallbackF( Camera_ToggleFarClip ), ToggleItem::AddCallbackCaller( g_getfarclip_item ), QKeySequence( "Ctrl+\\" ) );
 	GlobalCommands_insert( "CubicClipZoomIn", makeCallbackF( Camera_CubeIn ), QKeySequence( "Ctrl+[" ) );

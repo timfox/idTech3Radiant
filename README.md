@@ -44,6 +44,9 @@ The open-source, cross-platform level editor for id Tech based games.
 
 * Viewports zoom to mouse pointer
 * Maya-style navigation (Layout preference): Alt+Right orbit, Alt+Middle pan, Alt+Scroll zoom
+* Alt+B: cycle 3D viewport background (Maya-style)
+* Layout → Apply Maya theme: one-click Maya/Max/Lightwave color scheme
+* Layout preferences: default startup tool (Drag/Translate/Rotate/Scale)
 * 50× faster light radius rendering
 * Light power adjustable by mouse drag
 * Anisotropic texture filtering

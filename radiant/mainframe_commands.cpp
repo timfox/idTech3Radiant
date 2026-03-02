@@ -45,6 +45,7 @@ void MainFrame_registerCommands(){
 	GlobalCommands_insert( "LayoutHammerFourPane", makeCallbackF( Layout_setHammerFourPane ) );
 	GlobalCommands_insert( "LayoutFloating", makeCallbackF( Layout_setFloating ) );
 	GlobalCommands_insert( "LayoutSaveWorkspace", makeCallbackF( Layout_saveWorkspace ) );
+	GlobalCommands_insert( "LayoutApplyMayaTheme", makeCallbackF( Colors_ApplyMayaTheme ) );
 	GlobalCommands_insert( "OpenIdTech3ToolCenter", makeCallbackF( IdTech3Tool_openHubDialog ), QKeySequence( "Ctrl+Alt+T" ) );
 	GlobalCommands_insert( "OpenAudioWorkbench", makeCallbackF( AudioWorkbench_open ), QKeySequence( "Ctrl+Alt+M" ) );
 	GlobalCommands_insert( "OpenCinematicPlayer", makeCallbackF( VideoWorkbench_open ), QKeySequence( "Ctrl+Alt+V" ) );

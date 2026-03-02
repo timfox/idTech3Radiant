@@ -21,6 +21,7 @@
 
 #pragma once
 
+extern int g_defaultStartupToolPref;
 
 void Tools_registerCommands();
 

@@ -28,6 +28,9 @@
 #include "generic/callback.h"
 #include "signal/isignal.h"
 #include "gtkutil/widget.h"
+#include "preferencesystem.h"
+#include "stringio.h"
+#include <algorithm>
 
 
 void ModeChangeNotify(){
@@ -38,6 +41,8 @@ typedef void ( *ToolMode )();
 ToolMode g_currentToolMode = 0;
 bool g_currentToolModeSupportsComponentEditing = false;
 ToolMode g_defaultToolMode = 0;
+
+int g_defaultStartupToolPref = 0; // 0=Drag, 1=Translate, 2=Rotate, 3=Scale (Maya-style: W=Translate default)
 
 
 
@@ -441,6 +446,10 @@ void Tools_registerCommands(){
 
 	GlobalSelectionSystem().addSelectionChangeCallback( FreeCaller<void(const Selectable&), ComponentMode_SelectionChanged>() );
 
-	g_defaultToolMode = DragMode;
+	GlobalPreferenceSystem().registerPreference( "DefaultStartupTool", IntImportStringCaller( g_defaultStartupToolPref ), IntExportStringCaller( g_defaultStartupToolPref ) );
+
+	const ToolMode startupModes[] = { DragMode, TranslateMode, RotateMode, ScaleMode };
+	const int idx = std::clamp( g_defaultStartupToolPref, 0, 3 );
+	g_defaultToolMode = startupModes[idx];
 	g_defaultToolMode();
 }

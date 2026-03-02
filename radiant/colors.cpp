@@ -207,6 +207,10 @@ static void load_colors_theme( const char *filepath ){
 	}
 }
 
+void Colors_ApplyMayaTheme(){
+	load_colors_theme( StringStream( AppPath_get(), "themes/_colors/Maya.Max.Lightwave Emulation.json" ).c_str() );
+}
+
 void create_colours_menu( QMenu *menu ){
 	menu = menu->addMenu( "Theming" );
 

@@ -1402,6 +1402,8 @@ void create_layout_menu( QMenuBar *menubar, MainFrame::EViewStyle style ){
 	create_menu_item_with_mnemonic( menu, "&Floating viewports", "LayoutFloating" );
 	menu->addSeparator();
 	create_menu_item_with_mnemonic( menu, "&Save workspace", "LayoutSaveWorkspace" );
+	menu->addSeparator();
+	create_menu_item_with_mnemonic( menu, "Apply Maya theme", "LayoutApplyMayaTheme" );
 }
 
 void create_file_menu( QMenuBar *menubar ){
@@ -2010,6 +2012,7 @@ void create_view_menu( QMenuBar *menubar, MainFrame::EViewStyle style ){
 		submenu->setTearOffEnabled( g_Layout_enableDetachableMenus.m_value );
 
 		create_menu_item_with_mnemonic( submenu, "Focus on Selected", "CameraFocusOnSelected" );
+		create_menu_item_with_mnemonic( submenu, "Cycle &Background (Alt+B)", "CameraCycleBackground" );
 		create_menu_item_with_mnemonic( submenu, "&Center", "CenterView" );
 		create_menu_item_with_mnemonic( submenu, "&Up Floor", "UpFloor" );
 		create_menu_item_with_mnemonic( submenu, "&Down Floor", "DownFloor" );
@@ -3245,6 +3248,10 @@ void Layout_constructPreferences( PreferencesPage& page ){
 	    BoolExportCaller( g_Layout_expiramentalFeatures.m_latched )
 	);
 	page.appendCheckBox( "", "Industry Standard (Maya-style) navigation", g_bMayaNavigation );
+	{
+		const char* tools[] = { "Drag (Q)", "Translate (W)", "Rotate (R)", "Scale (E)" };
+		page.appendRadio( "Default startup tool", StringArrayRange( tools ), IntImportCaller( g_defaultStartupToolPref ), IntExportCaller( g_defaultStartupToolPref ) );
+	}
 	QCheckBox* trayCheck = page.appendCheckBox( "", "Show system tray / menu bar icon",
 		FreeCaller<void(bool), TrayIconEnabled_import>(),
 		BoolExportCaller( g_trayIconEnabled ) );
