@@ -3241,7 +3241,7 @@ void Layout_constructPreferences( PreferencesPage& page ){
 	);
 	page.appendCheckBox( "", "Industry Standard (Maya-style) navigation", g_bMayaNavigation );
 	QCheckBox* trayCheck = page.appendCheckBox( "", "Show system tray / menu bar icon",
-		FreeCaller<void(bool)>( TrayIconEnabled_import ),
+		FreeCaller<void(bool), TrayIconEnabled_import>(),
 		BoolExportCaller( g_trayIconEnabled ) );
 	QCheckBox* minimizeCheck = page.appendCheckBox( "", "Minimize to tray on close (instead of quit)", g_minimizeToTray );
 	Widget_connectToggleDependency( minimizeCheck, trayCheck );
