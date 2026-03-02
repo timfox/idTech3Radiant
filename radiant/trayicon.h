@@ -23,3 +23,5 @@
 
 void TrayIcon_construct();
 void TrayIcon_destroy();
+void TrayIcon_setVisible( bool visible );
+bool TrayIcon_isAvailable();

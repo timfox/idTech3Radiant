@@ -71,6 +71,21 @@ static void tray_executeCommand( const char* name ){
 	}
 }
 
+bool TrayIcon_isAvailable(){
+	return QSystemTrayIcon::isSystemTrayAvailable();
+}
+
+void TrayIcon_setVisible( bool visible ){
+	if ( g_trayIcon ) {
+		if ( visible ) {
+			g_trayIcon->show();
+		}
+		else {
+			g_trayIcon->hide();
+		}
+	}
+}
+
 void TrayIcon_construct(){
 	if ( !QSystemTrayIcon::isSystemTrayAvailable() ) {
 		return;
@@ -122,7 +137,9 @@ void TrayIcon_construct(){
 		}
 	} );
 
-	g_trayIcon->show();
+	if ( g_trayIconEnabled ) {
+		g_trayIcon->show();
+	}
 }
 
 void TrayIcon_destroy(){

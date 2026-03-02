@@ -38,10 +38,12 @@ The open-source, cross-platform level editor for id Tech based games.
 * Texture painting by drag
 * Seamless brush face↔face, patch↔face texture paste
 * Texture browser: alpha transparency, search in directories and tags, search shown textures
+* Surface Inspector: texture browse button with preview
 
 #### View & Display
 
 * Viewports zoom to mouse pointer
+* Maya-style navigation (Layout preference): Alt+Right orbit, Alt+Middle pan, Alt+Scroll zoom
 * 50× faster light radius rendering
 * Light power adjustable by mouse drag
 * Anisotropic texture filtering
@@ -51,6 +53,9 @@ The open-source, cross-platform level editor for id Tech based games.
 
 #### Workflow
 
+* Layout menu: switch window layouts (Regular, 4-pane, Floating), save/restore workspace
+* Save status indicator: progress bar and "Saved" at bottom-left with last-save tooltip (Maya-style)
+* System tray / Mac menu bar: quick access (Show/Hide, Save, Build, New Map, Open Map, Preferences, Quit); optional minimize-to-tray on close
 * Autocaulk
 * Model browser
 * Patch thicken; patch prefabs aligned to active projection
@@ -60,10 +65,12 @@ The open-source, cross-platform level editor for id Tech based games.
 * Working region compilations (compile regioned part only)
 * Map info dialog: patches, entities, group entities counts
 * Build→Customize: list available build variables
+* Console: build progress bar, elapsed time, Find Error/Warning buttons
 * Customizable keyboard shortcuts and GUI themes/fonts
 * Numerous mouse shortcuts (Help → General → Mouse Shortcuts)
 * MeshTex plugin
 * Modelling maps in Blender/Maya: export brush template to OBJ, model in 3D app, use misc_model (see docs/Modelling_maps_in_Blender.txt)
+* Video player: looks for movies in gamepack `content/movies` folder
 
 #### Advanced Entity Systems
 

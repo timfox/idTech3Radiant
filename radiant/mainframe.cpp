@@ -460,6 +460,8 @@ void GamePacksPath_set( const char* path ){
 CopiedString g_strGameToolsPath;           ///< this is set by g_GamesDialog
 
 bool g_bMayaNavigation = false;
+bool g_trayIconEnabled = true;
+bool g_minimizeToTray = false;
 
 const char* GameToolsPath_get(){
 	return g_strGameToolsPath.c_str();
@@ -2766,7 +2768,12 @@ class RadiantQMainWindow : public QMainWindow
 protected:
 	void closeEvent( QCloseEvent *event ) override {
 		event->ignore();
-		Exit();
+		if ( g_minimizeToTray && TrayIcon_isAvailable() && g_trayIconEnabled ) {
+			hide();
+		}
+		else {
+			Exit();
+		}
 	}
 	bool event( QEvent *event ) override {
 		if( event->type() == QEvent::ShortcutOverride && !QGuiApplication::mouseButtons().testFlag( Qt::MouseButton::NoButton ) ){
@@ -3202,6 +3209,11 @@ void GlobalGL_sharedContextDestroyed(){
 }
 
 
+void TrayIconEnabled_import( bool value ){
+	g_trayIconEnabled = value;
+	TrayIcon_setVisible( value );
+}
+
 void Layout_constructPreferences( PreferencesPage& page ){
 	{
 		const char* layouts[] = { "window1.png", "window2.png", "window3.png", "window4.png" };
@@ -3228,6 +3240,11 @@ void Layout_constructPreferences( PreferencesPage& page ){
 	    BoolExportCaller( g_Layout_expiramentalFeatures.m_latched )
 	);
 	page.appendCheckBox( "", "Industry Standard (Maya-style) navigation", g_bMayaNavigation );
+	QCheckBox* trayCheck = page.appendCheckBox( "", "Show system tray / menu bar icon",
+		FreeCaller<void(bool)>( TrayIconEnabled_import ),
+		BoolExportCaller( g_trayIconEnabled ) );
+	QCheckBox* minimizeCheck = page.appendCheckBox( "", "Minimize to tray on close (instead of quit)", g_minimizeToTray );
+	Widget_connectToggleDependency( minimizeCheck, trayCheck );
 }
 
 void Layout_constructPage( PreferenceGroup& group ){
@@ -3257,6 +3274,8 @@ void MainFrame_Construct(){
 	GlobalPreferenceSystem().registerPreference( "ExperimentalFeatures", makeBoolStringImportCallback( LatchedAssignCaller( g_Layout_expiramentalFeatures ) ), BoolExportStringCaller( g_Layout_expiramentalFeatures.m_latched ) );
 	GlobalPreferenceSystem().registerPreference( "ExpiramentalFeatures", makeBoolStringImportCallback( LatchedAssignCaller( g_Layout_expiramentalFeatures ) ), BoolExportStringCaller( g_Layout_expiramentalFeatures.m_latched ) );
 	GlobalPreferenceSystem().registerPreference( "MayaNavigation", BoolImportStringCaller( g_bMayaNavigation ), BoolExportStringCaller( g_bMayaNavigation ) );
+	GlobalPreferenceSystem().registerPreference( "TrayIconEnabled", BoolImportStringCaller( g_trayIconEnabled ), BoolExportStringCaller( g_trayIconEnabled ) );
+	GlobalPreferenceSystem().registerPreference( "MinimizeToTray", BoolImportStringCaller( g_minimizeToTray ), BoolExportStringCaller( g_minimizeToTray ) );
 	GlobalPreferenceSystem().registerPreference( "ToolbarHiddenButtons", CopiedStringImportStringCaller( g_toolbarHiddenButtons ), CopiedStringExportStringCaller( g_toolbarHiddenButtons ) );
 	GlobalPreferenceSystem().registerPreference( "OpenGLFont", CopiedStringImportStringCaller( g_OpenGLFont ), CopiedStringExportStringCaller( g_OpenGLFont ) );
 	GlobalPreferenceSystem().registerPreference( "OpenGLFontSize", IntImportStringCaller( g_OpenGLFontSize ), IntExportStringCaller( g_OpenGLFontSize ) );

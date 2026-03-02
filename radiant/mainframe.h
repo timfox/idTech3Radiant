@@ -73,6 +73,8 @@ public:
 
 	QMainWindow* m_window{};
 
+	friend void Layout_saveWorkspace();
+
 private:
 
 	void Create();
@@ -217,6 +219,8 @@ extern CopiedString g_strGamePacksPath;
 const char* GamePacksPath_get();
 
 extern bool g_bMayaNavigation;
+extern bool g_trayIconEnabled;
+extern bool g_minimizeToTray;
 void GamePacksPath_setDefault();
 void GamePacksPath_set( const char* path );
 
