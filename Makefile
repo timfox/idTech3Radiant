@@ -1007,6 +1007,7 @@ $(INSTALLDIR)/radiant.$(EXE): \
 	radiant/surfacedialog.o \
 	radiant/texmanip.o \
 	radiant/textures.o \
+	radiant/trayicon.o \
 	radiant/texwindow.o \
 	radiant/theme.o \
 	radiant/tools.o \

@@ -145,7 +145,6 @@ QWidget* Console_constructWindow(){
 		progressHbox->addWidget( findWarningBtn );
 
 		progressHbox->addWidget( g_buildProgressBar, 1 );
-		progressFrame->addLayout( progressHbox );
 		vbox->addWidget( progressFrame );
 
 		g_consoleContainer = container;
@@ -271,12 +270,12 @@ std::size_t Sys_Print( int level, const char* buf, std::size_t length ){
 			{
 			case SYS_WRN:
 			case SYS_ERR:
-				write( 2, buf, length );
+				(void)write( 2, buf, length );
 				break;
 			case SYS_STD:
 			case SYS_VRB:
 			default:
-				write( 1, buf, length );
+				(void)write( 1, buf, length );
 				break;
 			}
 		}

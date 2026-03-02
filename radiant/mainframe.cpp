@@ -145,6 +145,7 @@
 #include "selection.h"
 #include "server.h"
 #include "surfacedialog.h"
+#include "trayicon.h"
 #include "textures.h"
 #include "texwindow.h"
 #include "modelwindow.h"
@@ -3045,6 +3046,8 @@ void MainFrame::Create(){
 	toolbar_importState( g_toolbarHiddenButtons.c_str() );
 	RestoreGuiState();
 
+	TrayIcon_construct();
+
 	//GlobalShortcuts_reportUnregistered();
 }
 
@@ -3067,6 +3070,8 @@ void MainFrame::RestoreGuiState(){
 }
 
 void MainFrame::Shutdown(){
+	TrayIcon_destroy();
+
 	s_qe_every_second_timer.disable();
 
 	EntityList_destroyWindow();
