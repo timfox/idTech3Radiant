@@ -435,6 +435,19 @@ struct image_t
 		height( other.height ),
 		pixels( std::exchange( other.pixels, nullptr ) )
 	{}
+	image_t( const image_t& ) = delete;
+	image_t& operator=( const image_t& ) = delete;
+	image_t& operator=( image_t&& other ) noexcept {
+		if ( this != &other ) {
+			free( pixels );
+			name = std::move( other.name );
+			filename = std::move( other.filename );
+			width = other.width;
+			height = other.height;
+			pixels = std::exchange( other.pixels, nullptr );
+		}
+		return *this;
+	}
 	~image_t(){
 		free( pixels );
 	}

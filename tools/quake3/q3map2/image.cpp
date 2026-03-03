@@ -430,7 +430,7 @@ static void EquirectangularToCubeFace( const byte *equirectPixels, int eqWidth, 
 					const int y = dy ? y1 : y0;
 					const float w = ( dx ? fx : ( 1 - fx ) ) * ( dy ? fy : ( 1 - fy ) );
 					const byte *p = equirectPixels + 4 * ( y * eqWidth + x );
-					color += w * Vector3( p[0], p[1], p[2] );
+					color += Vector3( p[0], p[1], p[2] ) * w;
 				}
 			}
 			byte *out = facePixels + 4 * ( v * faceSize + u );
@@ -486,7 +486,8 @@ const image_t *const *ImageLoadSkyboxFaces( const char *basePath ){
 
 		if ( canWrite ) {
 			const CopiedString outPath( StringStream( writeDir, faceName, ".tga" ) );
-			Q_mkdir( PathFilenameless( outPath.c_str() ) );
+			const CopiedString outDir( PathFilenameless( outPath.c_str() ) );
+			Q_mkdir( outDir.c_str() );
 			WriteTGA( outPath.c_str(), pixels, SKYBOX_FACE_SIZE, SKYBOX_FACE_SIZE );
 			Sys_FPrintf( SYS_VRB, "Wrote %s\n", outPath.c_str() );
 		}

@@ -118,8 +118,11 @@ void Keys_releaseAll( PressedKeys::Keys& keys, Qt::KeyboardModifiers state ){
 
 bool PressedKeys_key_press( const QKeyEvent* event, PressedKeys& pressedKeys ){
 	//globalOutputStream() << "pressed: " << event->key() << '\n';
-	// Ignore LockModifier (capslock) so arrow keys work for camera navigation when capslock is on
-	const auto modifiers = event->modifiers() & ~Qt::KeyboardModifier::LockModifier;
+	auto modifiers = event->modifiers();
+#if QT_VERSION >= QT_VERSION_CHECK( 6, 0, 0 )
+	// Ignore LockModifier (capslock) so arrow keys work for camera navigation when capslock is on.
+	modifiers &= ~Qt::KeyboardModifier::LockModifier;
+#endif
 	return modifiers == 0 && Keys_press( pressedKeys.keys, qt_keyvalue_is_known( event->key() )? event->key() : event->nativeVirtualKey() );
 }
 
@@ -198,4 +201,3 @@ void keyup_accelerators_remove( QKeySequence accelerator ){
 		globalErrorStream() << "keyup_accelerators_remove: not found: " << Quoted( accelerator ) << '\n';
 	}
 }
-
