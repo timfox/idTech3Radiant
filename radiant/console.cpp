@@ -23,6 +23,7 @@
 
 #include <chrono>
 #include <ctime>
+#include <utility>
 
 #include "gtkutil/accelerator.h"
 #include "gtkutil/messagebox.h"
@@ -44,8 +45,11 @@
 #include <QPushButton>
 #include <QTimer>
 #include <QRegularExpression>
+#include <QSocketNotifier>
 
 #ifndef WIN32
+#include <cerrno>
+#include <fcntl.h>
 #include <unistd.h> // write()
 #endif
 
@@ -98,6 +102,44 @@ QProgressBar* g_buildProgressBar = nullptr;
 QLabel* g_buildProgressLabel = nullptr;
 QTimer* g_buildElapsedTimer = nullptr;
 std::chrono::steady_clock::time_point g_buildStartTime;
+
+#ifndef WIN32
+int g_consoleStdoutReadFd = -1;
+int g_consoleStderrReadFd = -1;
+int g_consoleStdoutTerminalFd = -1;
+int g_consoleStderrTerminalFd = -1;
+QSocketNotifier* g_consoleStdoutNotifier = nullptr;
+QSocketNotifier* g_consoleStderrNotifier = nullptr;
+bool g_consoleStdStreamsCaptured = false;
+
+void Console_closeFd( int& fd ){
+	if ( fd != -1 ) {
+		close( fd );
+		fd = -1;
+	}
+}
+
+bool Console_setNonBlocking( int fd ){
+	const int flags = fcntl( fd, F_GETFL, 0 );
+	if ( flags == -1 ) {
+		return false;
+	}
+	return fcntl( fd, F_SETFL, flags | O_NONBLOCK ) != -1;
+}
+
+int Console_terminalFd( int level ){
+	switch ( level )
+	{
+	case SYS_WRN:
+	case SYS_ERR:
+		return g_consoleStderrTerminalFd != -1 ? g_consoleStderrTerminalFd : STDERR_FILENO;
+	case SYS_STD:
+	case SYS_VRB:
+	default:
+		return g_consoleStdoutTerminalFd != -1 ? g_consoleStdoutTerminalFd : STDOUT_FILENO;
+	}
+}
+#endif
 }
 
 class QPlainTextEdit_console : public QPlainTextEdit
@@ -228,6 +270,131 @@ void Console_findNext( const char* pattern ){
 	}
 }
 
+void Console_captureStdStreams(){
+#ifndef WIN32
+	if ( g_consoleStdStreamsCaptured ) {
+		return;
+	}
+
+	int stdoutPipe[2] = { -1, -1 };
+	int stderrPipe[2] = { -1, -1 };
+	if ( pipe( stdoutPipe ) != 0 || pipe( stderrPipe ) != 0 ) {
+		if ( stdoutPipe[0] != -1 ) close( stdoutPipe[0] );
+		if ( stdoutPipe[1] != -1 ) close( stdoutPipe[1] );
+		if ( stderrPipe[0] != -1 ) close( stderrPipe[0] );
+		if ( stderrPipe[1] != -1 ) close( stderrPipe[1] );
+		return;
+	}
+
+	g_consoleStdoutTerminalFd = dup( STDOUT_FILENO );
+	g_consoleStderrTerminalFd = dup( STDERR_FILENO );
+	if ( g_consoleStdoutTerminalFd == -1 || g_consoleStderrTerminalFd == -1 ) {
+		Console_closeFd( g_consoleStdoutTerminalFd );
+		Console_closeFd( g_consoleStderrTerminalFd );
+		close( stdoutPipe[0] );
+		close( stdoutPipe[1] );
+		close( stderrPipe[0] );
+		close( stderrPipe[1] );
+		return;
+	}
+
+	if ( dup2( stdoutPipe[1], STDOUT_FILENO ) == -1 || dup2( stderrPipe[1], STDERR_FILENO ) == -1 ) {
+		dup2( g_consoleStdoutTerminalFd, STDOUT_FILENO );
+		dup2( g_consoleStderrTerminalFd, STDERR_FILENO );
+		Console_closeFd( g_consoleStdoutTerminalFd );
+		Console_closeFd( g_consoleStderrTerminalFd );
+		close( stdoutPipe[0] );
+		close( stdoutPipe[1] );
+		close( stderrPipe[0] );
+		close( stderrPipe[1] );
+		return;
+	}
+
+	close( stdoutPipe[1] );
+	close( stderrPipe[1] );
+	g_consoleStdoutReadFd = stdoutPipe[0];
+	g_consoleStderrReadFd = stderrPipe[0];
+	Console_setNonBlocking( g_consoleStdoutReadFd );
+	Console_setNonBlocking( g_consoleStderrReadFd );
+
+	setvbuf( stdout, nullptr, _IOLBF, 0 );
+	setvbuf( stderr, nullptr, _IONBF, 0 );
+
+	g_consoleStdoutNotifier = new QSocketNotifier( g_consoleStdoutReadFd, QSocketNotifier::Read, qApp );
+	QObject::connect( g_consoleStdoutNotifier, &QSocketNotifier::activated, []( int ){
+		if ( g_consoleStdoutReadFd == -1 ) {
+			return;
+		}
+		char buffer[4096];
+		for (;; )
+		{
+			const auto readBytes = read( g_consoleStdoutReadFd, buffer, sizeof( buffer ) );
+			if ( readBytes > 0 ) {
+				Sys_Print( SYS_STD, buffer, static_cast<std::size_t>( readBytes ) );
+			}
+			else if ( readBytes == 0 || ( readBytes == -1 && ( errno == EAGAIN || errno == EWOULDBLOCK ) ) ) {
+				break;
+			}
+			else{
+				break;
+			}
+		}
+	} );
+
+	g_consoleStderrNotifier = new QSocketNotifier( g_consoleStderrReadFd, QSocketNotifier::Read, qApp );
+	QObject::connect( g_consoleStderrNotifier, &QSocketNotifier::activated, []( int ){
+		if ( g_consoleStderrReadFd == -1 ) {
+			return;
+		}
+		char buffer[4096];
+		for (;; )
+		{
+			const auto readBytes = read( g_consoleStderrReadFd, buffer, sizeof( buffer ) );
+			if ( readBytes > 0 ) {
+				Sys_Print( SYS_ERR, buffer, static_cast<std::size_t>( readBytes ) );
+			}
+			else if ( readBytes == 0 || ( readBytes == -1 && ( errno == EAGAIN || errno == EWOULDBLOCK ) ) ) {
+				break;
+			}
+			else{
+				break;
+			}
+		}
+	} );
+
+	g_consoleStdStreamsCaptured = true;
+#endif
+}
+
+void Console_releaseStdStreams(){
+#ifndef WIN32
+	if ( g_consoleStdoutNotifier != nullptr ) {
+		g_consoleStdoutNotifier->setEnabled( false );
+		delete std::exchange( g_consoleStdoutNotifier, nullptr );
+	}
+	if ( g_consoleStderrNotifier != nullptr ) {
+		g_consoleStderrNotifier->setEnabled( false );
+		delete std::exchange( g_consoleStderrNotifier, nullptr );
+	}
+
+	fflush( stdout );
+	fflush( stderr );
+
+	if ( g_consoleStdoutTerminalFd != -1 ) {
+		dup2( g_consoleStdoutTerminalFd, STDOUT_FILENO );
+	}
+	if ( g_consoleStderrTerminalFd != -1 ) {
+		dup2( g_consoleStderrTerminalFd, STDERR_FILENO );
+	}
+
+	Console_closeFd( g_consoleStdoutReadFd );
+	Console_closeFd( g_consoleStderrReadFd );
+	Console_closeFd( g_consoleStdoutTerminalFd );
+	Console_closeFd( g_consoleStderrTerminalFd );
+	g_consoleStdStreamsCaptured = false;
+#endif
+}
+
 //#pragma GCC push_options
 //#pragma GCC optimize ("O0")
 
@@ -266,18 +433,7 @@ std::size_t Sys_Print( int level, const char* buf, std::size_t length ){
 	if ( level != SYS_NOCON ) {
 #ifndef WIN32
 		{  // on linux/macos log also to terminal
-			switch ( level )
-			{
-			case SYS_WRN:
-			case SYS_ERR:
-				(void)write( 2, buf, length );
-				break;
-			case SYS_STD:
-			case SYS_VRB:
-			default:
-				(void)write( 1, buf, length );
-				break;
-			}
+			(void)write( Console_terminalFd( level ), buf, length );
 		}
 #endif
 

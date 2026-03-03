@@ -1114,12 +1114,13 @@ $(INSTALLDIR)/modules/entity.$(DLL): \
 	plugins/entity/skincache.o \
 	plugins/entity/targetable.o \
 
-$(INSTALLDIR)/modules/image.$(DLL): LIBS_EXTRA := $(LIBS_JPEG)
-$(INSTALLDIR)/modules/image.$(DLL): CPPFLAGS_EXTRA := $(CPPFLAGS_JPEG) -Ilibs -Iinclude
+$(INSTALLDIR)/modules/image.$(DLL): LIBS_EXTRA := $(LIBS_JPEG) $(LIBS_ZLIB)
+$(INSTALLDIR)/modules/image.$(DLL): CPPFLAGS_EXTRA := $(CPPFLAGS_JPEG) $(CPPFLAGS_ZLIB) -Ilibs -Iinclude
 $(INSTALLDIR)/modules/image.$(DLL): \
 	plugins/image/bmp.o \
 	plugins/image/crn.o \
 	plugins/image/dds.o \
+	plugins/image/hdr.o \
 	plugins/image/image.o \
 	plugins/image/jpeg.o \
 	plugins/image/ktx.o \

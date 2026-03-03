@@ -415,6 +415,7 @@ int main( int argc, char* argv[] ){
 	QApplication qapplication( argc, argv );
 	setlocale( LC_NUMERIC, "C" );
 	qInstallMessageHandler( qute_messageHandler );
+	Console_captureStdStreams();
 	QCoreApplication::setOrganizationName( "QtRadiant" );
 	QCoreApplication::setApplicationName( "NetRadiant-Custom" );
 	QCoreApplication::setApplicationVersion( QT_VERSION_STR );
@@ -484,6 +485,7 @@ int main( int argc, char* argv[] ){
 
 	Radiant_Shutdown();
 
+	Console_releaseStdStreams();
 	qInstallMessageHandler( nullptr );
 	// close the log file if any
 	Sys_LogFile( false );

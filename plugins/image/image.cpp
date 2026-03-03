@@ -28,6 +28,7 @@
 #include "tga.h"
 #include "bmp.h"
 #include "pcx.h"
+#include "hdr.h"
 #include "dds.h"
 #include "ktx.h"
 #include "crn.h"
@@ -78,6 +79,46 @@ public:
 typedef SingletonModule<ImageJPGAPI, ImageDependencies> ImageJPGModule;
 
 ImageJPGModule g_ImageJPGModule;
+
+
+class ImageHDRAPI
+{
+	_QERPlugImageTable m_imagehdr;
+public:
+	typedef _QERPlugImageTable Type;
+	STRING_CONSTANT( Name, "hdr" );
+
+	ImageHDRAPI(){
+		m_imagehdr.loadImage = LoadHDR;
+	}
+	_QERPlugImageTable* getTable(){
+		return &m_imagehdr;
+	}
+};
+
+typedef SingletonModule<ImageHDRAPI, ImageDependencies> ImageHDRModule;
+
+ImageHDRModule g_ImageHDRModule;
+
+
+class ImageEXRAPI
+{
+	_QERPlugImageTable m_imageexr;
+public:
+	typedef _QERPlugImageTable Type;
+	STRING_CONSTANT( Name, "exr" );
+
+	ImageEXRAPI(){
+		m_imageexr.loadImage = LoadEXR;
+	}
+	_QERPlugImageTable* getTable(){
+		return &m_imageexr;
+	}
+};
+
+typedef SingletonModule<ImageEXRAPI, ImageDependencies> ImageEXRModule;
+
+ImageEXRModule g_ImageEXRModule;
 
 
 class ImageBMPAPI
@@ -205,6 +246,8 @@ extern "C" void RADIANT_DLLEXPORT Radiant_RegisterModules( ModuleServer& server 
 
 	g_ImageTGAModule.selfRegister();
 	g_ImageJPGModule.selfRegister();
+	g_ImageHDRModule.selfRegister();
+	g_ImageEXRModule.selfRegister();
 	g_ImageBMPModule.selfRegister();
 	g_ImagePCXModule.selfRegister();
 	g_ImageDDSModule.selfRegister();

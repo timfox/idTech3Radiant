@@ -245,6 +245,7 @@ inline void XYWnd_Update( XYWnd& xywnd ){
 }
 
 void XY_Centralize();
+void XY_Focus();
 
 struct xywindow_globals_t
 {

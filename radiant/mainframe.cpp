@@ -3271,7 +3271,7 @@ void Layout_registerPreferencesPage(){
 
 
 void FocusAllViews(){
-	XY_Centralize(); //using centralizing here, not focusing function
+	XY_Focus();
 	GlobalCamera_FocusOnSelected();
 }
 
