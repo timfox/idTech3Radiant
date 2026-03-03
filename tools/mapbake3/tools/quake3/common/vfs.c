@@ -136,7 +136,7 @@ static void vfsInitPakFile( const char *filename ){
 		vfsFixDOSName( filename_inzip );
 		g_strdown( filename_inzip );
 
-		file->name = strdup( filename_inzip );
+		file->name = g_strdup( filename_inzip );
 		file->size = file_info.uncompressed_size;
 		file->zipfile = uf;
 		memcpy( &file->zipinfo, uf, sizeof( unz_s ) );

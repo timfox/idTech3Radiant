@@ -36,12 +36,17 @@
 #if defined ( __linux__ ) || defined ( __APPLE__ )
 #include <dirent.h>
 #include <unistd.h>
+#include <limits.h>
 #else
 #include <wtypes.h>
 #include <io.h>
 #define R_OK 04
 #define S_ISDIR( mode ) ( mode & _S_IFDIR )
 #define PATH_MAX 260
+#endif
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
 #endif
 #include <glib.h>
 

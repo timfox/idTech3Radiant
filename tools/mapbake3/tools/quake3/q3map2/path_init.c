@@ -36,6 +36,10 @@
 /* dependencies */
 #include "q3map2.h"
 
+#ifdef Q_UNIX
+char *realpath( const char *path, char *resolved_path );
+#endif
+
 
 
 /* path support */
@@ -70,7 +74,7 @@ char *LokiGetHomeDir( void ){
 	return NULL;
 	#else
 	static char	buf[ 4096 ];
-	struct passwd   pw, *pwp;
+	struct passwd   *pwp;
 	char            *home;
 	static char homeBuf[MAX_OS_PATH];
 
@@ -81,8 +85,10 @@ char *LokiGetHomeDir( void ){
 	/* look up home dir in password database */
 	if(!home)
 	{
-		if ( getpwuid_r( getuid(), &pw, buf, sizeof( buf ), &pwp ) == 0 ) {
-			return pw.pw_dir;
+		(void) buf;
+		pwp = getpwuid( getuid() );
+		if ( pwp != NULL ) {
+			return pwp->pw_dir;
 		}
 	}
 

@@ -35,6 +35,7 @@
 
 /* dependencies */
 #include "q3map2.h"
+#include "float_image_io.h"
 
 
 
@@ -105,6 +106,111 @@ void WriteTGA24( char *filename, byte *data, int width, int height, qboolean fli
 	free( buffer );
 }
 
+static const char *GetLightmapFileExtension( void ){
+	if ( lightmapFileFormat == LIGHTMAP_FILEFORMAT_HDR ) {
+		return "hdr";
+	}
+	if ( lightmapFileFormat == LIGHTMAP_FILEFORMAT_EXR ) {
+		return "exr";
+	}
+	return "tga";
+}
+
+static qboolean ParseLightmapFileFormat( const char *value ){
+	if ( value == NULL || value[ 0 ] == '\0' ) {
+		return qfalse;
+	}
+
+	if ( !Q_stricmp( value, "tga" ) ) {
+		lightmapFileFormat = LIGHTMAP_FILEFORMAT_TGA;
+		return qtrue;
+	}
+	if ( !Q_stricmp( value, "hdr" ) ) {
+		lightmapFileFormat = LIGHTMAP_FILEFORMAT_HDR;
+		return qtrue;
+	}
+	if ( !Q_stricmp( value, "exr" ) ) {
+		lightmapFileFormat = LIGHTMAP_FILEFORMAT_EXR;
+		return qtrue;
+	}
+
+	return qfalse;
+}
+
+static void BuildIndexedLightmapPath( char *out, size_t outSize, const char *dirname, const char *prefix, int index ){
+	snprintf( out, outSize, "%s/%s_%04d.%s", dirname, prefix, index, GetLightmapFileExtension() );
+}
+
+static void BuildExternalLightmapPath( char *out, size_t outSize, const char *dirname, int index ){
+	BuildIndexedLightmapPath( out, outSize, dirname, "lm", index );
+}
+
+static void BuildExternalLightmapShaderPath( char *out, size_t outSize, const char *mapName, int index ){
+	snprintf( out, outSize, "maps/%s/lm_%04d.%s", mapName, index, GetLightmapFileExtension() );
+}
+
+static qboolean WriteLightmapFile( const char *filename, byte *data, int width, int height, qboolean flip ){
+	if ( lightmapFileFormat == LIGHTMAP_FILEFORMAT_HDR ) {
+		return MapBake3_WriteRGB8AsHDR32( filename, data, width, height, flip );
+	}
+	if ( lightmapFileFormat == LIGHTMAP_FILEFORMAT_EXR ) {
+		return MapBake3_WriteRGB8AsEXR32( filename, data, width, height, flip );
+	}
+
+	WriteTGA24( (char*) filename, data, width, height, flip );
+	return qtrue;
+}
+
+static qboolean LoadLightmapFile( const char *filename, byte **pixels, int *width, int *height ){
+	int len;
+	byte *buffer = NULL;
+	byte *rgba = NULL;
+	int i;
+
+	*pixels = NULL;
+	*width = 0;
+	*height = 0;
+
+	len = vfsLoadFile( filename, (void*) &buffer, -1 );
+	if ( len < 0 ) {
+		return qfalse;
+	}
+
+	if ( lightmapFileFormat == LIGHTMAP_FILEFORMAT_HDR ) {
+		if ( !MapBake3_LoadHDRBufferToRGB8( buffer, len, pixels, width, height ) ) {
+			free( buffer );
+			return qfalse;
+		}
+		free( buffer );
+		return qtrue;
+	}
+
+	if ( lightmapFileFormat == LIGHTMAP_FILEFORMAT_EXR ) {
+		if ( !MapBake3_LoadEXRBufferToRGB8( buffer, len, pixels, width, height ) ) {
+			free( buffer );
+			return qfalse;
+		}
+		free( buffer );
+		return qtrue;
+	}
+
+	LoadTGABuffer( buffer, buffer + len, &rgba, width, height );
+	free( buffer );
+	if ( rgba == NULL || *width <= 0 || *height <= 0 ) {
+		return qfalse;
+	}
+
+	*pixels = safe_malloc( ( *width ) * ( *height ) * 3 );
+	for ( i = 0; i < ( *width ) * ( *height ); ++i )
+	{
+		( *pixels )[ i * 3 + 0 ] = rgba[ i * 4 + 0 ];
+		( *pixels )[ i * 3 + 1 ] = rgba[ i * 4 + 1 ];
+		( *pixels )[ i * 3 + 2 ] = rgba[ i * 4 + 2 ];
+	}
+	free( rgba );
+	return qtrue;
+}
+
 
 
 /*
@@ -137,10 +243,12 @@ void ExportLightmaps( void ){
 	/* iterate through the lightmaps */
 	for ( i = 0, lightmap = bspLightBytes; lightmap < ( bspLightBytes + numBSPLightBytes ); i++, lightmap += ( game->lightmapSize * game->lightmapSize * 3 ) )
 	{
-		/* write a tga image out */
-		sprintf( filename, "%s/lightmap_%04d.tga", dirname, i );
+		/* write an image out */
+		BuildIndexedLightmapPath( filename, sizeof( filename ), dirname, "lightmap", i );
 		Sys_Printf( "Writing %s\n", filename );
-		WriteTGA24( filename, lightmap, game->lightmapSize, game->lightmapSize, qfalse );
+		if ( !WriteLightmapFile( filename, lightmap, game->lightmapSize, game->lightmapSize, qfalse ) ) {
+			Sys_Printf( "WARNING: Failed writing lightmap %s\n", filename );
+		}
 	}
 }
 
@@ -152,10 +260,28 @@ void ExportLightmaps( void ){
  */
 
 int ExportLightmapsMain( int argc, char **argv ){
+	int i;
+
 	/* arg checking */
 	if ( argc < 1 ) {
-		Sys_Printf( "Usage: q3map -export [-v] <mapname>\n" );
+		Sys_Printf( "Usage: mapbake3 -export [-v] [-lmformat tga|hdr|exr|-hdr32|-exr32] <mapname>\n" );
 		return 0;
+	}
+
+	for ( i = 0; i < argc - 1; ++i )
+	{
+		if ( !strcmp( argv[ i ], "-hdr32" ) ) {
+			lightmapFileFormat = LIGHTMAP_FILEFORMAT_HDR;
+		}
+		else if ( !strcmp( argv[ i ], "-exr32" ) ) {
+			lightmapFileFormat = LIGHTMAP_FILEFORMAT_EXR;
+		}
+		else if ( !strcmp( argv[ i ], "-lmformat" ) || !strcmp( argv[ i ], "-lightmapformat" ) ) {
+			if ( i + 1 >= argc - 1 || !ParseLightmapFileFormat( argv[ i + 1 ] ) ) {
+				Error( "Invalid lightmap format, expected one of: tga hdr exr" );
+			}
+			++i;
+		}
 	}
 
 	/* do some path mangling */
@@ -182,15 +308,31 @@ int ExportLightmapsMain( int argc, char **argv ){
  */
 
 int ImportLightmapsMain( int argc, char **argv ){
-	int i, x, y, len, width, height;
+	int i, x, y, width, height;
 	char dirname[ 1024 ], filename[ 1024 ];
-	byte        *lightmap, *buffer, *pixels, *in, *out;
+	byte        *lightmap, *pixels, *in, *out;
 
 
 	/* arg checking */
 	if ( argc < 1 ) {
-		Sys_Printf( "Usage: q3map -import [-v] <mapname>\n" );
+		Sys_Printf( "Usage: mapbake3 -import [-v] [-lmformat tga|hdr|exr|-hdr32|-exr32] <mapname>\n" );
 		return 0;
+	}
+
+	for ( i = 0; i < argc - 1; ++i )
+	{
+		if ( !strcmp( argv[ i ], "-hdr32" ) ) {
+			lightmapFileFormat = LIGHTMAP_FILEFORMAT_HDR;
+		}
+		else if ( !strcmp( argv[ i ], "-exr32" ) ) {
+			lightmapFileFormat = LIGHTMAP_FILEFORMAT_EXR;
+		}
+		else if ( !strcmp( argv[ i ], "-lmformat" ) || !strcmp( argv[ i ], "-lightmapformat" ) ) {
+			if ( i + 1 >= argc - 1 || !ParseLightmapFileFormat( argv[ i + 1 ] ) ) {
+				Error( "Invalid lightmap format, expected one of: tga hdr exr" );
+			}
+			++i;
+		}
 	}
 
 	/* do some path mangling */
@@ -220,24 +362,31 @@ int ImportLightmapsMain( int argc, char **argv ){
 	/* iterate through the lightmaps */
 	for ( i = 0, lightmap = bspLightBytes; lightmap < ( bspLightBytes + numBSPLightBytes ); i++, lightmap += ( game->lightmapSize * game->lightmapSize * 3 ) )
 	{
-		/* read a tga image */
-		sprintf( filename, "%s/lightmap_%04d.tga", dirname, i );
+		/* read an image */
+		BuildIndexedLightmapPath( filename, sizeof( filename ), dirname, "lightmap", i );
 		Sys_Printf( "Loading %s\n", filename );
-		buffer = NULL;
-		len = vfsLoadFile( filename, (void*) &buffer, -1 );
-		if ( len < 0 ) {
-			Sys_Printf( "WARNING: Unable to load image %s\n", filename );
-			continue;
+		pixels = NULL;
+		if ( !LoadLightmapFile( filename, &pixels, &width, &height ) ) {
+			if ( lightmapFileFormat != LIGHTMAP_FILEFORMAT_TGA ) {
+				int savedFormat = lightmapFileFormat;
+				lightmapFileFormat = LIGHTMAP_FILEFORMAT_TGA;
+				BuildIndexedLightmapPath( filename, sizeof( filename ), dirname, "lightmap", i );
+				Sys_Printf( "Falling back to %s\n", filename );
+				if ( !LoadLightmapFile( filename, &pixels, &width, &height ) ) {
+					Sys_Printf( "WARNING: Unable to load image %s\n", filename );
+					lightmapFileFormat = savedFormat;
+					continue;
+				}
+				lightmapFileFormat = savedFormat;
+			}
+			else{
+				Sys_Printf( "WARNING: Unable to load image %s\n", filename );
+				continue;
+			}
 		}
 
-		/* parse file into an image */
-		pixels = NULL;
-		LoadTGABuffer( buffer, buffer + len, &pixels, &width, &height );
-		free( buffer );
-
-		/* sanity check it */
+		/* sanity check */
 		if ( pixels == NULL ) {
-			Sys_Printf( "WARNING: Unable to load image %s\n", filename );
 			continue;
 		}
 		if ( width != game->lightmapSize || height != game->lightmapSize ) {
@@ -250,7 +399,7 @@ int ImportLightmapsMain( int argc, char **argv ){
 		for ( y = 1; y <= game->lightmapSize; y++ )
 		{
 			out = lightmap + ( ( game->lightmapSize - y ) * game->lightmapSize * 3 );
-			for ( x = 0; x < game->lightmapSize; x++, in += 4, out += 3 )
+			for ( x = 0; x < game->lightmapSize; x++, in += 3, out += 3 )
 				VectorCopy( in, out );
 		}
 
@@ -3158,16 +3307,20 @@ void StoreSurfaceLightmaps( qboolean fastAllocate ){
 			olm->extLightmapNum = numExtLightmaps;
 
 			/* write lightmap */
-			sprintf( filename, "%s/" EXTERNAL_LIGHTMAP, dirname, numExtLightmaps );
+			BuildExternalLightmapPath( filename, sizeof( filename ), dirname, numExtLightmaps );
 			Sys_FPrintf( SYS_VRB, "\nwriting %s", filename );
-			WriteTGA24( filename, olm->bspLightBytes, olm->customWidth, olm->customHeight, qtrue );
+			if ( !WriteLightmapFile( filename, olm->bspLightBytes, olm->customWidth, olm->customHeight, qtrue ) ) {
+				Sys_FPrintf( SYS_WRN, "\nWARNING: failed writing %s", filename );
+			}
 			numExtLightmaps++;
 
 			/* write deluxemap */
 			if ( deluxemap ) {
-				sprintf( filename, "%s/" EXTERNAL_LIGHTMAP, dirname, numExtLightmaps );
+				BuildExternalLightmapPath( filename, sizeof( filename ), dirname, numExtLightmaps );
 				Sys_FPrintf( SYS_VRB, "\nwriting %s", filename );
-				WriteTGA24( filename, olm->bspDirBytes, olm->customWidth, olm->customHeight, qtrue );
+				if ( !WriteLightmapFile( filename, olm->bspDirBytes, olm->customWidth, olm->customHeight, qtrue ) ) {
+					Sys_FPrintf( SYS_WRN, "\nWARNING: failed writing %s", filename );
+				}
 				numExtLightmaps++;
 
 				if ( debugDeluxemap ) {
@@ -3185,7 +3338,7 @@ void StoreSurfaceLightmaps( qboolean fastAllocate ){
 	for ( i = numExtLightmaps; i; i++ )
 	{
 		/* determine if file exists */
-		sprintf( filename, "%s/" EXTERNAL_LIGHTMAP, dirname, i );
+		BuildExternalLightmapPath( filename, sizeof( filename ), dirname, i );
 		if ( !FileExists( filename ) ) {
 			break;
 		}
@@ -3363,7 +3516,7 @@ void StoreSurfaceLightmaps( qboolean fastAllocate ){
 					strcpy( lightmapName, "$lightmap" );
 				}
 				else{
-					sprintf( lightmapName, "maps/%s/" EXTERNAL_LIGHTMAP, mapName, olm->extLightmapNum );
+					BuildExternalLightmapShaderPath( lightmapName, sizeof( lightmapName ), mapName, olm->extLightmapNum );
 				}
 
 				/* get rgbgen string */
@@ -3460,7 +3613,7 @@ void StoreSurfaceLightmaps( qboolean fastAllocate ){
 			olm = &outLightmaps[ lm->outLightmapNums[ 0 ] ];
 
 			/* do some name mangling */
-			sprintf( lightmapName, "maps/%s/" EXTERNAL_LIGHTMAP, mapName, olm->extLightmapNum );
+			BuildExternalLightmapShaderPath( lightmapName, sizeof( lightmapName ), mapName, olm->extLightmapNum );
 
 			/* create custom shader */
 			csi = CustomShader( info->si, "$lightmap", lightmapName );

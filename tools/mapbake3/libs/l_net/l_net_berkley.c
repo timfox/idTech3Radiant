@@ -47,6 +47,15 @@
 #include <unistd.h>
 #include <stdarg.h>
 #include <stdio.h>
+#ifndef u_short
+typedef unsigned short u_short;
+#endif
+#ifndef u_long
+typedef unsigned long u_long;
+#endif
+#ifndef HAVE_GETHOSTNAME_DECL
+int gethostname( char *name, size_t len );
+#endif
 #define SOCKET_ERROR -1
 #define INVALID_SOCKET -1
 

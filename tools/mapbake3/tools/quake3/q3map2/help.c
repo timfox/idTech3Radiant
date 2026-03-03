@@ -186,11 +186,14 @@ void HelpLight()
 		{"-dirtmode 0", "Ordered direction dirtmapping"},
 		{"-dirtmode 1", "Randomized direction dirtmapping"},
 		{"-dirtscale", "Dirtmapping scaling factor"},
-		{"-dirty", "Enable dirtmapping"},
+		{"-dirty, -ao", "Enable ambient occlusion (dirtmapping)"},
+		{"-nodirty, -noao", "Disable ambient occlusion (enabled by default)"},
 		{"-dump", "Dump radiosity from `-bounce` into numbered MAP file prefabs"},
 		{"-export", "Export lightmaps when compile finished (like `-export` mode)"},
 		{"-exposure <F>", "Lightmap exposure to better support overbright spots"},
 		{"-external", "Force external lightmaps even if at size of internal lightmaps"},
+		{"-hdr32", "Write external/exported lightmaps as 32-bit HDR"},
+		{"-exr32", "Write external/exported lightmaps as 32-bit EXR"},
 		{"-extravisnudge", "Broken feature to nudge the luxel origin to a better vis cluster"},
 		{"-extrawide", "Deprecated alias for `-super 2 -filter`"},
 		{"-extra", "Deprecated alias for `-super 2`"},
@@ -201,11 +204,14 @@ void HelpLight()
 		{"-fast", "Ignore tiny light contributions"},
 		{"-filter", "Lightmap filtering"},
 		{"-floodlight", "Enable floodlight (zero-effort somewhat decent lighting)"},
+		{"-ibl", "Enable IBL-style ambient floodlight (enabled by default)"},
+		{"-noibl", "Disable IBL-style ambient floodlight"},
 		{"-gamma <F>", "Lightmap gamma"},
 		{"-gridambientscale <F>", "Scaling factor for the light grid ambient components only"},
 		{"-gridscale <F>", "Scaling factor for the light grid only"},
 		{"-keeplights", "Keep light entities in the BSP file after compile"},
 		{"-lightmapdir <directory>", "Directory to store external lightmaps (default: same as map name without extension)"},
+		{"-lmformat <tga|hdr|exr>, -lightmapformat <...>", "Set external/exported lightmap file format"},
 		{"-lightmapsize <N>", "Size of lightmaps to generate (must be a power of two)"},
 		{"-lomem", "Low memory but slower lighting mode"},
 		{"-lowquality", "Low quality floodlight (appears to currently break floodlight)"},
@@ -221,6 +227,7 @@ void HelpLight()
 		{"-novertex", "Disable vertex lighting"},
 		{"-patchshadows", "Cast shadows from patches"},
 		{"-pointscale <F, `-point` F>", "Scaling factor for point lights (light entities)"},
+		{"-pbr", "Enable modern preset: deluxemap+tangentspace+sRGB+IBL+AO+bounce"},
 		{"-q3", "Use nonlinear falloff curve by default (like Q3A)"},
 		{"-samplescale <F>", "Scales all lightmap resolutions"},
 		{"-samplesize <N>", "Sets default lightmap resolution in luxels/qu"},
@@ -280,7 +287,7 @@ void HelpConvert()
 void HelpExport()
 {
 	struct HelpOption exportl[] = {
-		{"-export <filename.bsp>", "Copies lightmaps from the BSP to `filename/lightmap_0000.tga` ff"}
+		{"-export [-lmformat tga|hdr|exr|-hdr32|-exr32] <filename.bsp>", "Copies BSP lightmaps to `filename/lightmap_0000.<ext>`"}
 	};
 
 	HelpOptions("Exporting lightmaps", 0, 80, exportl, sizeof(exportl)/sizeof(struct HelpOption));
@@ -315,7 +322,7 @@ void HelpInfo()
 void HelpImport()
 {
 	struct HelpOption import[] = {
-		{"-import <filename.bsp>", "Copies lightmaps from `filename/lightmap_0000.tga` ff into the BSP"},
+		{"-import [-lmformat tga|hdr|exr|-hdr32|-exr32] <filename.bsp>", "Copies lightmaps from `filename/lightmap_0000.<ext>` into the BSP"},
 	};
 
 	HelpOptions("Importing lightmaps", 0, 80, import, sizeof(import)/sizeof(struct HelpOption));
@@ -364,8 +371,8 @@ void HelpCommon()
 
 void HelpMain(const char* arg)
 {
-	printf("Usage: q3map2 [stage] [common options...] [stage options...] [stage source file]\n");
-	printf("       q3map2 -help [stage]\n\n");
+	printf("Usage: mapbake3 [stage] [common options...] [stage options...] [stage source file]\n");
+	printf("       mapbake3 -help [stage]\n\n");
 
 	HelpCommon();
 

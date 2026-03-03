@@ -35,6 +35,8 @@
 
 /* dependencies */
 #include "q3map2.h"
+#include "float_image_io.h"
+#include <webp/decode.h>
 
 
 
@@ -472,17 +474,40 @@ image_t *ImageLoad( const char *filename ){
 					if ( size > 0 ) {
 						LoadKTXBufferFirstImage( buffer, size, &image->pixels, &image->width, &image->height );
 					}
-          else
-          {
-            /* attempt to load webp */
-            StripExtension( name );
-            strcat( name, ".webp" );
-            size = vfsLoadFile( (const char*) name, (void**) &buffer, 0 );
-            if ( size > 0 )
-            {
-              LoadWEBPBuffer( buffer, size, &image->pixels, &image->width, &image->height );
-            }
-          }
+				else
+				{
+					/* attempt to load webp */
+					StripExtension( name );
+					strcat( name, ".webp" );
+					size = vfsLoadFile( (const char*) name, (void**) &buffer, 0 );
+					if ( size > 0 ) {
+						LoadWEBPBuffer( buffer, size, &image->pixels, &image->width, &image->height );
+					}
+					else
+					{
+						/* attempt to load hdr */
+						StripExtension( name );
+						strcat( name, ".hdr" );
+						size = vfsLoadFile( (const char*) name, (void**) &buffer, 0 );
+						if ( size > 0 ) {
+							if ( !MapBake3_LoadHDRBufferToRGBA8( buffer, size, &image->pixels, &image->width, &image->height ) ) {
+								Sys_Printf( "WARNING: Failed to parse HDR image %s\n", name );
+							}
+						}
+						else
+						{
+							/* attempt to load exr */
+							StripExtension( name );
+							strcat( name, ".exr" );
+							size = vfsLoadFile( (const char*) name, (void**) &buffer, 0 );
+							if ( size > 0 ) {
+								if ( !MapBake3_LoadEXRBufferToRGBA8( buffer, size, &image->pixels, &image->width, &image->height ) ) {
+									Sys_Printf( "WARNING: Failed to parse EXR image %s\n", name );
+								}
+							}
+						}
+					}
+				}
 				}
 			}
 		}

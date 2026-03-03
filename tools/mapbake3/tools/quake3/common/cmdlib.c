@@ -41,6 +41,7 @@
 
 #if defined ( __linux__ ) || defined ( __APPLE__ )
 #include <unistd.h>
+#include <time.h>
 #endif
 
 #ifdef NeXT
@@ -1111,6 +1112,8 @@ void Sys_Sleep( int n ){
 	Sleep( n );
 #endif
 #if defined ( __linux__ ) || defined ( __APPLE__ )
-	usleep( n * 1000 );
+	if ( n > 0 ) {
+		sleep( (unsigned int) ( ( n + 999 ) / 1000 ) );
+	}
 #endif
 }

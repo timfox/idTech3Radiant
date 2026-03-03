@@ -58,6 +58,7 @@
 	#include <unistd.h>
 	#include <pwd.h>
 	#include <limits.h>
+	#include <strings.h>
 #endif
 
 #ifdef WIN32
@@ -304,6 +305,9 @@
    ------------------------------------------------------------------------------- */
 
 #define EXTERNAL_LIGHTMAP       "lm_%04d.tga"
+#define LIGHTMAP_FILEFORMAT_TGA 0
+#define LIGHTMAP_FILEFORMAT_HDR 1
+#define LIGHTMAP_FILEFORMAT_EXR 2
 
 #define MAX_LIGHTMAPS           4           /* RBSP */
 #define MAX_LIGHT_STYLES        64
@@ -2276,11 +2280,12 @@ Q_EXTERN qboolean noCollapse Q_ASSIGN( qfalse );
 Q_EXTERN int lightmapSearchBlockSize Q_ASSIGN( 0 );
 Q_EXTERN qboolean exportLightmaps Q_ASSIGN( qfalse );
 Q_EXTERN qboolean externalLightmaps Q_ASSIGN( qfalse );
+Q_EXTERN int lightmapFileFormat Q_ASSIGN( LIGHTMAP_FILEFORMAT_TGA );
 Q_EXTERN int lmCustomSize Q_ASSIGN( LIGHTMAP_WIDTH );
 Q_EXTERN char *             lmCustomDir Q_ASSIGN( NULL );
 Q_EXTERN int lmLimitSize Q_ASSIGN( 0 );
 
-Q_EXTERN qboolean dirty Q_ASSIGN( qfalse );
+Q_EXTERN qboolean dirty Q_ASSIGN( qtrue );
 Q_EXTERN qboolean dirtDebug Q_ASSIGN( qfalse );
 Q_EXTERN int dirtMode Q_ASSIGN( 0 );
 Q_EXTERN float dirtDepth Q_ASSIGN( 128.0f );
@@ -2289,7 +2294,7 @@ Q_EXTERN float dirtGain Q_ASSIGN( 1.0f );
 
 /* 27: floodlighting */
 Q_EXTERN qboolean debugnormals Q_ASSIGN( qfalse );
-Q_EXTERN qboolean floodlighty Q_ASSIGN( qfalse );
+Q_EXTERN qboolean floodlighty Q_ASSIGN( qtrue );
 Q_EXTERN qboolean floodlight_lowquality Q_ASSIGN( qfalse );
 Q_EXTERN vec3_t floodlightRGB;
 Q_EXTERN float floodlightIntensity Q_ASSIGN( 512.0f );

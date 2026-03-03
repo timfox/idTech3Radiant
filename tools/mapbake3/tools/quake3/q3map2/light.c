@@ -2106,6 +2106,27 @@ void LightWorld( const char *BSPFilePath, qboolean fastAllocate ){
    main routine for light processing
  */
 
+static qboolean ParseLightmapFormatString( const char *value ){
+	if ( value == NULL || value[ 0 ] == '\0' ) {
+		return qfalse;
+	}
+
+	if ( !Q_stricmp( value, "tga" ) ) {
+		lightmapFileFormat = LIGHTMAP_FILEFORMAT_TGA;
+		return qtrue;
+	}
+	if ( !Q_stricmp( value, "hdr" ) ) {
+		lightmapFileFormat = LIGHTMAP_FILEFORMAT_HDR;
+		return qtrue;
+	}
+	if ( !Q_stricmp( value, "exr" ) ) {
+		lightmapFileFormat = LIGHTMAP_FILEFORMAT_EXR;
+		return qtrue;
+	}
+
+	return qfalse;
+}
+
 int LightMain( int argc, char **argv ){
 	int i;
 	float f;
@@ -2207,6 +2228,20 @@ int LightMain( int argc, char **argv ){
 	}
 	else{
 		Sys_Printf( " deluxemapping: disabled\n" );
+	}
+
+	if ( dirty ) {
+		Sys_Printf( " ambient occlusion: enabled\n" );
+	}
+	else{
+		Sys_Printf( " ambient occlusion: disabled\n" );
+	}
+
+	if ( floodlighty ) {
+		Sys_Printf( " ibl ambient (floodlight): enabled\n" );
+	}
+	else{
+		Sys_Printf( " ibl ambient (floodlight): disabled\n" );
 	}
 
 	Sys_Printf( "--- ProcessCommandLine ---\n" );
@@ -2503,9 +2538,50 @@ int LightMain( int argc, char **argv ){
 			deluxemap = qfalse;
 			Sys_Printf( "Disabling generating of deluxemaps for average light direction\n" );
 		}
+		else if ( !strcmp( argv[ i ], "-pbr" ) ) {
+			deluxemap = qtrue;
+			deluxemode = 1;
+			lightmapsRGB = qtrue;
+			texturesRGB = qtrue;
+			colorsRGB = qtrue;
+			dirty = qtrue;
+			floodlighty = qtrue;
+			if ( bounce < 1 ) {
+				bounce = 1;
+			}
+			Sys_Printf( "PBR preset enabled (deluxemap+tangentspace+sRGB+IBL+AO+bounce)\n" );
+		}
+		else if ( !strcmp( argv[ i ], "-ibl" ) ) {
+			floodlighty = qtrue;
+			Sys_Printf( "IBL-style ambient floodlight enabled\n" );
+		}
+		else if ( !strcmp( argv[ i ], "-noibl" ) ) {
+			floodlighty = qfalse;
+			Sys_Printf( "IBL-style ambient floodlight disabled\n" );
+		}
 		else if ( !strcmp( argv[ i ], "-external" ) ) {
 			externalLightmaps = qtrue;
 			Sys_Printf( "Storing all lightmaps externally\n" );
+		}
+		else if ( !strcmp( argv[ i ], "-hdr32" ) ) {
+			lightmapFileFormat = LIGHTMAP_FILEFORMAT_HDR;
+			externalLightmaps = qtrue;
+			Sys_Printf( "32-bit HDR lightmap output selected (external lightmaps enabled)\n" );
+		}
+		else if ( !strcmp( argv[ i ], "-exr32" ) ) {
+			lightmapFileFormat = LIGHTMAP_FILEFORMAT_EXR;
+			externalLightmaps = qtrue;
+			Sys_Printf( "32-bit EXR lightmap output selected (external lightmaps enabled)\n" );
+		}
+		else if ( !strcmp( argv[ i ], "-lmformat" ) || !strcmp( argv[ i ], "-lightmapformat" ) ) {
+			if ( i + 1 >= ( argc - 1 ) || !ParseLightmapFormatString( argv[ i + 1 ] ) ) {
+				Error( "Invalid lightmap format, expected one of: tga hdr exr" );
+			}
+			if ( lightmapFileFormat != LIGHTMAP_FILEFORMAT_TGA ) {
+				externalLightmaps = qtrue;
+			}
+			Sys_Printf( "Lightmap file format set to %s\n", argv[ i + 1 ] );
+			i++;
 		}
 
 		else if ( !strcmp( argv[ i ], "-lightmapsize" ) ) {
@@ -2817,6 +2893,14 @@ int LightMain( int argc, char **argv ){
 			dirty = qtrue;
 			Sys_Printf( "Dirtmapping enabled\n" );
 		}
+		else if ( !strcmp( argv[ i ], "-ao" ) ) {
+			dirty = qtrue;
+			Sys_Printf( "Ambient occlusion enabled\n" );
+		}
+		else if ( !strcmp( argv[ i ], "-nodirty" ) || !strcmp( argv[ i ], "-noao" ) ) {
+			dirty = qfalse;
+			Sys_Printf( "Ambient occlusion disabled\n" );
+		}
 		else if ( !strcmp( argv[ i ], "-dirtdebug" ) || !strcmp( argv[ i ], "-debugdirt" ) ) {
 			dirtDebug = qtrue;
 			Sys_Printf( "Dirtmap debugging enabled\n" );
@@ -2932,6 +3016,16 @@ int LightMain( int argc, char **argv ){
 
 		Sys_Printf( "Restricted lightmap searching enabled - block size adjusted to %d\n", lightmapSearchBlockSize );
 	}
+
+	if ( lightmapFileFormat == LIGHTMAP_FILEFORMAT_HDR || lightmapFileFormat == LIGHTMAP_FILEFORMAT_EXR ) {
+		externalLightmaps = qtrue;
+	}
+
+	Sys_Printf( "Ambient occlusion: %s\n", dirty ? "enabled" : "disabled" );
+	Sys_Printf( "IBL ambient floodlight: %s\n", floodlighty ? "enabled" : "disabled" );
+	Sys_Printf( "Lightmap file format: %s\n",
+				( lightmapFileFormat == LIGHTMAP_FILEFORMAT_HDR ) ? "hdr" :
+				( lightmapFileFormat == LIGHTMAP_FILEFORMAT_EXR ) ? "exr" : "tga" );
 
 	strcpy( source, ExpandArg( argv[ i ] ) );
 	StripExtension( source );

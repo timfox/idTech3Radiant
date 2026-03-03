@@ -32,6 +32,9 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#ifndef WIN32
+	#include <strings.h>
+#endif
 #include <stdlib.h>
 #include "l_net.h"
 #include "l_net_wins.h"

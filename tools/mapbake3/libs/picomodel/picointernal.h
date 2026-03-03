@@ -49,6 +49,9 @@ extern "C"
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#if !( WIN32 || _WIN32 )
+	#include <strings.h>
+#endif
 #include <ctype.h>
 #include <math.h>
 

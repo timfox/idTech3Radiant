@@ -1,4 +1,7 @@
 include_directories(BEFORE common)
+set(IDTECH3_ROOT_DIR "${PROJECT_SOURCE_DIR}/../..")
+include_directories("${IDTECH3_ROOT_DIR}/libs")
+include_directories("${IDTECH3_ROOT_DIR}/libs/tinyexr")
 
 set(Q3MAP_VERSION 2.5.17n)
 find_package(Git REQUIRED)
@@ -53,7 +56,7 @@ set(q3map2_games
         q3map2/game_xonotic.h
         )
 
-radiant_tool(q3map2
+radiant_tool(mapbake3
         common/cmdlib.c common/cmdlib.h
         common/imagelib.c common/imagelib.h
         common/inout.c common/inout.h
@@ -87,6 +90,7 @@ radiant_tool(q3map2
         q3map2/exportents.c
         q3map2/facebsp.c
         q3map2/fixaas.c
+        q3map2/float_image_io.cpp
         q3map2/fog.c
         ${q3map2_games} q3map2/game__null.h
         q3map2/help.c
@@ -118,9 +122,9 @@ radiant_tool(q3map2
         q3map2/vis.c
         q3map2/visflow.c
         q3map2/writebsp.c
-        )
+)
 
-target_link_libraries(q3map2
+target_link_libraries(mapbake3
         ${GLIB_LIBRARIES}
         ${JPEG_LIBRARIES}
         ${PNG_LIBRARIES}
@@ -133,6 +137,11 @@ target_link_libraries(q3map2
         l_net
         mathlib
         picomodel
+        )
+
+add_custom_command(TARGET mapbake3 POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:mapbake3>" "${PROJECT_BINARY_DIR}/q3map2${CMAKE_EXECUTABLE_SUFFIX}"
+        VERBATIM
         )
 
 radiant_tool(q3data
@@ -170,9 +179,9 @@ target_link_libraries(q3data
         )
 
 add_custom_target(quake3)
-add_dependencies(quake3 q3map2 q3data)
+add_dependencies(quake3 mapbake3 q3data)
 
 if (UNIX)
-    target_link_libraries(q3map2 pthread m)
+    target_link_libraries(mapbake3 pthread m)
     target_link_libraries(q3data m)
 endif ()
