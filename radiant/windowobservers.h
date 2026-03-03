@@ -54,5 +54,8 @@ inline ModifierFlags modifiers_for_state( Qt::KeyboardModifiers state ){
 	if ( state & Qt::KeyboardModifier::AltModifier ) {
 		modifiers |= c_modifierAlt;
 	}
+	if ( state & Qt::KeyboardModifier::MetaModifier ) {
+		modifiers |= c_modifierMeta;
+	}
 	return modifiers;
 }

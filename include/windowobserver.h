@@ -38,7 +38,8 @@ struct ModifierEnumeration
 	{
 		SHIFT = 0,
 		CONTROL = 1,
-		ALT = 2
+		ALT = 2,
+		META = 3  // Super/Windows key - works when WM intercepts Alt on Linux
 	};
 };
 
@@ -48,6 +49,7 @@ const ModifierFlags c_modifierNone;
 const ModifierFlags c_modifierShift( ModifierEnumeration::SHIFT );
 const ModifierFlags c_modifierControl( ModifierEnumeration::CONTROL );
 const ModifierFlags c_modifierAlt( ModifierEnumeration::ALT );
+const ModifierFlags c_modifierMeta( ModifierEnumeration::META );
 
 #include "generic/enumeration.h"
 

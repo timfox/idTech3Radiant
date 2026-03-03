@@ -104,6 +104,7 @@ const unsigned int RAD_NONE =    0x00;
 const unsigned int RAD_SHIFT =   0x01;
 const unsigned int RAD_ALT =     0x02;
 const unsigned int RAD_CONTROL = 0x04;
+const unsigned int RAD_META =    0x80;  // Super/Windows key - works when WM intercepts Alt on Linux
 const unsigned int RAD_PRESS   = 0x08;
 const unsigned int RAD_LBUTTON = 0x10;
 const unsigned int RAD_MBUTTON = 0x20;
@@ -133,6 +134,9 @@ inline ModifierFlags modifiers_for_flags( unsigned int flags ){
 	if ( flags & RAD_ALT ) {
 		modifiers |= c_modifierAlt;
 	}
+	if ( flags & RAD_META ) {
+		modifiers |= c_modifierMeta;
+	}
 	return modifiers;
 }
 
@@ -159,6 +163,10 @@ inline unsigned int buttons_for_button_and_modifiers( ButtonIdentifier button, M
 		buttons |= RAD_ALT;
 	}
 
+	if ( bitfield_enabled( flags, c_modifierMeta ) ) {
+		buttons |= RAD_META;
+	}
+
 	return buttons;
 }
 
@@ -183,6 +191,10 @@ inline unsigned int buttons_for_event_button( QMouseEvent* event ){
 
 	if ( event->modifiers() & Qt::KeyboardModifier::AltModifier ) {
 		flags |= RAD_ALT;
+	}
+
+	if ( event->modifiers() & Qt::KeyboardModifier::MetaModifier ) {
+		flags |= RAD_META;
 	}
 
 	return flags;
@@ -215,9 +227,17 @@ inline unsigned int buttons_for_state( const QMouseEvent& event ){
 		flags |= RAD_ALT;
 	}
 
+	if ( event.modifiers() & Qt::KeyboardModifier::MetaModifier ) {
+		flags |= RAD_META;
+	}
+
 	return flags;
 }
 
+// Maya modifier: Alt or Super (Meta)
+inline bool maya_modifier_flags( unsigned int flags ){
+	return ( flags & ( RAD_ALT | RAD_META ) ) != 0;
+}
 
 void XYWnd::SetScale( float f ){
 	const float max_scale = 64.f;
@@ -527,8 +547,8 @@ protected:
 		if( !m_xywnd.Active() ){
 			g_pParentWnd->SetActiveXY( &m_xywnd );
 		}
-		if ( g_bMayaNavigation && !( event->modifiers() & Qt::KeyboardModifier::AltModifier ) ) {
-			return; // Maya: zoom only with Alt+scroll
+		if ( g_bMayaNavigation && !( event->modifiers() & ( Qt::KeyboardModifier::AltModifier | Qt::KeyboardModifier::MetaModifier ) ) ) {
+			return; // Maya: zoom only with Alt+scroll or Super+scroll
 		}
 		if ( event->angleDelta().y() > 0 ) {
 			m_xywnd.ZoomInWithMouse( event->position().x() * m_scale, event->position().y() * m_scale );
@@ -628,7 +648,7 @@ void XYWnd::SetCustomPivotOrigin( int x, int y ) const {
 }
 
 unsigned int MoveCamera_buttons(){
-	return g_bMayaNavigation ? ( RAD_ALT | RAD_MBUTTON ) : ( RAD_CONTROL | RAD_MBUTTON );
+	return g_bMayaNavigation ? ( RAD_ALT | RAD_META | RAD_MBUTTON ) : ( RAD_CONTROL | RAD_MBUTTON );
 }
 
 void XYWnd_PositionCamera( XYWnd* xywnd, int x, int y, CamWnd& camwnd ){
@@ -884,7 +904,7 @@ void XYWnd::OnContextMenu(){
 static FreezePointer g_xywnd_freezePointer;
 
 unsigned int Move_buttons(){
-	return g_bMayaNavigation ? ( RAD_ALT | RAD_MBUTTON ) : RAD_RBUTTON;
+	return g_bMayaNavigation ? ( RAD_ALT | RAD_META | RAD_MBUTTON ) : RAD_RBUTTON;
 }
 
 void XYWnd::Move_Begin(){
@@ -908,7 +928,7 @@ void XYWnd::Move_End(){
 }
 
 unsigned int Zoom_buttons(){
-	return RAD_RBUTTON | RAD_ALT;
+	return RAD_RBUTTON | RAD_ALT | RAD_META;
 }
 
 static int g_dragZoom = 0;
@@ -969,19 +989,29 @@ bool isClipperMode(){
 void XYWnd::mouseDown( const WindowVector& position, ButtonIdentifier button, ModifierFlags modifiers ){
 	XY_MouseDown( static_cast<int>( position.x() ), static_cast<int>( position.y() ), buttons_for_button_and_modifiers( button, modifiers ) );
 }
+inline bool Move_buttons_match( unsigned int buttons ){
+	return g_bMayaNavigation ? ( ( buttons & RAD_MBUTTON ) && maya_modifier_flags( buttons ) ) : ( buttons == RAD_RBUTTON );
+}
+inline bool MoveCamera_buttons_match( unsigned int buttons ){
+	return g_bMayaNavigation ? ( ( buttons & RAD_MBUTTON ) && maya_modifier_flags( buttons ) ) : ( buttons == ( RAD_CONTROL | RAD_MBUTTON ) );
+}
+inline bool Zoom_buttons_match( unsigned int buttons ){
+	return ( buttons & RAD_RBUTTON ) && maya_modifier_flags( buttons );
+}
+
 void XYWnd::XY_MouseDown( int x, int y, unsigned int buttons ){
-	if ( buttons == Move_buttons() ) {
+	if ( Move_buttons_match( buttons ) ) {
 		Move_Begin();
 		EntityCreate_MouseDown( x, y );
 	}
-	else if ( buttons == Zoom_buttons() ) {
+	else if ( Zoom_buttons_match( buttons ) ) {
 		Zoom_Begin( x, y );
 	}
 	else if ( buttons == NewBrushDrag_buttons() && GlobalSelectionSystem().countSelected() == 0 && !isClipperMode() ) {
 		NewBrushDrag_Begin( x, y );
 	}
 	// control mbutton = move camera
-	else if ( buttons == MoveCamera_buttons() ) {
+	else if ( MoveCamera_buttons_match( buttons ) ) {
 		XYWnd_PositionCamera( this, x, y, *g_pParentWnd->GetCamWnd() );
 	}
 	// mbutton = angle camera
@@ -1035,7 +1065,7 @@ void XYWnd::XY_MouseMoved( int x, int y, unsigned int buttons ){
 	}
 
 	// control mbutton = move camera
-	else if ( buttons == MoveCamera_buttons() ) {
+	else if ( MoveCamera_buttons_match( buttons ) ) {
 		XYWnd_PositionCamera( this, x, y, *g_pParentWnd->GetCamWnd() );
 	}
 

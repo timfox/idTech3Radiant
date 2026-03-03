@@ -714,18 +714,23 @@ public:
 };
 
 
+// Maya modifier: Alt or Super (Meta) - Super works when WM intercepts Alt on Linux
+inline bool maya_modifier_pressed( Qt::KeyboardModifiers modifiers ){
+	return ( modifiers & ( Qt::KeyboardModifier::AltModifier | Qt::KeyboardModifier::MetaModifier ) ) != 0;
+}
+
 static void Camera_motionDelta( int x, int y, const QMouseEvent *event, camera_t& cam ){
 	cam.m_mouseMove.motion_delta( x, y, event );
 	cam.m_idleDraw.queueDraw( DeferredMotionDelta2::InvokeCaller( cam.m_mouseMove ), true );
 
-	cam.m_orbit = ( event->modifiers() & Qt::KeyboardModifier::AltModifier ) && ( event->buttons() & Qt::MouseButton::RightButton );
+	cam.m_orbit = maya_modifier_pressed( event->modifiers() ) && ( event->buttons() & Qt::MouseButton::RightButton );
 	if( cam.m_orbit ){
 		cam.m_strafe = false;
 		return;
 	}
 
-	// Maya navigation: Alt+Middle = pan (strafe)
-	if( g_bMayaNavigation && ( event->modifiers() & Qt::KeyboardModifier::AltModifier ) && ( event->buttons() & Qt::MouseButton::MiddleButton ) ){
+	// Maya navigation: Alt+Middle or Super+Middle = pan (strafe)
+	if( g_bMayaNavigation && maya_modifier_pressed( event->modifiers() ) && ( event->buttons() & Qt::MouseButton::MiddleButton ) ){
 		cam.m_strafe = true;
 		cam.m_strafe_forward = false;
 		return;
@@ -1136,13 +1141,15 @@ void camera_orbit_init( camera_t& cam, Vector2 xy ){
 }
 
 inline bool ORBIT_EVENT( const QMouseEvent& event ){
-	return event.button() == Qt::MouseButton::RightButton && modifiers_for_state( event.modifiers() ) == c_modifierAlt;
+	return event.button() == Qt::MouseButton::RightButton
+		&& ( modifiers_for_state( event.modifiers() ) == c_modifierAlt || maya_modifier_pressed( event.modifiers() ) );
 }
 inline bool M2_EVENT( const QMouseEvent& event ){
 	return event.button() == Qt::MouseButton::RightButton && modifiers_for_state( event.modifiers() ) == c_modifierNone;
 }
 inline bool PAN_EVENT( const QMouseEvent& event ){
-	return g_bMayaNavigation && event.button() == Qt::MouseButton::MiddleButton && modifiers_for_state( event.modifiers() ) == c_modifierAlt;
+	return g_bMayaNavigation && event.button() == Qt::MouseButton::MiddleButton
+		&& ( modifiers_for_state( event.modifiers() ) == c_modifierAlt || maya_modifier_pressed( event.modifiers() ) );
 }
 inline bool PAN_RELEASE_EVENT( const QMouseEvent& event ){
 	return g_bMayaNavigation && event.button() == Qt::MouseButton::MiddleButton;
@@ -1307,8 +1314,8 @@ static void camera_zoom( CamWnd& camwnd, float x, float y, float step ){
 static void wheelmove_scroll( const QWheelEvent& event, CamWnd& camwnd ){
 	camera_t& cam = camwnd.getCamera();
 
-	// Maya navigation: zoom only with Alt+scroll
-	if( g_bMayaNavigation && !( event.modifiers() & Qt::KeyboardModifier::AltModifier ) ){
+	// Maya navigation: zoom only with Alt+scroll or Super+scroll
+	if( g_bMayaNavigation && !maya_modifier_pressed( event.modifiers() ) ){
 		return;
 	}
 
