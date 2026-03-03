@@ -796,13 +796,12 @@ void Entity_Construct(){
 	GlobalCommands_insert( "EntitiesConnect", makeCallbackF( Entity_connectSelected ), QKeySequence( "Ctrl+K" ) );
 	if ( game_has_killConnect() )
 		GlobalCommands_insert( "EntitiesKillConnect", makeCallbackF( Entity_killconnectSelected ), QKeySequence( "Shift+K" ) );
-	GlobalCommands_insert( "EntityMovePrimitivesToLast", makeCallbackF( Entity_moveSelectedPrimitivesToLast ), QKeySequence( "Ctrl+M" ) );
+	GlobalCommands_insert( "EntityMovePrimitivesToLast", makeCallbackF( Entity_moveSelectedPrimitivesToLast ), QKeySequence( "P" ) );
 	if( Layout_expiramentalFeaturesEnabled() ){
 		GlobalCommands_insert( "EntityMovePrimitivesToLastModern", makeCallbackF( Entity_moveSelectedPrimitivesToLast ), QKeySequence( "Ctrl+G" ) );
 	}
 	GlobalCommands_insert( "EntityMovePrimitivesToFirst", makeCallbackF( Entity_moveSelectedPrimitivesToFirst ) );
-	GlobalCommands_insert( "EntityUngroup", makeCallbackF( Entity_ungroup ),
-	                       Layout_expiramentalFeaturesEnabled() ? QKeySequence( "Alt+G" ) : QKeySequence() );
+	GlobalCommands_insert( "EntityUngroup", makeCallbackF( Entity_ungroup ), QKeySequence( "Shift+P" ) );
 	GlobalCommands_insert( "EntityUngroupPrimitives", makeCallbackF( Entity_ungroupSelectedPrimitives ) );
 	GlobalCommands_insert( "EntityApplyNextGenVolumetricFogPreset", makeCallbackF( Entity_applyNextGenVolumetricFogPreset ) );
 	GlobalCommands_insert( "EntityApplyNextGenBulletPreset", makeCallbackF( Entity_applyNextGenBulletPreset ) );

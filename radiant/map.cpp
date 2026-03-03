@@ -2443,11 +2443,11 @@ CopiedString g_strLastMap;
 bool g_bLoadLastMap = true;
 
 void Map_Construct(){
-	GlobalCommands_insert( "NewMap", makeCallbackF( NewMap ) );
+	GlobalCommands_insert( "NewMap", makeCallbackF( NewMap ), QKeySequence( "Ctrl+N" ) );
 	GlobalCommands_insert( "OpenMap", makeCallbackF( OpenMap ), QKeySequence( "Ctrl+O" ) );
 	GlobalCommands_insert( "ImportMap", makeCallbackF( ImportMap ) );
 	GlobalCommands_insert( "SaveMap", makeCallbackF( SaveMap ), QKeySequence( "Ctrl+S" ) );
-	GlobalCommands_insert( "SaveMapAs", makeCallbackF( SaveMapAs ) );
+	GlobalCommands_insert( "SaveMapAs", makeCallbackF( SaveMapAs ), QKeySequence( "Ctrl+Shift+S" ) );
 	GlobalCommands_insert( "SaveSelected", makeCallbackF( ExportMap ) );
 	GlobalCommands_insert( "SaveRegion", makeCallbackF( SaveRegion ) );
 

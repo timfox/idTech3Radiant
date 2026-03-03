@@ -34,7 +34,7 @@ void MainFrame_registerCommands(){
 
 	GlobalCommands_insert( "RefreshReferences", makeCallbackF( RefreshReferences ) );
 	GlobalCommands_insert( "CheckForUpdate", makeCallbackF( CheckForUpdate ) );
-	GlobalCommands_insert( "Exit", makeCallbackF( Exit ) );
+	GlobalCommands_insert( "Exit", makeCallbackF( Exit ), QKeySequence( "Ctrl+Q" ) );
 	GlobalCommands_insert( "AddEntityByName", makeCallbackF( Add_openEntityDialog ) );
 	GlobalCommands_insert( "AddLight", makeCallbackF( Add_createLight ) );
 	GlobalCommands_insert( "AddInfoPlayerStart", makeCallbackF( Add_createInfoPlayerStart ) );
@@ -75,10 +75,8 @@ void MainFrame_registerCommands(){
 
 	GlobalCommands_insert( "Shortcuts", makeCallbackF( DoCommandListDlg ),
 	                       g_Layout_expiramentalFeatures.m_value ? QKeySequence( "Ctrl+Alt+P" ) : QKeySequence( "Ctrl+Shift+P" ) );
-	GlobalCommands_insert( "Preferences", makeCallbackF( PreferencesDialog_showDialog ), QKeySequence( "P" ) );
-	if( g_Layout_expiramentalFeatures.m_value ){
-		GlobalCommands_insert( "FrameSelection", makeCallbackF( FocusAllViews ), QKeySequence( "F" ) );
-	}
+	GlobalCommands_insert( "Preferences", makeCallbackF( PreferencesDialog_showDialog ), QKeySequence( "Ctrl+," ) );
+	GlobalCommands_insert( "FrameSelection", makeCallbackF( FocusAllViews ), QKeySequence( "F" ) );
 
 	GlobalCommands_insert( "ToggleConsole", makeCallbackF( Console_ToggleShow ), QKeySequence( "O" ) );
 	GlobalCommands_insert( "ToggleEntityInspector", makeCallbackF( EntityInspector_ToggleShow ), QKeySequence( "N" ) );
@@ -109,8 +107,8 @@ void MainFrame_registerCommands(){
 
 	Colors_registerCommands();
 
-	GlobalCommands_insert( "Fullscreen", makeCallbackF( MainFrame_toggleFullscreen ), QKeySequence( "F11" ) );
-	GlobalCommands_insert( "MaximizeView", makeCallbackF( Maximize_View ), QKeySequence( "F12" ) );
+	GlobalCommands_insert( "Fullscreen", makeCallbackF( MainFrame_toggleFullscreen ), QKeySequence( "Ctrl+Space" ) );
+	GlobalCommands_insert( "MaximizeView", makeCallbackF( Maximize_View ), QKeySequence( "Space" ) );
 
 	CSG_registerCommands();
 

@@ -587,11 +587,10 @@ void Scene_ExpandSelectionToLayers(){
 
 #include "commands.h"
 void Layers_registerCommands(){
-	GlobalCommands_insert( "ExpandSelectionToLayers", makeCallbackF( Scene_ExpandSelectionToLayers ), QKeySequence( "Ctrl+Q" ) );
+	GlobalCommands_insert( "ExpandSelectionToLayers", makeCallbackF( Scene_ExpandSelectionToLayers ), QKeySequence( "Ctrl+Shift+Q" ) );
 	GlobalCommands_insert( "LayersMenu", makeCallbackF( context_moveto_menu ), QKeySequence( "Shift+Q" ) );
 }
 
 void Layers_registerShortcuts(){
 	command_connect_accelerator( "LayersMenu" );
 }
-

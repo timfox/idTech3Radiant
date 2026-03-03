@@ -693,7 +693,7 @@ void PatchPreferences_construct(){
 void Patch_registerCommands(){
 	GlobalCommands_insert( "InvertCurveTextureX", makeCallbackF( Patch_FlipTextureX ), QKeySequence( "Ctrl+Shift+I" ) );
 	GlobalCommands_insert( "InvertCurveTextureY", makeCallbackF( Patch_FlipTextureY ), QKeySequence( "Shift+I" ) );
-	GlobalCommands_insert( "NaturalizePatch", makeCallbackF( Patch_NaturalTexture ), QKeySequence( "Ctrl+N" ) );
+	GlobalCommands_insert( "NaturalizePatch", makeCallbackF( Patch_NaturalTexture ), QKeySequence( "Alt+N" ) );
 	GlobalCommands_insert( "PatchCylinder", makeCallbackF( Patch_Cylinder ) );
 //	GlobalCommands_insert( "PatchDenseCylinder", makeCallbackF( Patch_DenseCylinder ) );
 //	GlobalCommands_insert( "PatchVeryDenseCylinder", makeCallbackF( Patch_VeryDenseCylinder ) );
@@ -707,7 +707,7 @@ void Patch_registerCommands(){
 //	GlobalCommands_insert( "PatchSquareEndcap", makeCallbackF( Patch_SquareEndcap ) );
 	GlobalCommands_insert( "PatchCone", makeCallbackF( Patch_Cone ) );
 	GlobalCommands_insert( "PatchSphere", makeCallbackF( Patch_Sphere ) );
-	GlobalCommands_insert( "SimplePatchMesh", makeCallbackF( Patch_Plane ), QKeySequence( "Shift+P" ) );
+	GlobalCommands_insert( "SimplePatchMesh", makeCallbackF( Patch_Plane ), QKeySequence( "Alt+Shift+P" ) );
 	GlobalCommands_insert( "PatchInsertFirstColumn", makeCallbackF( Patch_InsertFirstColumn ), QKeySequence( Qt::CTRL + Qt::SHIFT + Qt::Key_Plus + Qt::KeypadModifier ) );
 	GlobalCommands_insert( "PatchInsertLastColumn", makeCallbackF( Patch_InsertLastColumn ) );
 	GlobalCommands_insert( "PatchInsertFirstRow", makeCallbackF( Patch_InsertFirstRow ), QKeySequence( +Qt::CTRL + Qt::Key_Plus + Qt::KeypadModifier ) );
@@ -728,7 +728,7 @@ void Patch_registerCommands(){
 //	GlobalCommands_insert( "MakeOverlayPatch", makeCallbackF( Patch_OverlayOn ), QKeySequence( "Y" ) );
 //	GlobalCommands_insert( "ClearPatchOverlays", makeCallbackF( Patch_OverlayOff ), QKeySequence( "Ctrl+L" ) );
 	GlobalCommands_insert( "PatchDeform", makeCallbackF( Patch_Deform ) );
-	GlobalCommands_insert( "PatchThicken", makeCallbackF( Patch_Thicken ), QKeySequence( "Ctrl+T" ) );
+	GlobalCommands_insert( "PatchThicken", makeCallbackF( Patch_Thicken ), QKeySequence( "Alt+Shift+T" ) );
 }
 
 void Patch_constructToolbar( QToolBar* toolbar ){

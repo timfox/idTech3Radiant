@@ -459,7 +459,7 @@ void GamePacksPath_set( const char* path ){
  */
 CopiedString g_strGameToolsPath;           ///< this is set by g_GamesDialog
 
-bool g_bMayaNavigation = false;
+bool g_bMayaNavigation = true;
 bool g_trayIconEnabled = true;
 bool g_minimizeToTray = false;
 
@@ -2403,6 +2403,7 @@ void TexBro_registerShortcuts(){
 }
 
 void Misc_registerShortcuts(){
+	command_connect_accelerator( "FrameSelection" );
 	command_connect_accelerator( "Redo2" );
 	command_connect_accelerator( "UnSelectSelection2" );
 	command_connect_accelerator( "DeleteSelection2" );
@@ -3249,7 +3250,7 @@ void Layout_constructPreferences( PreferencesPage& page ){
 	);
 	page.appendCheckBox( "", "Industry Standard (Maya-style) navigation", g_bMayaNavigation );
 	{
-		const char* tools[] = { "Drag (Q)", "Translate (W)", "Rotate (R)", "Scale (E)" };
+		const char* tools[] = { "Drag (Q)", "Translate (W)", "Rotate (E)", "Scale (R)" };
 		page.appendRadio( "Default startup tool", StringArrayRange( tools ), IntImportCaller( g_defaultStartupToolPref ), IntExportCaller( g_defaultStartupToolPref ) );
 	}
 	QCheckBox* trayCheck = page.appendCheckBox( "", "Show system tray / menu bar icon",

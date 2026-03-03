@@ -235,14 +235,13 @@ void ConstructFilters(){
 	}
 	add_filter_command( EXCLUDE_CURVES, "FilterPatches",
 	                   Layout_expiramentalFeaturesEnabled() ? QKeySequence( "Alt+P" ) : QKeySequence( "Ctrl+P" ) );
-	add_filter_command( EXCLUDE_DETAILS, "FilterDetails",
-	                   Layout_expiramentalFeaturesEnabled() ? QKeySequence( "Alt+Shift+D" ) : QKeySequence( "Ctrl+D" ) );
-	add_filter_command( EXCLUDE_HINTSSKIPS, "FilterHintsSkips", QKeySequence( "Ctrl+H" ) );
+	add_filter_command( EXCLUDE_DETAILS, "FilterDetails", QKeySequence( "Ctrl+Alt+D" ) );
+	add_filter_command( EXCLUDE_HINTSSKIPS, "FilterHintsSkips", QKeySequence( "Ctrl+Alt+H" ) );
 	add_filter_command( EXCLUDE_MODELS, "FilterModels", QKeySequence( "Shift+M" ) );
 	add_filter_command( EXCLUDE_TRIGGERS, "FilterTriggers", QKeySequence( "Ctrl+Shift+T" ) );
 	if ( g_pGameDescription->mGameType != "doom3" ) {
 		add_filter_command( EXCLUDE_BOTCLIP, "FilterBotClips", QKeySequence( "Alt+M" ) );
-		add_filter_command( EXCLUDE_DECALS, "FilterDecals", QKeySequence( "Shift+D" ) );
+		add_filter_command( EXCLUDE_DECALS, "FilterDecals", QKeySequence( "Alt+Shift+D" ) );
 	}
 	add_filter_command( EXCLUDE_FUNC_GROUPS, "FilterFuncGroups" );
 	add_filter_command( EXCLUDE_POINT_ENT, "FilterPointEntities" );
