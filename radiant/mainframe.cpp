@@ -931,10 +931,22 @@ void OpenBugReportURL(){
 }
 
 
-QWidget* g_page_console;
+QWidget* g_page_console{};
+QDockWidget* g_consoleDock{};
 
 void Console_ToggleShow(){
-	GroupDialog_showPage( g_page_console );
+	if ( g_consoleDock != nullptr ) {
+		const bool shouldShow = !g_consoleDock->isVisible();
+		g_consoleDock->setVisible( shouldShow );
+		if ( shouldShow ) {
+			g_consoleDock->raise();
+		}
+		return;
+	}
+
+	if ( g_page_console != nullptr ) {
+		GroupDialog_showPage( g_page_console );
+	}
 }
 
 QWidget* g_page_entity;
@@ -1403,7 +1415,6 @@ void create_layout_menu( QMenuBar *menubar, MainFrame::EViewStyle style ){
 	menu->addSeparator();
 	create_menu_item_with_mnemonic( menu, "&Save workspace", "LayoutSaveWorkspace" );
 	menu->addSeparator();
-	create_menu_item_with_mnemonic( menu, "Apply Maya theme", "LayoutApplyMayaTheme" );
 }
 
 void create_file_menu( QMenuBar *menubar ){
@@ -2879,9 +2890,19 @@ void MainFrame::Create(){
 
 	g_page_entity = GroupDialog_addPage( "Entities", EntityInspector_constructWindow( GroupDialog_getWindow() ), RawStringExportCaller( "Entities" ) );
 
-	if ( FloatingGroupDialog() ) {
-		g_page_console = GroupDialog_addPage( "Console", Console_constructWindow(), RawStringExportCaller( "Console" ) );
+	auto* consoleWindow = Console_constructWindow();
+	g_page_console = nullptr;
+	g_consoleDock = nullptr;
+	if ( CurrentStyle() == eFloating ) {
+		g_page_console = GroupDialog_addPage( "Console", consoleWindow, RawStringExportCaller( "Console" ) );
 		g_page_textures = GroupDialog_addPage( "Textures", TextureBrowser_constructWindow( GroupDialog_getWindow() ), TextureBrowserExportTitleCaller() );
+	}
+	else{
+		g_consoleDock = new QDockWidget( "Console", window );
+		g_consoleDock->setObjectName( "dock_console" );
+		g_consoleDock->setAllowedAreas( Qt::BottomDockWidgetArea | Qt::TopDockWidgetArea );
+		g_consoleDock->setWidget( consoleWindow );
+		window->addDockWidget( Qt::BottomDockWidgetArea, g_consoleDock );
 	}
 
 	g_page_models = GroupDialog_addPage( "Models", ModelBrowser_constructWindow( GroupDialog_getWindow() ), RawStringExportCaller( "Models" ) );
@@ -2903,8 +2924,6 @@ void MainFrame::Create(){
 				m_hSplit->addWidget( m_vSplit2 );
 				m_hSplit->addWidget( m_vSplit );
 			}
-			// console
-			m_vSplit->addWidget( Console_constructWindow() );
 
 			// xy
 			m_pXYWnd = new XYWnd();
@@ -3117,6 +3136,8 @@ void MainFrame::Shutdown(){
 	VideoWorkbench_stopAndRelease();
 	Spreadsheet_stopAndRelease();
 	PythonScript_stopAndRelease();
+	g_consoleDock = nullptr;
+	g_page_console = nullptr;
 
 	user_shortcuts_save();
 }
