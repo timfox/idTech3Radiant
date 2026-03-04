@@ -37,9 +37,11 @@
 #include "q3map2.h"
 
 #define WISHGI_MAX_LINKS             8
+#define WISHGI_MAX_SH_COEFFS         16
 #define WISHGI_ASSOC_MAGIC           "wishgi_assoc_v1"
 #define WISHGI_ASSOC_DEFAULT_SUFFIX  ".wishgi_assoc.txt"
 #define WISHGI_PROBES_DEFAULT_SUFFIX ".wishgi_probes.txt"
+#define WISHGI_PROBES_SH_DEFAULT_SUFFIX ".wishgi_probes_sh.txt"
 
 typedef struct wishGIOptions_s
 {
@@ -51,8 +53,12 @@ typedef struct wishGIOptions_s
 	qboolean loadAssociations;
 	qboolean saveAssociations;
 	qboolean dumpProbeColors;
+	qboolean dumpProbeSH;
+	int shOrder;
+	float shRegularization;
 	char associationFile[ 1024 ];
 	char probeDumpFile[ 1024 ];
+	char probeSHDumpFile[ 1024 ];
 }
 wishGIOptions_t;
 
@@ -65,7 +71,7 @@ wishGIVertexAssociation_t;
 
 static wishGIOptions_t wishGIOptions =
 {
-	qfalse, 32, 2, 8, 200000, qfalse, qfalse, qfalse, { 0 }, { 0 }
+	qfalse, 32, 2, 8, 200000, qfalse, qfalse, qfalse, qfalse, 2, 0.001f, { 0 }, { 0 }, { 0 }
 };
 
 static wishGIVertexAssociation_t *wishGIVertexAssociations = NULL;
@@ -2685,6 +2691,321 @@ static qboolean WishGI_DumpProbeColors( const char *bspFilePath ){
 	return qtrue;
 }
 
+static int WishGI_SHBasisCount( int shOrder ){
+	if ( shOrder <= 0 ) {
+		return 1;
+	}
+	if ( shOrder == 1 ) {
+		return 4;
+	}
+	if ( shOrder == 2 ) {
+		return 9;
+	}
+	return 16;
+}
+
+static void WishGI_EvaluateSHBasis( const vec3_t direction, int shOrder, float *basis ){
+	float x, y, z, xx, yy, zz;
+	int i;
+
+	for ( i = 0; i < WISHGI_MAX_SH_COEFFS; i++ )
+		basis[ i ] = 0.0f;
+
+	x = direction[ 0 ];
+	y = direction[ 1 ];
+	z = direction[ 2 ];
+	xx = x * x;
+	yy = y * y;
+	zz = z * z;
+
+	/* Real SH basis up to l=3 (common graphics convention). */
+	basis[ 0 ] = 0.2820947918f;
+	if ( shOrder < 1 ) {
+		return;
+	}
+
+	basis[ 1 ] = 0.4886025119f * y;
+	basis[ 2 ] = 0.4886025119f * z;
+	basis[ 3 ] = 0.4886025119f * x;
+	if ( shOrder < 2 ) {
+		return;
+	}
+
+	basis[ 4 ] = 1.0925484306f * x * y;
+	basis[ 5 ] = 1.0925484306f * y * z;
+	basis[ 6 ] = 0.3153915653f * ( 3.0f * zz - 1.0f );
+	basis[ 7 ] = 1.0925484306f * x * z;
+	basis[ 8 ] = 0.5462742153f * ( xx - yy );
+	if ( shOrder < 3 ) {
+		return;
+	}
+
+	basis[ 9 ] = 0.5900435899f * y * ( 3.0f * xx - yy );
+	basis[ 10 ] = 2.8906114426f * x * y * z;
+	basis[ 11 ] = 0.4570457995f * y * ( 5.0f * zz - 1.0f );
+	basis[ 12 ] = 0.3731763325f * z * ( 5.0f * zz - 3.0f );
+	basis[ 13 ] = 0.4570457995f * x * ( 5.0f * zz - 1.0f );
+	basis[ 14 ] = 1.4453057213f * z * ( xx - yy );
+	basis[ 15 ] = 0.5900435899f * x * ( xx - 3.0f * yy );
+}
+
+static qboolean WishGI_SolveLinearSystem( int size, const double *matrix, const double *rhs, double *solution ){
+	double *a, *b;
+	double pivotAbs, pivotValue, factor, temp, sum;
+	int row, col, pivotRow, swapCol;
+
+	a = safe_malloc( size * size * sizeof( *a ) );
+	b = safe_malloc( size * sizeof( *b ) );
+	memcpy( a, matrix, size * size * sizeof( *a ) );
+	memcpy( b, rhs, size * sizeof( *b ) );
+
+	for ( row = 0; row < size; row++ )
+	{
+		pivotRow = row;
+		pivotAbs = fabs( a[ row * size + row ] );
+		for ( col = row + 1; col < size; col++ )
+		{
+			temp = fabs( a[ col * size + row ] );
+			if ( temp > pivotAbs ) {
+				pivotAbs = temp;
+				pivotRow = col;
+			}
+		}
+
+		if ( pivotAbs < 1.0e-12 ) {
+			free( a );
+			free( b );
+			return qfalse;
+		}
+
+		if ( pivotRow != row ) {
+			for ( swapCol = row; swapCol < size; swapCol++ )
+			{
+				temp = a[ row * size + swapCol ];
+				a[ row * size + swapCol ] = a[ pivotRow * size + swapCol ];
+				a[ pivotRow * size + swapCol ] = temp;
+			}
+
+			temp = b[ row ];
+			b[ row ] = b[ pivotRow ];
+			b[ pivotRow ] = temp;
+		}
+
+		pivotValue = a[ row * size + row ];
+		for ( col = row + 1; col < size; col++ )
+		{
+			factor = a[ col * size + row ] / pivotValue;
+			if ( fabs( factor ) < 1.0e-20 ) {
+				continue;
+			}
+
+			a[ col * size + row ] = 0.0;
+			for ( swapCol = row + 1; swapCol < size; swapCol++ )
+				a[ col * size + swapCol ] -= factor * a[ row * size + swapCol ];
+			b[ col ] -= factor * b[ row ];
+		}
+	}
+
+	for ( row = size - 1; row >= 0; row-- )
+	{
+		sum = b[ row ];
+		for ( col = row + 1; col < size; col++ )
+			sum -= a[ row * size + col ] * solution[ col ];
+
+		if ( fabs( a[ row * size + row ] ) < 1.0e-12 ) {
+			free( a );
+			free( b );
+			return qfalse;
+		}
+
+		solution[ row ] = sum / a[ row * size + row ];
+	}
+
+	free( a );
+	free( b );
+	return qtrue;
+}
+
+static qboolean WishGI_DumpProbeSHCoefficients( const char *bspFilePath ){
+	char dumpPath[ 1024 ];
+	FILE *file;
+	double *normalMatrices, *rhsR, *rhsG, *rhsB, *sampleWeights;
+	double matrixCopy[ WISHGI_MAX_SH_COEFFS * WISHGI_MAX_SH_COEFFS ];
+	double rhsCopy[ WISHGI_MAX_SH_COEFFS ];
+	double shR[ WISHGI_MAX_SH_COEFFS ], shG[ WISHGI_MAX_SH_COEFFS ], shB[ WISHGI_MAX_SH_COEFFS ];
+	float basis[ WISHGI_MAX_SH_COEFFS ];
+	float sampleR, sampleG, sampleB;
+	float directionLength, solveLambda;
+	qboolean solveOkR, solveOkG, solveOkB;
+	int basisCount;
+	int vertexIndex, probeIndex, linkIndex, coeffA, coeffB;
+	int matrixBase, rhsBase;
+	int associatedProbe;
+	float associatedWeight;
+	int failedProbeCount;
+	vec3_t normal;
+
+	if ( !wishGIOptions.enabled || !wishGIOptions.dumpProbeSH ) {
+		return qfalse;
+	}
+	if ( wishGIVertexAssociations == NULL || wishGIProbePositions == NULL ) {
+		Sys_Printf( "WishGI: cannot dump SH coefficients without associations.\n" );
+		return qfalse;
+	}
+
+	wishGIOptions.shOrder = WishGI_ClampInt( wishGIOptions.shOrder, 0, 3 );
+	basisCount = WishGI_SHBasisCount( wishGIOptions.shOrder );
+	solveLambda = wishGIOptions.shRegularization;
+	if ( solveLambda <= 0.0f ) {
+		solveLambda = 0.001f;
+	}
+
+	if ( wishGIOptions.probeSHDumpFile[ 0 ] != '\0' ) {
+		strcpy( dumpPath, wishGIOptions.probeSHDumpFile );
+	}
+	else{
+		WishGI_DefaultPath( bspFilePath, WISHGI_PROBES_SH_DEFAULT_SUFFIX, dumpPath, sizeof( dumpPath ) );
+	}
+
+	normalMatrices = safe_malloc( wishGIActualProbeCount * basisCount * basisCount * sizeof( *normalMatrices ) );
+	rhsR = safe_malloc( wishGIActualProbeCount * basisCount * sizeof( *rhsR ) );
+	rhsG = safe_malloc( wishGIActualProbeCount * basisCount * sizeof( *rhsG ) );
+	rhsB = safe_malloc( wishGIActualProbeCount * basisCount * sizeof( *rhsB ) );
+	sampleWeights = safe_malloc( wishGIActualProbeCount * sizeof( *sampleWeights ) );
+	memset( normalMatrices, 0, wishGIActualProbeCount * basisCount * basisCount * sizeof( *normalMatrices ) );
+	memset( rhsR, 0, wishGIActualProbeCount * basisCount * sizeof( *rhsR ) );
+	memset( rhsG, 0, wishGIActualProbeCount * basisCount * sizeof( *rhsG ) );
+	memset( rhsB, 0, wishGIActualProbeCount * basisCount * sizeof( *rhsB ) );
+	memset( sampleWeights, 0, wishGIActualProbeCount * sizeof( *sampleWeights ) );
+
+	for ( vertexIndex = 0; vertexIndex < numBSPDrawVerts; vertexIndex++ )
+	{
+		VectorCopy( yDrawVerts[ vertexIndex ].normal, normal );
+		directionLength = VectorNormalize( normal, normal );
+		if ( directionLength <= 1.0e-6f ) {
+			continue;
+		}
+
+		WishGI_EvaluateSHBasis( normal, wishGIOptions.shOrder, basis );
+		sampleR = yDrawVerts[ vertexIndex ].color[ 0 ][ 0 ] / 255.0f;
+		sampleG = yDrawVerts[ vertexIndex ].color[ 0 ][ 1 ] / 255.0f;
+		sampleB = yDrawVerts[ vertexIndex ].color[ 0 ][ 2 ] / 255.0f;
+
+		for ( linkIndex = 0; linkIndex < wishGIActualLinksPerVertex; linkIndex++ )
+		{
+			associatedProbe = wishGIVertexAssociations[ vertexIndex ].probeIndex[ linkIndex ];
+			associatedWeight = wishGIVertexAssociations[ vertexIndex ].weights[ linkIndex ];
+			if ( associatedProbe < 0 || associatedProbe >= wishGIActualProbeCount || associatedWeight <= 0.0f ) {
+				continue;
+			}
+
+			matrixBase = associatedProbe * basisCount * basisCount;
+			rhsBase = associatedProbe * basisCount;
+			sampleWeights[ associatedProbe ] += associatedWeight;
+
+			for ( coeffA = 0; coeffA < basisCount; coeffA++ )
+			{
+				rhsR[ rhsBase + coeffA ] += associatedWeight * basis[ coeffA ] * sampleR;
+				rhsG[ rhsBase + coeffA ] += associatedWeight * basis[ coeffA ] * sampleG;
+				rhsB[ rhsBase + coeffA ] += associatedWeight * basis[ coeffA ] * sampleB;
+
+				for ( coeffB = 0; coeffB < basisCount; coeffB++ )
+					normalMatrices[ matrixBase + coeffA * basisCount + coeffB ] += associatedWeight * basis[ coeffA ] * basis[ coeffB ];
+			}
+		}
+	}
+
+	file = fopen( dumpPath, "w" );
+	if ( file == NULL ) {
+		Sys_Printf( "WARNING: WishGI failed to open %s for SH coefficient output\n", dumpPath );
+		free( normalMatrices );
+		free( rhsR );
+		free( rhsG );
+		free( rhsB );
+		free( sampleWeights );
+		return qfalse;
+	}
+
+	fprintf( file, "wishgi_probe_sh_v1 %d %d %d\n", wishGIActualProbeCount, wishGIOptions.shOrder, basisCount );
+	fprintf( file, "# probe x y z sampleWeight then (r g b) triplets for each SH coefficient\n" );
+
+	failedProbeCount = 0;
+	for ( probeIndex = 0; probeIndex < wishGIActualProbeCount; probeIndex++ )
+	{
+		matrixBase = probeIndex * basisCount * basisCount;
+		rhsBase = probeIndex * basisCount;
+
+		for ( coeffA = 0; coeffA < basisCount; coeffA++ )
+			for ( coeffB = 0; coeffB < basisCount; coeffB++ )
+				matrixCopy[ coeffA * basisCount + coeffB ] = normalMatrices[ matrixBase + coeffA * basisCount + coeffB ];
+
+		for ( coeffA = 0; coeffA < basisCount; coeffA++ )
+			matrixCopy[ coeffA * basisCount + coeffA ] += solveLambda * ( sampleWeights[ probeIndex ] + 1.0 );
+
+		for ( coeffA = 0; coeffA < basisCount; coeffA++ ) {
+			rhsCopy[ coeffA ] = rhsR[ rhsBase + coeffA ];
+			shR[ coeffA ] = 0.0;
+		}
+		solveOkR = WishGI_SolveLinearSystem( basisCount, matrixCopy, rhsCopy, shR );
+
+		for ( coeffA = 0; coeffA < basisCount; coeffA++ )
+			for ( coeffB = 0; coeffB < basisCount; coeffB++ )
+				matrixCopy[ coeffA * basisCount + coeffB ] = normalMatrices[ matrixBase + coeffA * basisCount + coeffB ];
+		for ( coeffA = 0; coeffA < basisCount; coeffA++ )
+			matrixCopy[ coeffA * basisCount + coeffA ] += solveLambda * ( sampleWeights[ probeIndex ] + 1.0 );
+		for ( coeffA = 0; coeffA < basisCount; coeffA++ ) {
+			rhsCopy[ coeffA ] = rhsG[ rhsBase + coeffA ];
+			shG[ coeffA ] = 0.0;
+		}
+		solveOkG = WishGI_SolveLinearSystem( basisCount, matrixCopy, rhsCopy, shG );
+
+		for ( coeffA = 0; coeffA < basisCount; coeffA++ )
+			for ( coeffB = 0; coeffB < basisCount; coeffB++ )
+				matrixCopy[ coeffA * basisCount + coeffB ] = normalMatrices[ matrixBase + coeffA * basisCount + coeffB ];
+		for ( coeffA = 0; coeffA < basisCount; coeffA++ )
+			matrixCopy[ coeffA * basisCount + coeffA ] += solveLambda * ( sampleWeights[ probeIndex ] + 1.0 );
+		for ( coeffA = 0; coeffA < basisCount; coeffA++ ) {
+			rhsCopy[ coeffA ] = rhsB[ rhsBase + coeffA ];
+			shB[ coeffA ] = 0.0;
+		}
+		solveOkB = WishGI_SolveLinearSystem( basisCount, matrixCopy, rhsCopy, shB );
+
+		if ( !solveOkR || !solveOkG || !solveOkB ) {
+			failedProbeCount++;
+			for ( coeffA = 0; coeffA < basisCount; coeffA++ ) {
+				shR[ coeffA ] = 0.0;
+				shG[ coeffA ] = 0.0;
+				shB[ coeffA ] = 0.0;
+			}
+		}
+
+		fprintf( file, "%d %.9g %.9g %.9g %.9g",
+				 probeIndex,
+				 wishGIProbePositions[ probeIndex ][ 0 ],
+				 wishGIProbePositions[ probeIndex ][ 1 ],
+				 wishGIProbePositions[ probeIndex ][ 2 ],
+				 (float) sampleWeights[ probeIndex ] );
+
+		for ( coeffA = 0; coeffA < basisCount; coeffA++ )
+			fprintf( file, " %.9g %.9g %.9g", (float) shR[ coeffA ], (float) shG[ coeffA ], (float) shB[ coeffA ] );
+		fprintf( file, "\n" );
+	}
+
+	fclose( file );
+	free( normalMatrices );
+	free( rhsR );
+	free( rhsG );
+	free( rhsB );
+	free( sampleWeights );
+
+	Sys_Printf( "WishGI: wrote SH coefficient fit dump to %s (%d coefficient set(s), order %d)\n",
+				dumpPath, wishGIActualProbeCount, wishGIOptions.shOrder );
+	if ( failedProbeCount > 0 ) {
+		Sys_Printf( "WishGI: SH fit fallback to zero for %d probe(s) due to degenerate solves.\n", failedProbeCount );
+	}
+	return qtrue;
+}
+
 static qboolean ParseLightmapFormatString( const char *value ){
 	if ( value == NULL || value[ 0 ] == '\0' ) {
 		return qfalse;
@@ -3197,6 +3518,34 @@ int LightMain( int argc, char **argv ){
 			wishGIOptions.probeDumpFile[ 0 ] = '\0';
 			Sys_Printf( "WishGI probe color dump enabled (default output path)\n" );
 		}
+		else if ( !strcmp( argv[ i ], "-wishgi-dumpsh" ) ) {
+			wishGIOptions.enabled = qtrue;
+			wishGIOptions.dumpProbeSH = qtrue;
+			strcpy( wishGIOptions.probeSHDumpFile, argv[ i + 1 ] );
+			Sys_Printf( "WishGI SH coefficient dump path set to %s\n", wishGIOptions.probeSHDumpFile );
+			i++;
+		}
+		else if ( !strcmp( argv[ i ], "-wishgi-dumpsh-default" ) ) {
+			wishGIOptions.enabled = qtrue;
+			wishGIOptions.dumpProbeSH = qtrue;
+			wishGIOptions.probeSHDumpFile[ 0 ] = '\0';
+			Sys_Printf( "WishGI SH coefficient dump enabled (default output path)\n" );
+		}
+		else if ( !strcmp( argv[ i ], "-wishgi-shorder" ) ) {
+			wishGIOptions.enabled = qtrue;
+			wishGIOptions.shOrder = WishGI_ClampInt( atoi( argv[ i + 1 ] ), 0, 3 );
+			Sys_Printf( "WishGI SH order set to %d\n", wishGIOptions.shOrder );
+			i++;
+		}
+		else if ( !strcmp( argv[ i ], "-wishgi-shlambda" ) ) {
+			wishGIOptions.enabled = qtrue;
+			wishGIOptions.shRegularization = atof( argv[ i + 1 ] );
+			if ( wishGIOptions.shRegularization <= 0.0f ) {
+				wishGIOptions.shRegularization = 0.001f;
+			}
+			Sys_Printf( "WishGI SH fit regularization set to %.6f\n", wishGIOptions.shRegularization );
+			i++;
+		}
 		else if ( !strcmp( argv[ i ], "-ibl" ) ) {
 			floodlighty = qtrue;
 			Sys_Printf( "IBL-style ambient floodlight enabled\n" );
@@ -3673,8 +4022,9 @@ int LightMain( int argc, char **argv ){
 				( lightmapFileFormat == LIGHTMAP_FILEFORMAT_HDR ) ? "hdr" :
 				( lightmapFileFormat == LIGHTMAP_FILEFORMAT_EXR ) ? "exr" : "tga" );
 	if ( wishGIOptions.enabled ) {
-		Sys_Printf( "WishGI experimental mode: enabled (probes %d, links %d, refinement %d)\n",
-					wishGIOptions.probeCount, wishGIOptions.linksPerVertex, wishGIOptions.refinementIterations );
+		Sys_Printf( "WishGI experimental mode: enabled (probes %d, links %d, refinement %d, SH order %d, SH lambda %.6f)\n",
+					wishGIOptions.probeCount, wishGIOptions.linksPerVertex, wishGIOptions.refinementIterations,
+					wishGIOptions.shOrder, wishGIOptions.shRegularization );
 	}
 	else{
 		Sys_Printf( "WishGI experimental mode: disabled\n" );
@@ -3742,6 +4092,7 @@ int LightMain( int argc, char **argv ){
 
 	/* Optional debug dump: per-probe RGB fit from baked vertex lighting. */
 	WishGI_DumpProbeColors( BSPFilePath );
+	WishGI_DumpProbeSHCoefficients( BSPFilePath );
 
 	/* ydnar: store off lightmaps */
 	StoreSurfaceLightmaps( fastAllocate );

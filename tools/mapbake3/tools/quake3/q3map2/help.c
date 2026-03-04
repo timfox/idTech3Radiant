@@ -255,8 +255,12 @@ void HelpLight()
 		{"-wishgi-saveassoc", "Save generated WishGI association cache"},
 		{"-wishgi-dumpprobes <file>", "Dump fitted probe colors after bake"},
 		{"-wishgi-dumpprobes-default", "Dump fitted probe colors to default path"},
+		{"-wishgi-dumpsh <file>", "Dump fitted per-probe SH coefficients after bake"},
+		{"-wishgi-dumpsh-default", "Dump fitted per-probe SH coefficients to default path"},
+		{"-wishgi-shorder <N>", "SH order for fitting output (0..3, default 2)"},
+		{"-wishgi-shlambda <F>", "Regularization term for SH least-squares fit"},
 		{"-wolf", "Use linear falloff curve by default (like W:ET)"},
-		};
+			};
 
 	HelpOptions("Light Stage", 0, 80, light, sizeof(light)/sizeof(struct HelpOption));
 }
