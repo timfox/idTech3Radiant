@@ -1,0 +1,36 @@
+MapBake3 WishGI Notes
+=====================
+
+Purpose
+-------
+Reduce confusion between tool names and source paths:
+
+- The WishGI experimental flags are implemented in `mapbake3`.
+- The source files live in `tools/mapbake3/tools/quake3/q3map2/` for legacy reasons.
+- This does NOT mean the top-level `tools/quake3/q3map2` binary got the feature.
+
+Where To Use It
+---------------
+Use build menu entries prefixed with `MapBake3 WishGI ...` in:
+
+- `games/NRCPack/xonotic.game/default_build_menu.xml`
+
+Quick Start
+-----------
+Use these optional vars in the build menu:
+
+- `WishGIExperimentalFlags`
+- `WishGIFlagsLite` / `WishGIFlagsQuality` / `WishGIFlagsUltraLite`
+- `WishGIShOutputFlags`
+
+Example SH output flags:
+
+- `-wishgi-dumpsh-default -wishgi-shorder 2 -wishgi-shlambda 0.001`
+
+Expected Output Files
+---------------------
+For `mymap.bsp`, optional WishGI outputs include:
+
+- `mymap.wishgi_assoc.txt`
+- `mymap.wishgi_probes.txt`
+- `mymap.wishgi_probes_sh.txt`

@@ -36,6 +36,12 @@
 /* dependencies */
 #include "q3map2.h"
 
+/*
+   NOTE:
+   In the mapbake3 toolchain, source files are stored in a legacy "q3map2"
+   path for historical reasons. Changes in this file affect mapbake3.
+ */
+
 #define WISHGI_MAX_LINKS             8
 #define WISHGI_MAX_SH_COEFFS         16
 #define WISHGI_ASSOC_MAGIC           "wishgi_assoc_v1"
