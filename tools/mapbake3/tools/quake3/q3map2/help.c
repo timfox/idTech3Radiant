@@ -244,8 +244,19 @@ void HelpLight()
 		{"-thresh <F>", "Triangle subdivision threshold"},
 		{"-trianglecheck", "Broken check that should ensure luxels apply to the right triangle"},
 		{"-trisoup", "Convert brush faces to triangle soup"},
+		{"-wishgi", "Enable experimental WishGI-style probe association baking"},
+		{"-nowishgi", "Disable WishGI experimental path"},
+		{"-wishgi-probes <N>", "WishGI probe count (inverse distribution centers)"},
+		{"-wishgi-links <N>", "WishGI per-vertex probe links (1-8)"},
+		{"-wishgi-iterations <N>", "WishGI inverse distribution refinement iterations"},
+		{"-wishgi-maxsamples <N>", "WishGI max sampled vertices for distribution optimization"},
+		{"-wishgi-assoc <file>", "WishGI association cache path"},
+		{"-wishgi-loadassoc", "Load WishGI association cache if present"},
+		{"-wishgi-saveassoc", "Save generated WishGI association cache"},
+		{"-wishgi-dumpprobes <file>", "Dump fitted probe colors after bake"},
+		{"-wishgi-dumpprobes-default", "Dump fitted probe colors to default path"},
 		{"-wolf", "Use linear falloff curve by default (like W:ET)"},
-	};
+		};
 
 	HelpOptions("Light Stage", 0, 80, light, sizeof(light)/sizeof(struct HelpOption));
 }

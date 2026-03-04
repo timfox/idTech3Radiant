@@ -36,6 +36,43 @@
 /* dependencies */
 #include "q3map2.h"
 
+#define WISHGI_MAX_LINKS             8
+#define WISHGI_ASSOC_MAGIC           "wishgi_assoc_v1"
+#define WISHGI_ASSOC_DEFAULT_SUFFIX  ".wishgi_assoc.txt"
+#define WISHGI_PROBES_DEFAULT_SUFFIX ".wishgi_probes.txt"
+
+typedef struct wishGIOptions_s
+{
+	qboolean enabled;
+	int probeCount;
+	int linksPerVertex;
+	int refinementIterations;
+	int maxSampleVerts;
+	qboolean loadAssociations;
+	qboolean saveAssociations;
+	qboolean dumpProbeColors;
+	char associationFile[ 1024 ];
+	char probeDumpFile[ 1024 ];
+}
+wishGIOptions_t;
+
+typedef struct wishGIVertexAssociation_s
+{
+	unsigned short probeIndex[ WISHGI_MAX_LINKS ];
+	float weights[ WISHGI_MAX_LINKS ];
+}
+wishGIVertexAssociation_t;
+
+static wishGIOptions_t wishGIOptions =
+{
+	qfalse, 32, 2, 8, 200000, qfalse, qfalse, qfalse, { 0 }, { 0 }
+};
+
+static wishGIVertexAssociation_t *wishGIVertexAssociations = NULL;
+static vec3_t *wishGIProbePositions = NULL;
+static int wishGIActualProbeCount = 0;
+static int wishGIActualLinksPerVertex = 0;
+
 
 
 /*
@@ -2106,6 +2143,548 @@ void LightWorld( const char *BSPFilePath, qboolean fastAllocate ){
    main routine for light processing
  */
 
+static int WishGI_ClampInt( int value, int minValue, int maxValue ){
+	if ( value < minValue ) {
+		return minValue;
+	}
+	if ( value > maxValue ) {
+		return maxValue;
+	}
+	return value;
+}
+
+static float WishGI_DistanceSquared( const vec3_t a, const vec3_t b ){
+	float dx, dy, dz;
+	dx = a[ 0 ] - b[ 0 ];
+	dy = a[ 1 ] - b[ 1 ];
+	dz = a[ 2 ] - b[ 2 ];
+	return ( dx * dx ) + ( dy * dy ) + ( dz * dz );
+}
+
+static int WishGI_SampleVertexIndex( int sampleIndex, int sampleCount, int totalVerts ){
+	double t;
+
+	if ( totalVerts <= 1 || sampleCount <= 1 ) {
+		return 0;
+	}
+
+	t = (double) sampleIndex / (double) ( sampleCount - 1 );
+	return (int) ( t * ( totalVerts - 1 ) );
+}
+
+static void WishGI_ClearAssociations( void ){
+	if ( wishGIVertexAssociations != NULL ) {
+		free( wishGIVertexAssociations );
+		wishGIVertexAssociations = NULL;
+	}
+
+	if ( wishGIProbePositions != NULL ) {
+		free( wishGIProbePositions );
+		wishGIProbePositions = NULL;
+	}
+
+	wishGIActualProbeCount = 0;
+	wishGIActualLinksPerVertex = 0;
+}
+
+static void WishGI_DefaultPath( const char *bspFilePath, const char *suffix, char *outPath, int outPathSize ){
+	int length;
+
+	if ( bspFilePath == NULL || suffix == NULL || outPath == NULL || outPathSize <= 0 ) {
+		return;
+	}
+
+	if ( (int) strlen( bspFilePath ) >= outPathSize ) {
+		Error( "WishGI path is too long: %s", bspFilePath );
+	}
+
+	strcpy( outPath, bspFilePath );
+	StripExtension( outPath );
+	length = strlen( outPath );
+	if ( ( length + strlen( suffix ) + 1 ) >= outPathSize ) {
+		Error( "WishGI path is too long after suffix append: %s", outPath );
+	}
+	strcat( outPath, suffix );
+}
+
+static int WishGI_FindNearestProbe( const vec3_t point, int probeCount, vec3_t *probePositions ){
+	int probeIndex, nearestProbe;
+	float distanceSquared, bestDistanceSquared;
+
+	nearestProbe = 0;
+	bestDistanceSquared = 9.99999968e+37f;
+
+	for ( probeIndex = 0; probeIndex < probeCount; probeIndex++ )
+	{
+		distanceSquared = WishGI_DistanceSquared( point, probePositions[ probeIndex ] );
+		if ( distanceSquared < bestDistanceSquared ) {
+			bestDistanceSquared = distanceSquared;
+			nearestProbe = probeIndex;
+		}
+	}
+
+	return nearestProbe;
+}
+
+static void WishGI_InitializeProbePositions( int probeCount, vec3_t *probePositions ){
+	int probeIndex, vertIndex;
+
+	for ( probeIndex = 0; probeIndex < probeCount; probeIndex++ )
+	{
+		vertIndex = WishGI_SampleVertexIndex( probeIndex, probeCount, numBSPDrawVerts );
+		VectorCopy( yDrawVerts[ vertIndex ].xyz, probePositions[ probeIndex ] );
+	}
+}
+
+static void WishGI_RefineProbePositions( int probeCount, vec3_t *probePositions ){
+	double *sumX, *sumY, *sumZ;
+	int *sampleCountPerProbe;
+	int sampleCount;
+	int iteration, sampleIndex, vertexIndex, probeIndex, nearestProbe, fallbackSampleIndex;
+	float movement, dx, dy, dz;
+	vec3_t updatedPosition;
+
+	if ( probeCount <= 0 ) {
+		return;
+	}
+
+	sampleCount = numBSPDrawVerts;
+	if ( wishGIOptions.maxSampleVerts > 0 && sampleCount > wishGIOptions.maxSampleVerts ) {
+		sampleCount = wishGIOptions.maxSampleVerts;
+	}
+	sampleCount = WishGI_ClampInt( sampleCount, 1, numBSPDrawVerts );
+
+	sumX = safe_malloc( probeCount * sizeof( *sumX ) );
+	sumY = safe_malloc( probeCount * sizeof( *sumY ) );
+	sumZ = safe_malloc( probeCount * sizeof( *sumZ ) );
+	sampleCountPerProbe = safe_malloc( probeCount * sizeof( *sampleCountPerProbe ) );
+
+	for ( iteration = 0; iteration < wishGIOptions.refinementIterations; iteration++ )
+	{
+		memset( sumX, 0, probeCount * sizeof( *sumX ) );
+		memset( sumY, 0, probeCount * sizeof( *sumY ) );
+		memset( sumZ, 0, probeCount * sizeof( *sumZ ) );
+		memset( sampleCountPerProbe, 0, probeCount * sizeof( *sampleCountPerProbe ) );
+
+		for ( sampleIndex = 0; sampleIndex < sampleCount; sampleIndex++ )
+		{
+			vertexIndex = WishGI_SampleVertexIndex( sampleIndex, sampleCount, numBSPDrawVerts );
+			nearestProbe = WishGI_FindNearestProbe( yDrawVerts[ vertexIndex ].xyz, probeCount, probePositions );
+			sumX[ nearestProbe ] += yDrawVerts[ vertexIndex ].xyz[ 0 ];
+			sumY[ nearestProbe ] += yDrawVerts[ vertexIndex ].xyz[ 1 ];
+			sumZ[ nearestProbe ] += yDrawVerts[ vertexIndex ].xyz[ 2 ];
+			sampleCountPerProbe[ nearestProbe ]++;
+		}
+
+		movement = 0.0f;
+		for ( probeIndex = 0; probeIndex < probeCount; probeIndex++ )
+		{
+			if ( sampleCountPerProbe[ probeIndex ] > 0 ) {
+				updatedPosition[ 0 ] = (float) ( sumX[ probeIndex ] / sampleCountPerProbe[ probeIndex ] );
+				updatedPosition[ 1 ] = (float) ( sumY[ probeIndex ] / sampleCountPerProbe[ probeIndex ] );
+				updatedPosition[ 2 ] = (float) ( sumZ[ probeIndex ] / sampleCountPerProbe[ probeIndex ] );
+			}
+			else
+			{
+				/* Keep unreferenced probes alive by re-seeding from a deterministic sample. */
+				fallbackSampleIndex = ( probeIndex * 104729 + iteration * 1543 ) % sampleCount;
+				vertexIndex = WishGI_SampleVertexIndex( fallbackSampleIndex, sampleCount, numBSPDrawVerts );
+				VectorCopy( yDrawVerts[ vertexIndex ].xyz, updatedPosition );
+			}
+
+			dx = updatedPosition[ 0 ] - probePositions[ probeIndex ][ 0 ];
+			dy = updatedPosition[ 1 ] - probePositions[ probeIndex ][ 1 ];
+			dz = updatedPosition[ 2 ] - probePositions[ probeIndex ][ 2 ];
+			movement += sqrt( ( dx * dx ) + ( dy * dy ) + ( dz * dz ) );
+
+			VectorCopy( updatedPosition, probePositions[ probeIndex ] );
+		}
+
+		Sys_Printf( "WishGI: inverse probe refinement %d/%d movement %.3f\n",
+					iteration + 1, wishGIOptions.refinementIterations, movement );
+	}
+
+	free( sumX );
+	free( sumY );
+	free( sumZ );
+	free( sampleCountPerProbe );
+}
+
+static void WishGI_BuildVertexAssociations( int linksPerVertex ){
+	int vertexIndex, probeIndex, linkIndex, insertIndex;
+	float bestDistances[ WISHGI_MAX_LINKS ];
+	int bestProbeIndices[ WISHGI_MAX_LINKS ];
+	float distanceSquared, weightSum, nearestDistance;
+	double averageNearestDistance;
+	float inverseDistance;
+
+	if ( wishGIVertexAssociations == NULL || wishGIProbePositions == NULL || wishGIActualProbeCount <= 0 ) {
+		return;
+	}
+
+	averageNearestDistance = 0.0;
+	for ( vertexIndex = 0; vertexIndex < numBSPDrawVerts; vertexIndex++ )
+	{
+		for ( linkIndex = 0; linkIndex < linksPerVertex; linkIndex++ )
+		{
+			bestDistances[ linkIndex ] = 9.99999968e+37f;
+			bestProbeIndices[ linkIndex ] = 0;
+		}
+
+		for ( probeIndex = 0; probeIndex < wishGIActualProbeCount; probeIndex++ )
+		{
+			distanceSquared = WishGI_DistanceSquared( yDrawVerts[ vertexIndex ].xyz, wishGIProbePositions[ probeIndex ] );
+			if ( distanceSquared >= bestDistances[ linksPerVertex - 1 ] ) {
+				continue;
+			}
+
+			insertIndex = linksPerVertex - 1;
+			while ( insertIndex > 0 && distanceSquared < bestDistances[ insertIndex - 1 ] )
+			{
+				bestDistances[ insertIndex ] = bestDistances[ insertIndex - 1 ];
+				bestProbeIndices[ insertIndex ] = bestProbeIndices[ insertIndex - 1 ];
+				insertIndex--;
+			}
+
+			bestDistances[ insertIndex ] = distanceSquared;
+			bestProbeIndices[ insertIndex ] = probeIndex;
+		}
+
+		nearestDistance = sqrt( bestDistances[ 0 ] );
+		averageNearestDistance += nearestDistance;
+
+		if ( bestDistances[ 0 ] <= 1.0e-6f ) {
+			wishGIVertexAssociations[ vertexIndex ].probeIndex[ 0 ] = bestProbeIndices[ 0 ];
+			wishGIVertexAssociations[ vertexIndex ].weights[ 0 ] = 1.0f;
+			for ( linkIndex = 1; linkIndex < WISHGI_MAX_LINKS; linkIndex++ )
+			{
+				wishGIVertexAssociations[ vertexIndex ].probeIndex[ linkIndex ] = bestProbeIndices[ 0 ];
+				wishGIVertexAssociations[ vertexIndex ].weights[ linkIndex ] = 0.0f;
+			}
+			continue;
+		}
+
+		weightSum = 0.0f;
+		for ( linkIndex = 0; linkIndex < linksPerVertex; linkIndex++ )
+		{
+			inverseDistance = 1.0f / ( sqrt( bestDistances[ linkIndex ] ) + 1.0e-6f );
+			wishGIVertexAssociations[ vertexIndex ].probeIndex[ linkIndex ] = bestProbeIndices[ linkIndex ];
+			wishGIVertexAssociations[ vertexIndex ].weights[ linkIndex ] = inverseDistance;
+			weightSum += inverseDistance;
+		}
+
+		if ( weightSum > 1.0e-6f ) {
+			for ( linkIndex = 0; linkIndex < linksPerVertex; linkIndex++ )
+				wishGIVertexAssociations[ vertexIndex ].weights[ linkIndex ] /= weightSum;
+		}
+		else{
+			wishGIVertexAssociations[ vertexIndex ].weights[ 0 ] = 1.0f;
+			for ( linkIndex = 1; linkIndex < linksPerVertex; linkIndex++ )
+				wishGIVertexAssociations[ vertexIndex ].weights[ linkIndex ] = 0.0f;
+		}
+
+		for ( linkIndex = linksPerVertex; linkIndex < WISHGI_MAX_LINKS; linkIndex++ )
+		{
+			wishGIVertexAssociations[ vertexIndex ].probeIndex[ linkIndex ] = wishGIVertexAssociations[ vertexIndex ].probeIndex[ 0 ];
+			wishGIVertexAssociations[ vertexIndex ].weights[ linkIndex ] = 0.0f;
+		}
+	}
+
+	averageNearestDistance /= numBSPDrawVerts;
+	Sys_Printf( "WishGI: inverse probe distribution complete (avg nearest distance %.3f)\n", averageNearestDistance );
+}
+
+static qboolean WishGI_SaveAssociations( const char *associationPath ){
+	FILE *file;
+	int probeIndex, vertexIndex, linkIndex;
+
+	if ( associationPath == NULL || associationPath[ 0 ] == '\0' ) {
+		return qfalse;
+	}
+	if ( wishGIVertexAssociations == NULL || wishGIProbePositions == NULL ) {
+		return qfalse;
+	}
+
+	file = fopen( associationPath, "w" );
+	if ( file == NULL ) {
+		Sys_Printf( "WARNING: WishGI failed to open %s for writing\n", associationPath );
+		return qfalse;
+	}
+
+	fprintf( file, "%s %d %d %d\n", WISHGI_ASSOC_MAGIC, numBSPDrawVerts, wishGIActualProbeCount, wishGIActualLinksPerVertex );
+	for ( probeIndex = 0; probeIndex < wishGIActualProbeCount; probeIndex++ )
+		fprintf( file, "%.9g %.9g %.9g\n",
+				 wishGIProbePositions[ probeIndex ][ 0 ],
+				 wishGIProbePositions[ probeIndex ][ 1 ],
+				 wishGIProbePositions[ probeIndex ][ 2 ] );
+
+	for ( vertexIndex = 0; vertexIndex < numBSPDrawVerts; vertexIndex++ )
+	{
+		for ( linkIndex = 0; linkIndex < wishGIActualLinksPerVertex; linkIndex++ )
+			fprintf( file, "%hu %.9g ",
+					 wishGIVertexAssociations[ vertexIndex ].probeIndex[ linkIndex ],
+					 wishGIVertexAssociations[ vertexIndex ].weights[ linkIndex ] );
+		fprintf( file, "\n" );
+	}
+
+	fclose( file );
+	Sys_Printf( "WishGI: wrote probe association data to %s\n", associationPath );
+	return qtrue;
+}
+
+static qboolean WishGI_LoadAssociations( const char *associationPath ){
+	FILE *file;
+	char magic[ 64 ];
+	int storedVertCount, storedProbeCount, storedLinksPerVertex;
+	int probeIndex, vertexIndex, linkIndex;
+	int parsedProbeIndex;
+	float parsedWeight;
+	float weightSum;
+
+	if ( associationPath == NULL || associationPath[ 0 ] == '\0' ) {
+		return qfalse;
+	}
+
+	file = fopen( associationPath, "r" );
+	if ( file == NULL ) {
+		Sys_Printf( "WishGI: association file not found: %s\n", associationPath );
+		return qfalse;
+	}
+
+	if ( fscanf( file, "%63s %d %d %d", magic, &storedVertCount, &storedProbeCount, &storedLinksPerVertex ) != 4 ) {
+		Sys_Printf( "WARNING: WishGI invalid association header in %s\n", associationPath );
+		fclose( file );
+		return qfalse;
+	}
+
+	if ( strcmp( magic, WISHGI_ASSOC_MAGIC ) != 0 ) {
+		Sys_Printf( "WARNING: WishGI unknown association format in %s\n", associationPath );
+		fclose( file );
+		return qfalse;
+	}
+	if ( storedVertCount != numBSPDrawVerts ) {
+		Sys_Printf( "WARNING: WishGI association vertex count mismatch (%d in file, %d in map)\n",
+					storedVertCount, numBSPDrawVerts );
+		fclose( file );
+		return qfalse;
+	}
+	if ( storedProbeCount <= 0 || storedLinksPerVertex <= 0 || storedLinksPerVertex > WISHGI_MAX_LINKS ) {
+		Sys_Printf( "WARNING: WishGI invalid association dimensions in %s\n", associationPath );
+		fclose( file );
+		return qfalse;
+	}
+
+	WishGI_ClearAssociations();
+	wishGIActualProbeCount = storedProbeCount;
+	wishGIActualLinksPerVertex = storedLinksPerVertex;
+	wishGIProbePositions = safe_malloc( wishGIActualProbeCount * sizeof( *wishGIProbePositions ) );
+	wishGIVertexAssociations = safe_malloc( numBSPDrawVerts * sizeof( *wishGIVertexAssociations ) );
+	memset( wishGIVertexAssociations, 0, numBSPDrawVerts * sizeof( *wishGIVertexAssociations ) );
+
+	for ( probeIndex = 0; probeIndex < wishGIActualProbeCount; probeIndex++ )
+	{
+		if ( fscanf( file, "%f %f %f",
+					 &wishGIProbePositions[ probeIndex ][ 0 ],
+					 &wishGIProbePositions[ probeIndex ][ 1 ],
+					 &wishGIProbePositions[ probeIndex ][ 2 ] ) != 3 ) {
+			Sys_Printf( "WARNING: WishGI failed to parse probe position %d in %s\n", probeIndex, associationPath );
+			fclose( file );
+			WishGI_ClearAssociations();
+			return qfalse;
+		}
+	}
+
+	for ( vertexIndex = 0; vertexIndex < numBSPDrawVerts; vertexIndex++ )
+	{
+		weightSum = 0.0f;
+		for ( linkIndex = 0; linkIndex < wishGIActualLinksPerVertex; linkIndex++ )
+		{
+			if ( fscanf( file, "%d %f", &parsedProbeIndex, &parsedWeight ) != 2 ) {
+				Sys_Printf( "WARNING: WishGI failed to parse association for vertex %d in %s\n", vertexIndex, associationPath );
+				fclose( file );
+				WishGI_ClearAssociations();
+				return qfalse;
+			}
+
+			parsedProbeIndex = WishGI_ClampInt( parsedProbeIndex, 0, wishGIActualProbeCount - 1 );
+			if ( parsedWeight < 0.0f ) {
+				parsedWeight = 0.0f;
+			}
+
+			wishGIVertexAssociations[ vertexIndex ].probeIndex[ linkIndex ] = parsedProbeIndex;
+			wishGIVertexAssociations[ vertexIndex ].weights[ linkIndex ] = parsedWeight;
+			weightSum += parsedWeight;
+		}
+
+		if ( weightSum > 1.0e-6f ) {
+			for ( linkIndex = 0; linkIndex < wishGIActualLinksPerVertex; linkIndex++ )
+				wishGIVertexAssociations[ vertexIndex ].weights[ linkIndex ] /= weightSum;
+		}
+		else{
+			wishGIVertexAssociations[ vertexIndex ].weights[ 0 ] = 1.0f;
+			for ( linkIndex = 1; linkIndex < wishGIActualLinksPerVertex; linkIndex++ )
+				wishGIVertexAssociations[ vertexIndex ].weights[ linkIndex ] = 0.0f;
+		}
+
+		for ( linkIndex = wishGIActualLinksPerVertex; linkIndex < WISHGI_MAX_LINKS; linkIndex++ )
+		{
+			wishGIVertexAssociations[ vertexIndex ].probeIndex[ linkIndex ] = wishGIVertexAssociations[ vertexIndex ].probeIndex[ 0 ];
+			wishGIVertexAssociations[ vertexIndex ].weights[ linkIndex ] = 0.0f;
+		}
+	}
+
+	fclose( file );
+	Sys_Printf( "WishGI: loaded probe association data from %s\n", associationPath );
+	return qtrue;
+}
+
+static void WishGI_PrepareAssociations( const char *bspFilePath ){
+	char associationPath[ 1024 ];
+	int probeCount, linksPerVertex;
+
+	if ( !wishGIOptions.enabled ) {
+		return;
+	}
+
+	if ( numBSPDrawVerts <= 0 || yDrawVerts == NULL ) {
+		Sys_Printf( "WishGI: no draw vertices available, skipping.\n" );
+		return;
+	}
+
+	if ( wishGIOptions.associationFile[ 0 ] != '\0' ) {
+		strcpy( associationPath, wishGIOptions.associationFile );
+	}
+	else{
+		WishGI_DefaultPath( bspFilePath, WISHGI_ASSOC_DEFAULT_SUFFIX, associationPath, sizeof( associationPath ) );
+	}
+
+	if ( wishGIOptions.loadAssociations && WishGI_LoadAssociations( associationPath ) ) {
+		return;
+	}
+
+	probeCount = WishGI_ClampInt( wishGIOptions.probeCount, 1, numBSPDrawVerts );
+	linksPerVertex = WishGI_ClampInt( wishGIOptions.linksPerVertex, 1, WISHGI_MAX_LINKS );
+	if ( linksPerVertex > probeCount ) {
+		linksPerVertex = probeCount;
+	}
+
+	WishGI_ClearAssociations();
+	wishGIActualProbeCount = probeCount;
+	wishGIActualLinksPerVertex = linksPerVertex;
+	wishGIProbePositions = safe_malloc( wishGIActualProbeCount * sizeof( *wishGIProbePositions ) );
+	wishGIVertexAssociations = safe_malloc( numBSPDrawVerts * sizeof( *wishGIVertexAssociations ) );
+	memset( wishGIVertexAssociations, 0, numBSPDrawVerts * sizeof( *wishGIVertexAssociations ) );
+
+	Sys_Printf( "WishGI: generating inverse probe distribution (%d probes, %d links, %d refine iterations)\n",
+				wishGIActualProbeCount, wishGIActualLinksPerVertex, wishGIOptions.refinementIterations );
+
+	WishGI_InitializeProbePositions( wishGIActualProbeCount, wishGIProbePositions );
+	if ( wishGIOptions.refinementIterations > 0 ) {
+		WishGI_RefineProbePositions( wishGIActualProbeCount, wishGIProbePositions );
+	}
+	WishGI_BuildVertexAssociations( wishGIActualLinksPerVertex );
+
+	if ( wishGIOptions.saveAssociations ) {
+		WishGI_SaveAssociations( associationPath );
+	}
+}
+
+static qboolean WishGI_DumpProbeColors( const char *bspFilePath ){
+	char dumpPath[ 1024 ];
+	FILE *file;
+	double *sumR, *sumG, *sumB, *sumWeight;
+	int vertexIndex, probeIndex, linkIndex;
+	int associatedProbe;
+	float associatedWeight;
+	float r, g, b;
+
+	if ( !wishGIOptions.enabled || !wishGIOptions.dumpProbeColors ) {
+		return qfalse;
+	}
+	if ( wishGIVertexAssociations == NULL || wishGIProbePositions == NULL ) {
+		Sys_Printf( "WishGI: cannot dump probe colors without associations.\n" );
+		return qfalse;
+	}
+
+	if ( wishGIOptions.probeDumpFile[ 0 ] != '\0' ) {
+		strcpy( dumpPath, wishGIOptions.probeDumpFile );
+	}
+	else{
+		WishGI_DefaultPath( bspFilePath, WISHGI_PROBES_DEFAULT_SUFFIX, dumpPath, sizeof( dumpPath ) );
+	}
+
+	sumR = safe_malloc( wishGIActualProbeCount * sizeof( *sumR ) );
+	sumG = safe_malloc( wishGIActualProbeCount * sizeof( *sumG ) );
+	sumB = safe_malloc( wishGIActualProbeCount * sizeof( *sumB ) );
+	sumWeight = safe_malloc( wishGIActualProbeCount * sizeof( *sumWeight ) );
+	memset( sumR, 0, wishGIActualProbeCount * sizeof( *sumR ) );
+	memset( sumG, 0, wishGIActualProbeCount * sizeof( *sumG ) );
+	memset( sumB, 0, wishGIActualProbeCount * sizeof( *sumB ) );
+	memset( sumWeight, 0, wishGIActualProbeCount * sizeof( *sumWeight ) );
+
+	for ( vertexIndex = 0; vertexIndex < numBSPDrawVerts; vertexIndex++ )
+	{
+		r = yDrawVerts[ vertexIndex ].color[ 0 ][ 0 ] / 255.0f;
+		g = yDrawVerts[ vertexIndex ].color[ 0 ][ 1 ] / 255.0f;
+		b = yDrawVerts[ vertexIndex ].color[ 0 ][ 2 ] / 255.0f;
+
+		for ( linkIndex = 0; linkIndex < wishGIActualLinksPerVertex; linkIndex++ )
+		{
+			associatedProbe = wishGIVertexAssociations[ vertexIndex ].probeIndex[ linkIndex ];
+			associatedWeight = wishGIVertexAssociations[ vertexIndex ].weights[ linkIndex ];
+
+			if ( associatedProbe < 0 || associatedProbe >= wishGIActualProbeCount || associatedWeight <= 0.0f ) {
+				continue;
+			}
+
+			sumR[ associatedProbe ] += (double) ( r * associatedWeight );
+			sumG[ associatedProbe ] += (double) ( g * associatedWeight );
+			sumB[ associatedProbe ] += (double) ( b * associatedWeight );
+			sumWeight[ associatedProbe ] += (double) associatedWeight;
+		}
+	}
+
+	file = fopen( dumpPath, "w" );
+	if ( file == NULL ) {
+		Sys_Printf( "WARNING: WishGI failed to open %s for writing\n", dumpPath );
+		free( sumR );
+		free( sumG );
+		free( sumB );
+		free( sumWeight );
+		return qfalse;
+	}
+
+	fprintf( file, "wishgi_probe_colors_v1 %d\n", wishGIActualProbeCount );
+	for ( probeIndex = 0; probeIndex < wishGIActualProbeCount; probeIndex++ )
+	{
+		if ( sumWeight[ probeIndex ] > 1.0e-12 ) {
+			r = (float) ( sumR[ probeIndex ] / sumWeight[ probeIndex ] );
+			g = (float) ( sumG[ probeIndex ] / sumWeight[ probeIndex ] );
+			b = (float) ( sumB[ probeIndex ] / sumWeight[ probeIndex ] );
+		}
+		else{
+			r = g = b = 0.0f;
+		}
+
+		fprintf( file, "%d %.9g %.9g %.9g %.9g %.9g %.9g %.9g\n",
+				 probeIndex,
+				 wishGIProbePositions[ probeIndex ][ 0 ],
+				 wishGIProbePositions[ probeIndex ][ 1 ],
+				 wishGIProbePositions[ probeIndex ][ 2 ],
+				 r, g, b,
+				 (float) sumWeight[ probeIndex ] );
+	}
+
+	fclose( file );
+	free( sumR );
+	free( sumG );
+	free( sumB );
+	free( sumWeight );
+
+	Sys_Printf( "WishGI: wrote probe color fit dump to %s\n", dumpPath );
+	return qtrue;
+}
+
 static qboolean ParseLightmapFormatString( const char *value ){
 	if ( value == NULL || value[ 0 ] == '\0' ) {
 		return qfalse;
@@ -2550,6 +3129,73 @@ int LightMain( int argc, char **argv ){
 				bounce = 1;
 			}
 			Sys_Printf( "PBR preset enabled (deluxemap+tangentspace+sRGB+IBL+AO+bounce)\n" );
+		}
+		else if ( !strcmp( argv[ i ], "-wishgi" ) ) {
+			wishGIOptions.enabled = qtrue;
+			Sys_Printf( "WishGI experimental probe baking enabled\n" );
+		}
+		else if ( !strcmp( argv[ i ], "-nowishgi" ) ) {
+			wishGIOptions.enabled = qfalse;
+			Sys_Printf( "WishGI experimental probe baking disabled\n" );
+		}
+		else if ( !strcmp( argv[ i ], "-wishgi-probes" ) ) {
+			wishGIOptions.enabled = qtrue;
+			wishGIOptions.probeCount = atoi( argv[ i + 1 ] );
+			Sys_Printf( "WishGI probe count set to %d\n", wishGIOptions.probeCount );
+			i++;
+		}
+		else if ( !strcmp( argv[ i ], "-wishgi-links" ) ) {
+			wishGIOptions.enabled = qtrue;
+			wishGIOptions.linksPerVertex = atoi( argv[ i + 1 ] );
+			Sys_Printf( "WishGI links per vertex set to %d\n", wishGIOptions.linksPerVertex );
+			i++;
+		}
+		else if ( !strcmp( argv[ i ], "-wishgi-iterations" ) ) {
+			wishGIOptions.enabled = qtrue;
+			wishGIOptions.refinementIterations = atoi( argv[ i + 1 ] );
+			if ( wishGIOptions.refinementIterations < 0 ) {
+				wishGIOptions.refinementIterations = 0;
+			}
+			Sys_Printf( "WishGI inverse distribution refinement iterations set to %d\n", wishGIOptions.refinementIterations );
+			i++;
+		}
+		else if ( !strcmp( argv[ i ], "-wishgi-maxsamples" ) ) {
+			wishGIOptions.enabled = qtrue;
+			wishGIOptions.maxSampleVerts = atoi( argv[ i + 1 ] );
+			if ( wishGIOptions.maxSampleVerts < 1 ) {
+				wishGIOptions.maxSampleVerts = 1;
+			}
+			Sys_Printf( "WishGI max sampled vertices set to %d\n", wishGIOptions.maxSampleVerts );
+			i++;
+		}
+		else if ( !strcmp( argv[ i ], "-wishgi-assoc" ) ) {
+			wishGIOptions.enabled = qtrue;
+			strcpy( wishGIOptions.associationFile, argv[ i + 1 ] );
+			Sys_Printf( "WishGI association path set to %s\n", wishGIOptions.associationFile );
+			i++;
+		}
+		else if ( !strcmp( argv[ i ], "-wishgi-loadassoc" ) ) {
+			wishGIOptions.enabled = qtrue;
+			wishGIOptions.loadAssociations = qtrue;
+			Sys_Printf( "WishGI association loading enabled\n" );
+		}
+		else if ( !strcmp( argv[ i ], "-wishgi-saveassoc" ) ) {
+			wishGIOptions.enabled = qtrue;
+			wishGIOptions.saveAssociations = qtrue;
+			Sys_Printf( "WishGI association writing enabled\n" );
+		}
+		else if ( !strcmp( argv[ i ], "-wishgi-dumpprobes" ) ) {
+			wishGIOptions.enabled = qtrue;
+			wishGIOptions.dumpProbeColors = qtrue;
+			strcpy( wishGIOptions.probeDumpFile, argv[ i + 1 ] );
+			Sys_Printf( "WishGI probe color dump path set to %s\n", wishGIOptions.probeDumpFile );
+			i++;
+		}
+		else if ( !strcmp( argv[ i ], "-wishgi-dumpprobes-default" ) ) {
+			wishGIOptions.enabled = qtrue;
+			wishGIOptions.dumpProbeColors = qtrue;
+			wishGIOptions.probeDumpFile[ 0 ] = '\0';
+			Sys_Printf( "WishGI probe color dump enabled (default output path)\n" );
 		}
 		else if ( !strcmp( argv[ i ], "-ibl" ) ) {
 			floodlighty = qtrue;
@@ -3026,6 +3672,13 @@ int LightMain( int argc, char **argv ){
 	Sys_Printf( "Lightmap file format: %s\n",
 				( lightmapFileFormat == LIGHTMAP_FILEFORMAT_HDR ) ? "hdr" :
 				( lightmapFileFormat == LIGHTMAP_FILEFORMAT_EXR ) ? "exr" : "tga" );
+	if ( wishGIOptions.enabled ) {
+		Sys_Printf( "WishGI experimental mode: enabled (probes %d, links %d, refinement %d)\n",
+					wishGIOptions.probeCount, wishGIOptions.linksPerVertex, wishGIOptions.refinementIterations );
+	}
+	else{
+		Sys_Printf( "WishGI experimental mode: disabled\n" );
+	}
 
 	strcpy( source, ExpandArg( argv[ i ] ) );
 	StripExtension( source );
@@ -3073,6 +3726,7 @@ int LightMain( int argc, char **argv ){
 
 	/* set the entity/model origins and init yDrawVerts */
 	SetEntityOrigins();
+	WishGI_PrepareAssociations( BSPFilePath );
 
 	/* ydnar: set up optimization */
 	SetupBrushes();
@@ -3085,6 +3739,9 @@ int LightMain( int argc, char **argv ){
 
 	/* light the world */
 	LightWorld( BSPFilePath, fastAllocate );
+
+	/* Optional debug dump: per-probe RGB fit from baked vertex lighting. */
+	WishGI_DumpProbeColors( BSPFilePath );
 
 	/* ydnar: store off lightmaps */
 	StoreSurfaceLightmaps( fastAllocate );
@@ -3100,5 +3757,6 @@ int LightMain( int argc, char **argv ){
 	}
 
 	/* return to sender */
+	WishGI_ClearAssociations();
 	return 0;
 }
