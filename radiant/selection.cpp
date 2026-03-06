@@ -2312,6 +2312,7 @@ void RadiantSelectionSystem::renderSolid( Renderer& renderer, const VolumeTest& 
 
 void SelectionSystem_constructPreferences( PreferencesPage& page ){
 	page.appendSpinner( "Selector size (pixels)", g_SELECT_EPSILON, 2, 64 );
+	page.appendSpinner( "Rotate snap (degrees)", g_ROTATE_SNAP, 1.0, 180.0, 1 );
 	page.appendCheckBox( "", "Prefer point entities in 2D", getSelectionSystem().m_bPreferPointEntsIn2D );
 	page.appendCheckBox( "", "Create brushes in 3D", g_3DCreateBrushes );
 	{
@@ -2354,6 +2355,7 @@ void SelectionSystem_Construct(){
 	GlobalShaderCache().attachRenderable( getSelectionSystem() );
 
 	GlobalPreferenceSystem().registerPreference( "SELECT_EPSILON", IntImportStringCaller( g_SELECT_EPSILON ), IntExportStringCaller( g_SELECT_EPSILON ) );
+	GlobalPreferenceSystem().registerPreference( "RotateSnap", FloatImportStringCaller( g_ROTATE_SNAP ), FloatExportStringCaller( g_ROTATE_SNAP ) );
 	GlobalPreferenceSystem().registerPreference( "PreferPointEntsIn2D", BoolImportStringCaller( getSelectionSystem().m_bPreferPointEntsIn2D ), BoolExportStringCaller( getSelectionSystem().m_bPreferPointEntsIn2D ) );
 	GlobalPreferenceSystem().registerPreference( "3DCreateBrushes", BoolImportStringCaller( g_3DCreateBrushes ), BoolExportStringCaller( g_3DCreateBrushes ) );
 	GlobalPreferenceSystem().registerPreference( "3DMoveStyle", IntImportStringCaller( TranslateFreeXY_Z::m_viewdependent ), IntExportStringCaller( TranslateFreeXY_Z::m_viewdependent ) );
@@ -2450,6 +2452,11 @@ public:
 
 		if( g_modifiers == c_modifier_copy_texture ) {
 			Scene_copyClosestTexture( volume );
+			if ( GlobalSelectionSystem().countSelectedComponents() != 0 || GlobalSelectionSystem().countSelected() != 0 ) {
+				GlobalUndoSystem().start();
+				Scene_applyClosestTexture( volume, false, false, false, true );
+				GlobalUndoSystem().finish( Scene_applyClosestTexture_getUndoName( false, false, false ) );
+			}
 		}
 		else{
 			m_undo_begun = true;

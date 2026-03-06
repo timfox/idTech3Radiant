@@ -46,6 +46,7 @@
 #include <QTimer>
 #include <QRegularExpression>
 #include <QSocketNotifier>
+#include <QKeyEvent>
 
 #ifndef WIN32
 #include <cerrno>
@@ -145,6 +146,23 @@ int Console_terminalFd( int level ){
 class QPlainTextEdit_console : public QPlainTextEdit
 {
 protected:
+	bool event( QEvent *event ) override {
+		if( event->type() == QEvent::ShortcutOverride ){
+			auto *keyEvent = static_cast<QKeyEvent *>( event );
+			// Ensure text-copy shortcuts work in the read-only console widget.
+			if( keyEvent == QKeySequence::StandardKey::Copy && !keyEvent->isAutoRepeat() ){
+				this->copy();
+				event->accept();
+				return true;
+			}
+			if( keyEvent == QKeySequence::StandardKey::SelectAll && !keyEvent->isAutoRepeat() ){
+				this->selectAll();
+				event->accept();
+				return true;
+			}
+		}
+		return QPlainTextEdit::event( event );
+	}
 	void contextMenuEvent( QContextMenuEvent *event ) override {
 		QMenu *menu = createStandardContextMenu();
 		connect( menu->addAction( "Copy All" ), &QAction::triggered, [this](){ QApplication::clipboard()->setText( toPlainText() ); } );
@@ -152,6 +170,7 @@ protected:
 		menu->addSeparator();
 		connect( menu->addAction( "Find next error" ), &QAction::triggered, [](){ Console_findNext( "error|Error|ERROR|leak|Leak|LEAK|fail|Fail|FAIL" ); } );
 		connect( menu->addAction( "Find next warning" ), &QAction::triggered, [](){ Console_findNext( "warning|Warning|WARNING" ); } );
+		connect( menu->addAction( "Scroll to bottom" ), &QAction::triggered, [](){ Console_scrollBottom(); } );
 		menu->exec( event->globalPos() );
 		delete menu;
 	}
@@ -186,8 +205,13 @@ QWidget* Console_constructWindow(){
 		QObject::connect( findWarningBtn, &QPushButton::clicked, [](){ Console_findNext( "warning|Warning|WARNING" ); } );
 		progressHbox->addWidget( findWarningBtn );
 
-		progressHbox->addWidget( g_buildProgressBar, 1 );
-		vbox->addWidget( progressFrame );
+		auto *scrollBottomBtn = new QPushButton( "Bottom" );
+		scrollBottomBtn->setToolTip( "Scroll console output to the latest line" );
+		QObject::connect( scrollBottomBtn, &QPushButton::clicked, [](){ Console_scrollBottom(); } );
+		progressHbox->addWidget( scrollBottomBtn );
+
+			progressHbox->addWidget( g_buildProgressBar, 1 );
+			vbox->addWidget( progressFrame );
 
 		g_consoleContainer = container;
 		g_buildElapsedTimer = new QTimer( container );
@@ -214,7 +238,7 @@ QWidget* Console_constructWindow(){
 	text->setReadOnly( true );
 	text->setUndoRedoEnabled( false );
 	text->setMinimumHeight( 10 );
-	text->setFocusPolicy( Qt::FocusPolicy::NoFocus );
+	text->setFocusPolicy( Qt::FocusPolicy::ClickFocus );
 
 	{
 		g_console = text;
@@ -268,6 +292,14 @@ void Console_findNext( const char* pattern ){
 		g_console->ensureCursorVisible();
 		g_console->setFocus();
 	}
+}
+
+void Console_scrollBottom(){
+	if ( g_console == nullptr ) {
+		return;
+	}
+	g_console->moveCursor( QTextCursor::MoveOperation::End );
+	g_console->ensureCursorVisible();
 }
 
 void Console_captureStdStreams(){

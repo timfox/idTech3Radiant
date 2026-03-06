@@ -636,7 +636,16 @@ void TextureBrowser_SetHideUnused( TextureBrowser& textureBrowser, bool hideUnus
 QWidget* g_page_textures;
 
 void TextureBrowser_toggleShow(){
-	GroupDialog_showPage( g_page_textures );
+	if ( g_page_textures != nullptr ) {
+		GroupDialog_showPage( g_page_textures );
+		return;
+	}
+
+	// In embedded-layout modes, textures are not a GroupDialog page.
+	// Keep the shortcut useful by focusing the texture browser widget instead.
+	if ( g_TexBro.m_gl_widget != nullptr ) {
+		g_TexBro.m_gl_widget->setFocus();
+	}
 }
 
 
@@ -2115,7 +2124,7 @@ void TextureBrowser_Construct(){
 	GlobalCommands_insert( "RefreshShaders", makeCallbackF( RefreshShaders ) );
 	GlobalToggles_insert( "ShowInUse", makeCallbackF( TextureBrowser_ToggleHideUnused ), ToggleItem::AddCallbackCaller( g_TexBro.m_hideunused_item ), QKeySequence( "U" ) );
 	GlobalCommands_insert( "ShowAllTextures", makeCallbackF( TextureBrowser_showAll ), QKeySequence( "Ctrl+A" ) );
-	GlobalCommands_insert( "ToggleTextures", makeCallbackF( TextureBrowser_toggleShow ), QKeySequence( "Alt+T" ) );
+	GlobalCommands_insert( "ToggleTextures", makeCallbackF( TextureBrowser_toggleShow ), QKeySequence( "T" ) );
 	GlobalToggles_insert( "ToggleShowShaders", makeCallbackF( TextureBrowser_ToggleShowShaders ), ToggleItem::AddCallbackCaller( g_TexBro.m_showshaders_item ) );
 	GlobalToggles_insert( "ToggleShowTextures", makeCallbackF( TextureBrowser_ToggleShowTextures ), ToggleItem::AddCallbackCaller( g_TexBro.m_showtextures_item ) );
 	GlobalToggles_insert( "ToggleShowShaderlistOnly", makeCallbackF( TextureBrowser_ToggleShowShaderListOnly ), ToggleItem::AddCallbackCaller( g_TexBro.m_showshaderlistonly_item ) );

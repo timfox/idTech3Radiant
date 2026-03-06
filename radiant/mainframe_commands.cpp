@@ -113,7 +113,7 @@ void MainFrame_registerCommands(){
 	CSG_registerCommands();
 
 	Grid_registerCommands();
-	GlobalCommands_insert( "NavMesh_Rebuild", makeCallbackF( NavMesh_rebuild ), QKeySequence( "Ctrl+Shift+R" ) );
+	GlobalCommands_insert( "NavMesh_Rebuild", makeCallbackF( NavMesh_rebuild ), QKeySequence( "Ctrl+Shift+N" ) );
 	GlobalToggles_insert( "NavMeshOverlay", makeCallbackF( ShowNavMeshToggle ), BoolExportCaller( g_navmeshOverlayEnabled ), QKeySequence( "Ctrl+Shift+M" ) );
 
 	Patch_registerCommands();

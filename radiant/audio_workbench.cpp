@@ -163,11 +163,18 @@ QString AudioWorkbench_categoryLabel( AudioCategory category ){
 }
 
 QString AudioWorkbench_contentFolder(){
+	const QString gamepackDefault = QDir::cleanPath( QString::fromLatin1( GameToolsPath_get() ) + "content" );
 	const QString override = AudioWorkbench_setting( "ContentFolder" );
 	if ( !override.isEmpty() ) {
-		return override;
+		const QString cleanedOverride = QDir::cleanPath( override );
+		const QString legacyDefault = QDir::cleanPath( QString::fromLatin1( EnginePath_get() ) + "/content" );
+		// Migrate old default that pointed to engine/content.
+		if ( cleanedOverride == legacyDefault ) {
+			return gamepackDefault;
+		}
+		return cleanedOverride;
 	}
-	return QString::fromLatin1( EnginePath_get() ) + "/content";
+	return gamepackDefault;
 }
 
 void AudioWorkbench_setContentFolder( const QString& path ){

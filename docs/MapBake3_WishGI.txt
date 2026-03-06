@@ -20,12 +20,45 @@ Quick Start
 Use these optional vars in the build menu:
 
 - `WishGIExperimentalFlags`
+- `WishGIDataCreationFlags` / `WishGIDataReuseFlags`
 - `WishGIFlagsLite` / `WishGIFlagsQuality` / `WishGIFlagsUltraLite`
 - `WishGIShOutputFlags`
 
 Example SH output flags:
 
 - `-wishgi-dumpsh-default -wishgi-shorder 2 -wishgi-shlambda 0.001`
+
+Build Variables UI
+------------------
+Use `Build -> Customize...`, expand `Build Variables`, then use
+`MapBake3 WishGI Controls`:
+
+- Data creation toggles:
+  - Save association cache (`-wishgi-saveassoc`)
+  - Dump probe colors (`-wishgi-dumpprobes-default`)
+  - Dump SH coefficients (`-wishgi-dumpsh-default`)
+  - Load association cache for final passes (`-wishgi-loadassoc`)
+- LOD preset controls:
+  - UltraLite / Lite / Quality probe settings:
+    `probes`, `links`, `iterations`, `max samples`
+
+The controls write directly to the corresponding `WishGI*` build variables.
+
+LOD Controls
+------------
+The Xonotic build menu now exposes WishGI LOD presets:
+
+- `MapBake3 WishGI: Final LOD UltraLite`
+- `MapBake3 WishGI: Final LOD Lite`
+- `MapBake3 WishGI: Final LOD Quality`
+
+Data Creation Controls
+----------------------
+Use `MapBake3 WishGI: Generate data (LOD Quality)` to regenerate:
+
+- association cache (`-wishgi-saveassoc`)
+- probe color dump (`-wishgi-dumpprobes-default`)
+- SH dump (`-wishgi-dumpsh-default`)
 
 Expected Output Files
 ---------------------

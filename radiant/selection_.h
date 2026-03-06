@@ -28,6 +28,7 @@
 #include "rect_t.h"
 
 inline int g_SELECT_EPSILON = 12;
+inline float g_ROTATE_SNAP = 15.0f;
 
 using DeviceVector = Vector2;
 

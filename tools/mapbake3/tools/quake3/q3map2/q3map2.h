@@ -343,8 +343,8 @@
 #define LIGHTMAP_WIDTH          128
 #define LIGHTMAP_HEIGHT         128
 
-#define MIN_WORLD_COORD         ( -65536 )
-#define MAX_WORLD_COORD         ( 65536 )
+#define MIN_WORLD_COORD         ( -128 * 1024 )
+#define MAX_WORLD_COORD         ( 128 * 1024 )
 #define WORLD_SIZE              ( MAX_WORLD_COORD - MIN_WORLD_COORD )
 
 

@@ -1,6 +1,10 @@
 name: build
 
-on: [workflow_dispatch]
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [master]
 
 jobs:
   windows-msys:
@@ -70,6 +74,8 @@ jobs:
     - name: Build
       run: |
         make CC=gcc-14 CXX=g++-14 CXXFLAGS="-Wno-deprecated-copy" -j4
+        ./install/q3map2.x86_64 -help > /tmp/q3map2-help.txt
+        grep -q "Usage: q3map2" /tmp/q3map2-help.txt
         ./appimage.sh
         7z a Linux-${{ matrix.arch }}.7z ./NetRadiant-Custom-x86_64.AppImage
 #        7z a Linux-${{ matrix.arch }}.7z ./install/*

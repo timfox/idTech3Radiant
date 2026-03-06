@@ -114,6 +114,69 @@ int LoadEXRBufferToBytes( const unsigned char *buffer, int size, int requestedCo
 	*height = h;
 	return 1;
 }
+
+int LoadFloatBufferToFloats( const unsigned char *buffer, int size, int requestedComponents, float **pixels, int *width, int *height ){
+	int w = 0;
+	int h = 0;
+	int components = 0;
+	float *floatPixels = stbi_loadf_from_memory( buffer, size, &w, &h, &components, requestedComponents );
+	if ( floatPixels == nullptr ) {
+		return 0;
+	}
+
+	const std::size_t count = static_cast<std::size_t>( w ) * static_cast<std::size_t>( h ) * static_cast<std::size_t>( requestedComponents );
+	float *out = static_cast<float*>( std::malloc( count * sizeof( float ) ) );
+	if ( out == nullptr ) {
+		stbi_image_free( floatPixels );
+		return 0;
+	}
+
+	std::copy( floatPixels, floatPixels + count, out );
+	stbi_image_free( floatPixels );
+	*pixels = out;
+	*width = w;
+	*height = h;
+	return 1;
+}
+
+int LoadEXRBufferToFloats( const unsigned char *buffer, int size, int requestedComponents, float **pixels, int *width, int *height ){
+	float *floatPixels = nullptr;
+	int w = 0;
+	int h = 0;
+	const char *err = nullptr;
+	const int status = LoadEXRFromMemory( &floatPixels, &w, &h, buffer, static_cast<size_t>( size ), &err );
+	if ( status != TINYEXR_SUCCESS ) {
+		if ( err != nullptr ) {
+			FreeEXRErrorMessage( err );
+		}
+		return 0;
+	}
+
+	const std::size_t count = static_cast<std::size_t>( w ) * static_cast<std::size_t>( h ) * static_cast<std::size_t>( requestedComponents );
+	float *out = static_cast<float*>( std::malloc( count * sizeof( float ) ) );
+	if ( out == nullptr ) {
+		std::free( floatPixels );
+		return 0;
+	}
+
+	for ( int i = 0; i < ( w * h ); ++i )
+	{
+		const std::size_t src = static_cast<std::size_t>( i ) * 4u;
+		const std::size_t dst = static_cast<std::size_t>( i ) * static_cast<std::size_t>( requestedComponents );
+		out[ dst + 0 ] = floatPixels[ src + 0 ];
+		out[ dst + 1 ] = floatPixels[ src + 1 ];
+		out[ dst + 2 ] = floatPixels[ src + 2 ];
+		if ( requestedComponents == 4 ) {
+			out[ dst + 3 ] = floatPixels[ src + 3 ];
+		}
+	}
+
+	std::free( floatPixels );
+	*pixels = out;
+	*width = w;
+	*height = h;
+	return 1;
+}
 }
 
 extern "C"
@@ -148,6 +211,22 @@ int MapBake3_LoadEXRBufferToRGB8( const unsigned char *buffer, int size, unsigne
 	}
 
 	return LoadEXRBufferToBytes( buffer, size, 3, pixels, width, height );
+}
+
+int MapBake3_LoadHDRBufferToRGBAF32( const unsigned char *buffer, int size, float **pixels, int *width, int *height ){
+	if ( buffer == nullptr || size <= 0 || pixels == nullptr || width == nullptr || height == nullptr ) {
+		return 0;
+	}
+
+	return LoadFloatBufferToFloats( buffer, size, 4, pixels, width, height );
+}
+
+int MapBake3_LoadEXRBufferToRGBAF32( const unsigned char *buffer, int size, float **pixels, int *width, int *height ){
+	if ( buffer == nullptr || size <= 0 || pixels == nullptr || width == nullptr || height == nullptr ) {
+		return 0;
+	}
+
+	return LoadEXRBufferToFloats( buffer, size, 4, pixels, width, height );
 }
 
 int MapBake3_WriteRGB8AsHDR32( const char *filename, const unsigned char *pixels, int width, int height, int flip ){

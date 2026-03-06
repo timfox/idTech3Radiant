@@ -24,14 +24,61 @@
 #include "mainframe.h"
 #include "gtkutil/messagebox.h"
 #include <QDesktopServices>
+#include <QProcess>
+#include <QProcessEnvironment>
+#include <QStringList>
 #include <QUrl>
 
+#if defined( __linux__ )
+namespace
+{
+QProcessEnvironment OpenURL_childEnvironment(){
+	QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+
+	// GTK3 provides ATK bridge natively; inherited forced module lists can emit warnings.
+	const QString gtkModules = env.value( "GTK_MODULES" );
+	if ( !gtkModules.isEmpty() ) {
+		QStringList filtered;
+		for ( const auto& module : gtkModules.split( ':', Qt::SkipEmptyParts ) )
+		{
+			if ( !module.contains( "atk-bridge", Qt::CaseInsensitive ) ) {
+				filtered.push_back( module );
+			}
+		}
+		if ( filtered.isEmpty() ) {
+			env.remove( "GTK_MODULES" );
+		}
+		else{
+			env.insert( "GTK_MODULES", filtered.join( ":" ) );
+		}
+	}
+
+	return env;
+}
+
+bool OpenURL_linuxDetached( const QUrl& qurl ){
+	QProcess process;
+	process.setProcessEnvironment( OpenURL_childEnvironment() );
+	process.setProgram( "xdg-open" );
+	process.setArguments( { qurl.toString() } );
+	process.setStandardInputFile( "/dev/null" );
+	process.setStandardOutputFile( "/dev/null" );
+	process.setStandardErrorFile( "/dev/null" );
+	return process.startDetached();
+}
+}
+#endif
+
 void OpenURL( const char *url ){
-	// let's put a little comment
 	globalOutputStream() << "OpenURL: " << url << '\n';
-	// QUrl::fromUserInput appears to work well for urls and local paths with spaces
-	// alternatively can prepend file:/// to the latter and use default QUrl constructor
-	if ( !QDesktopServices::openUrl( QUrl::fromUserInput( url ) ) ) {
+	// QUrl::fromUserInput works for urls and local paths with spaces.
+	const QUrl qurl = QUrl::fromUserInput( url );
+#if defined( __linux__ )
+	if ( OpenURL_linuxDetached( qurl ) ) {
+		return;
+	}
+#endif
+	if ( !QDesktopServices::openUrl( qurl ) ) {
 		qt_MessageBox( MainFrame_getWindow(), "Failed to launch browser!" );
 	}
 }

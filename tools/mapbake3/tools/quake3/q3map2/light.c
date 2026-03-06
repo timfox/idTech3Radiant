@@ -35,6 +35,7 @@
 
 /* dependencies */
 #include "q3map2.h"
+#include "float_image_io.h"
 
 /*
    NOTE:
@@ -84,6 +85,343 @@ static wishGIVertexAssociation_t *wishGIVertexAssociations = NULL;
 static vec3_t *wishGIProbePositions = NULL;
 static int wishGIActualProbeCount = 0;
 static int wishGIActualLinksPerVertex = 0;
+
+typedef enum skyLightMode_e
+{
+	SKYLIGHT_MODE_AUTO = 0,
+	SKYLIGHT_MODE_LEGACY,
+	SKYLIGHT_MODE_SHADER,
+	SKYLIGHT_MODE_PANORAMA,
+}
+skyLightMode_t;
+
+typedef struct skyFloatImage_s
+{
+	int width;
+	int height;
+	float *pixels; /* RGBA float32 */
+}
+skyFloatImage_t;
+
+static skyLightMode_t g_skyLightMode = SKYLIGHT_MODE_AUTO;
+static char g_skyLightPanoramaPath[ MAX_QPATH ] = { 0 };
+static char g_skyLightPanoramaConvertBase[ MAX_QPATH ] = { 0 };
+static int g_skyLightPanoramaFaceSize = 512;
+static char g_skyLightLastConvertedPath[ MAX_QPATH ] = { 0 };
+static char g_skyLightLastConvertedBase[ MAX_QPATH ] = { 0 };
+static int g_skyLightLastConvertedSize = 0;
+
+static const char *c_skyboxSuffixes[ 6 ] = { "_lf", "_rt", "_ft", "_bk", "_up", "_dn" };
+
+static const char *SkyLightMode_ToString( skyLightMode_t mode ){
+	switch ( mode )
+	{
+	case SKYLIGHT_MODE_LEGACY:
+		return "legacy";
+	case SKYLIGHT_MODE_SHADER:
+		return "shader";
+	case SKYLIGHT_MODE_PANORAMA:
+		return "panorama";
+	case SKYLIGHT_MODE_AUTO:
+	default:
+		return "auto";
+	}
+}
+
+static skyLightMode_t SkyLightMode_Parse( const char *mode ){
+	if ( !Q_stricmp( mode, "legacy" ) ) {
+		return SKYLIGHT_MODE_LEGACY;
+	}
+	if ( !Q_stricmp( mode, "shader" ) ) {
+		return SKYLIGHT_MODE_SHADER;
+	}
+	if ( !Q_stricmp( mode, "panorama" ) ) {
+		return SKYLIGHT_MODE_PANORAMA;
+	}
+	return SKYLIGHT_MODE_AUTO;
+}
+
+static void SkyFloatImage_Clear( skyFloatImage_t *image ){
+	if ( image->pixels != NULL ) {
+		free( image->pixels );
+	}
+	image->pixels = NULL;
+	image->width = 0;
+	image->height = 0;
+}
+
+static qboolean SkyFloatImage_LoadExact( const char *path, skyFloatImage_t *image ){
+	char ext[ 64 ];
+	void *buffer = NULL;
+	int size = 0;
+
+	ExtractFileExtension( path, ext );
+	if ( !Q_stricmp( ext, "hdr" ) || !Q_stricmp( ext, "exr" ) ) {
+		size = vfsLoadFile( path, &buffer, 0 );
+		if ( size <= 0 || buffer == NULL ) {
+			return qfalse;
+		}
+
+		if ( !Q_stricmp( ext, "hdr" ) ) {
+			if ( !MapBake3_LoadHDRBufferToRGBAF32( (const unsigned char*) buffer, size, &image->pixels, &image->width, &image->height ) ) {
+				free( buffer );
+				return qfalse;
+			}
+		}
+		else{
+			if ( !MapBake3_LoadEXRBufferToRGBAF32( (const unsigned char*) buffer, size, &image->pixels, &image->width, &image->height ) ) {
+				free( buffer );
+				return qfalse;
+			}
+		}
+
+		free( buffer );
+		return qtrue;
+	}
+	else{
+		image_t *ldr = ImageLoad( path );
+		size_t count;
+		size_t i;
+		float *pixels;
+
+		if ( ldr == NULL ) {
+			return qfalse;
+		}
+
+		count = (size_t) ldr->width * (size_t) ldr->height * 4u;
+		pixels = safe_malloc( count * sizeof( float ) );
+		for ( i = 0; i < count; ++i )
+		{
+			pixels[ i ] = ldr->pixels[ i ] / 255.0f;
+		}
+
+		image->pixels = pixels;
+		image->width = ldr->width;
+		image->height = ldr->height;
+		return qtrue;
+	}
+}
+
+static qboolean SkyFloatImage_LoadAny( const char *path, skyFloatImage_t *image, char *resolvedPath ){
+	char ext[ 64 ];
+	char tryPath[ MAX_QPATH ];
+
+	ExtractFileExtension( path, ext );
+	if ( ext[ 0 ] != '\0' ) {
+		if ( SkyFloatImage_LoadExact( path, image ) ) {
+			strcpy( resolvedPath, path );
+			return qtrue;
+		}
+		return qfalse;
+	}
+
+	sprintf( tryPath, "%s.hdr", path );
+	if ( SkyFloatImage_LoadExact( tryPath, image ) ) {
+		strcpy( resolvedPath, tryPath );
+		return qtrue;
+	}
+
+	sprintf( tryPath, "%s.exr", path );
+	if ( SkyFloatImage_LoadExact( tryPath, image ) ) {
+		strcpy( resolvedPath, tryPath );
+		return qtrue;
+	}
+
+	if ( SkyFloatImage_LoadExact( path, image ) ) {
+		strcpy( resolvedPath, path );
+		return qtrue;
+	}
+
+	return qfalse;
+}
+
+static qboolean SkyPanorama_IsEquirectangular( int width, int height ){
+	return width > 0 && height > 0 && width >= height && ( width * 3 ) <= ( height * 8 );
+}
+
+static void SkyPanorama_SampleDirection( const skyFloatImage_t *image, const vec3_t direction, vec3_t color ){
+	float lon;
+	float lat;
+	float u;
+	float v;
+	float x;
+	float y;
+	int x0;
+	int x1;
+	int y0;
+	int y1;
+	float tx;
+	float ty;
+	const float *p00;
+	const float *p10;
+	const float *p01;
+	const float *p11;
+
+	if ( image == NULL || image->pixels == NULL || image->width <= 0 || image->height <= 0 ) {
+		VectorClear( color );
+		return;
+	}
+
+	lon = atan2( direction[ 1 ], direction[ 0 ] );
+	lat = direction[ 2 ];
+	if ( lat < -1.0f ) {
+		lat = -1.0f;
+	}
+	else if ( lat > 1.0f ) {
+		lat = 1.0f;
+	}
+	lat = asin( lat );
+	u = lon * ( 1.0f / ( 2.0f * Q_PI ) ) + 0.5f;
+	v = 0.5f - lat * ( 1.0f / Q_PI );
+
+	x = u * image->width;
+	y = v * image->height;
+	while ( x < 0.0f ) x += image->width;
+	while ( x >= image->width ) x -= image->width;
+	if ( y < 0.0f ) y = 0.0f;
+	if ( y > ( image->height - 1.0f ) ) y = image->height - 1.0f;
+
+	x0 = (int) floor( x );
+	x1 = ( x0 + 1 ) % image->width;
+	y0 = (int) floor( y );
+	y1 = ( y0 + 1 < image->height ) ? ( y0 + 1 ) : y0;
+	tx = x - x0;
+	ty = y - y0;
+
+	p00 = image->pixels + ( ( y0 * image->width + x0 ) * 4 );
+	p10 = image->pixels + ( ( y0 * image->width + x1 ) * 4 );
+	p01 = image->pixels + ( ( y1 * image->width + x0 ) * 4 );
+	p11 = image->pixels + ( ( y1 * image->width + x1 ) * 4 );
+
+	color[ 0 ] = ( 1 - tx ) * ( 1 - ty ) * p00[ 0 ] + tx * ( 1 - ty ) * p10[ 0 ] + ( 1 - tx ) * ty * p01[ 0 ] + tx * ty * p11[ 0 ];
+	color[ 1 ] = ( 1 - tx ) * ( 1 - ty ) * p00[ 1 ] + tx * ( 1 - ty ) * p10[ 1 ] + ( 1 - tx ) * ty * p01[ 1 ] + tx * ty * p11[ 1 ];
+	color[ 2 ] = ( 1 - tx ) * ( 1 - ty ) * p00[ 2 ] + tx * ( 1 - ty ) * p10[ 2 ] + ( 1 - tx ) * ty * p01[ 2 ] + tx * ty * p11[ 2 ];
+	if ( color[ 0 ] < 0.0f ) color[ 0 ] = 0.0f;
+	if ( color[ 1 ] < 0.0f ) color[ 1 ] = 0.0f;
+	if ( color[ 2 ] < 0.0f ) color[ 2 ] = 0.0f;
+}
+
+static void SkyPanorama_DirectionForFaceUV( int face, float u, float v, vec3_t direction ){
+	const float fu = 2.0f * u - 1.0f;
+	const float fv = 2.0f * v - 1.0f;
+
+	switch ( face )
+	{
+	case 0: VectorSet( direction, -1.0f, fu, 1.0f - fv ); break;      /* _lf */
+	case 1: VectorSet( direction, 1.0f, 1.0f - fu, 1.0f - fv ); break; /* _rt */
+	case 2: VectorSet( direction, fu, 1.0f, 1.0f - fv ); break;        /* _ft */
+	case 3: VectorSet( direction, 1.0f - fu, -1.0f, 1.0f - fv ); break;/* _bk */
+	case 4: VectorSet( direction, 1.0f - fu, 1.0f - fv, 1.0f ); break; /* _up */
+	case 5: VectorSet( direction, fu, 1.0f - fv, -1.0f ); break;       /* _dn */
+	default: VectorSet( direction, 0.0f, 0.0f, 1.0f ); break;
+	}
+
+	VectorNormalize( direction, direction );
+}
+
+static void SkyPanorama_WriteConvertedFaces( const skyFloatImage_t *image, const char *sourcePath, const char *outputBase, int faceSize ){
+	int face;
+	int x;
+	int y;
+	byte *pixels;
+	char outputPath[ 1024 ];
+	char outputDir[ 1024 ];
+
+	if ( image == NULL || image->pixels == NULL || outputBase == NULL || outputBase[ 0 ] == '\0' ) {
+		return;
+	}
+
+	if ( sourcePath != NULL
+	  && !Q_stricmp( sourcePath, g_skyLightLastConvertedPath )
+	  && !Q_stricmp( outputBase, g_skyLightLastConvertedBase )
+	  && faceSize == g_skyLightLastConvertedSize ) {
+		return;
+	}
+
+	if ( faceSize < 16 ) {
+		faceSize = 16;
+	}
+	else if ( faceSize > 4096 ) {
+		faceSize = 4096;
+	}
+	pixels = safe_malloc( faceSize * faceSize * 4 );
+
+	for ( face = 0; face < 6; ++face )
+	{
+		for ( y = 0; y < faceSize; ++y )
+		{
+			for ( x = 0; x < faceSize; ++x )
+			{
+				vec3_t direction;
+				vec3_t rgb;
+				byte *out = pixels + ( ( y * faceSize + x ) * 4 );
+				SkyPanorama_DirectionForFaceUV( face, ( x + 0.5f ) / faceSize, ( y + 0.5f ) / faceSize, direction );
+				SkyPanorama_SampleDirection( image, direction, rgb );
+				int ir = (int) ( rgb[ 0 ] * 255.0f + 0.5f );
+				int ig = (int) ( rgb[ 1 ] * 255.0f + 0.5f );
+				int ib = (int) ( rgb[ 2 ] * 255.0f + 0.5f );
+				if ( ir < 0 ) ir = 0;
+				else if ( ir > 255 ) ir = 255;
+				if ( ig < 0 ) ig = 0;
+				else if ( ig > 255 ) ig = 255;
+				if ( ib < 0 ) ib = 0;
+				else if ( ib > 255 ) ib = 255;
+				out[ 0 ] = (byte) ir;
+				out[ 1 ] = (byte) ig;
+				out[ 2 ] = (byte) ib;
+				out[ 3 ] = 255;
+			}
+		}
+
+		sprintf( outputPath, "%s%s.tga", outputBase, c_skyboxSuffixes[ face ] );
+		ExtractFilePath( outputPath, outputDir );
+		if ( outputDir[ 0 ] != '\0' ) {
+			CreatePath( outputPath );
+		}
+		WriteTGA( outputPath, pixels, faceSize, faceSize );
+		Sys_Printf( "Wrote panoramic sky face: %s\n", outputPath );
+	}
+
+	free( pixels );
+	if ( sourcePath != NULL ) {
+		strcpy( g_skyLightLastConvertedPath, sourcePath );
+	}
+	strcpy( g_skyLightLastConvertedBase, outputBase );
+	g_skyLightLastConvertedSize = faceSize;
+}
+
+static qboolean SkyPanorama_SelectPath( const shaderInfo_t *si, char *path ){
+	path[ 0 ] = '\0';
+
+	switch ( g_skyLightMode )
+	{
+	case SKYLIGHT_MODE_LEGACY:
+		return qfalse;
+	case SKYLIGHT_MODE_PANORAMA:
+		if ( g_skyLightPanoramaPath[ 0 ] != '\0' ) {
+			strcpy( path, g_skyLightPanoramaPath );
+			return qtrue;
+		}
+		return qfalse;
+	case SKYLIGHT_MODE_SHADER:
+		if ( si != NULL && si->skyParmsImageBase[ 0 ] != '\0' ) {
+			strcpy( path, si->skyParmsImageBase );
+			return qtrue;
+		}
+		return qfalse;
+	case SKYLIGHT_MODE_AUTO:
+	default:
+		if ( g_skyLightPanoramaPath[ 0 ] != '\0' ) {
+			strcpy( path, g_skyLightPanoramaPath );
+			return qtrue;
+		}
+		if ( si != NULL && si->skyParmsImageBase[ 0 ] != '\0' ) {
+			strcpy( path, si->skyParmsImageBase );
+			return qtrue;
+		}
+		return qfalse;
+	}
+}
 
 
 
@@ -194,17 +532,42 @@ static void CreateSunLight( sun_t *sun ){
    simulates sky light with multiple suns
  */
 
-static void CreateSkyLights( vec3_t color, float value, int iterations, float filterRadius, int style ){
+static void CreateSkyLights( shaderInfo_t *si, vec3_t color, float value, int iterations, float filterRadius, int style ){
 	int i, j, numSuns;
 	int angleSteps, elevationSteps;
 	float angle, elevation;
 	float angleStep, elevationStep;
+	float basePhotons;
 	sun_t sun;
+	skyFloatImage_t panorama = { 0, 0, NULL };
+	qboolean usePanorama = qfalse;
+	char panoramaPath[ MAX_QPATH ];
+	char resolvedPanoramaPath[ MAX_QPATH ];
 
 
 	/* dummy check */
 	if ( value <= 0.0f || iterations < 2 ) {
 		return;
+	}
+
+	panoramaPath[ 0 ] = '\0';
+	resolvedPanoramaPath[ 0 ] = '\0';
+	if ( SkyPanorama_SelectPath( si, panoramaPath ) ) {
+		if ( SkyFloatImage_LoadAny( panoramaPath, &panorama, resolvedPanoramaPath ) ) {
+			if ( SkyPanorama_IsEquirectangular( panorama.width, panorama.height ) ) {
+				usePanorama = qtrue;
+			}
+			else{
+				Sys_Printf( "WARNING: Sky panorama %s is not equirectangular (expected ~2:1 aspect), using legacy skylight color.\n", resolvedPanoramaPath );
+			}
+		}
+		else if ( g_skyLightMode == SKYLIGHT_MODE_PANORAMA ) {
+			Sys_Printf( "WARNING: Failed to load panoramic skylight image %s, using legacy skylight color.\n", panoramaPath );
+		}
+	}
+
+	if ( usePanorama && g_skyLightPanoramaConvertBase[ 0 ] != '\0' ) {
+		SkyPanorama_WriteConvertedFaces( &panorama, resolvedPanoramaPath, g_skyLightPanoramaConvertBase, g_skyLightPanoramaFaceSize );
 	}
 
 	/* basic sun setup */
@@ -224,7 +587,8 @@ static void CreateSkyLights( vec3_t color, float value, int iterations, float fi
 
 	/* calc individual sun brightness */
 	numSuns = angleSteps * elevationSteps + 1;
-	sun.photons = value / numSuns;
+	basePhotons = value / numSuns;
+	sun.photons = basePhotons;
 
 	/* iterate elevation */
 	elevation = elevationStep * 0.5f;
@@ -238,6 +602,23 @@ static void CreateSkyLights( vec3_t color, float value, int iterations, float fi
 			sun.direction[ 0 ] = cos( angle ) * cos( elevation );
 			sun.direction[ 1 ] = sin( angle ) * cos( elevation );
 			sun.direction[ 2 ] = sin( elevation );
+
+			if ( usePanorama ) {
+				vec3_t sampled;
+				float scale;
+				SkyPanorama_SampleDirection( &panorama, sun.direction, sampled );
+				scale = ColorNormalize( sampled, sun.color );
+				if ( scale <= 0.0f ) {
+					angle += angleStep;
+					continue;
+				}
+				sun.photons = basePhotons * scale;
+			}
+			else{
+				VectorCopy( color, sun.color );
+				sun.photons = basePhotons;
+			}
+
 			CreateSunLight( &sun );
 
 			/* move */
@@ -251,7 +632,23 @@ static void CreateSkyLights( vec3_t color, float value, int iterations, float fi
 
 	/* create vertical sun */
 	VectorSet( sun.direction, 0.0f, 0.0f, 1.0f );
-	CreateSunLight( &sun );
+	if ( usePanorama ) {
+		vec3_t sampled;
+		float scale;
+		SkyPanorama_SampleDirection( &panorama, sun.direction, sampled );
+		scale = ColorNormalize( sampled, sun.color );
+		if ( scale > 0.0f ) {
+			sun.photons = basePhotons * scale;
+			CreateSunLight( &sun );
+		}
+	}
+	else{
+		VectorCopy( color, sun.color );
+		sun.photons = basePhotons;
+		CreateSunLight( &sun );
+	}
+
+	SkyFloatImage_Clear( &panorama );
 
 	/* short circuit */
 	return;
@@ -625,7 +1022,7 @@ void CreateSurfaceLights( void ){
 		/* sky light? */
 		if ( si->skyLightValue > 0.0f ) {
 			Sys_FPrintf( SYS_VRB, "Sky: %s\n", si->shader );
-			CreateSkyLights( si->color, si->skyLightValue, si->skyLightIterations, si->lightFilterRadius, si->lightStyle );
+			CreateSkyLights( si, si->color, si->skyLightValue, si->skyLightIterations, si->lightFilterRadius, si->lightStyle );
 			si->skyLightValue = 0.0f;   /* FIXME: hack! */
 		}
 
@@ -3191,6 +3588,61 @@ int LightMain( int argc, char **argv ){
 			skyScale *= f;
 			Sys_Printf( "Sky/sun light scaled by %f to %f\n", f, skyScale );
 			i++;
+		}
+		else if ( !strcmp( argv[ i ], "-skylightmode" ) ) {
+			skyLightMode_t parsedMode;
+			if ( i + 1 >= argc ) {
+				Error( "Missing mode for -skylightmode (expected: auto legacy shader panorama)" );
+			}
+			parsedMode = SkyLightMode_Parse( argv[ i + 1 ] );
+			if ( parsedMode == SKYLIGHT_MODE_AUTO && Q_stricmp( argv[ i + 1 ], "auto" ) ) {
+				Error( "Invalid -skylightmode '%s' (expected: auto legacy shader panorama)", argv[ i + 1 ] );
+			}
+			g_skyLightMode = parsedMode;
+			Sys_Printf( "Skylight panorama mode set to %s\n", SkyLightMode_ToString( g_skyLightMode ) );
+			i++;
+		}
+		else if ( !strcmp( argv[ i ], "-skylightlegacy" ) ) {
+			g_skyLightMode = SKYLIGHT_MODE_LEGACY;
+			Sys_Printf( "Skylight panorama mode set to %s\n", SkyLightMode_ToString( g_skyLightMode ) );
+		}
+		else if ( !strcmp( argv[ i ], "-skylightshader" ) ) {
+			g_skyLightMode = SKYLIGHT_MODE_SHADER;
+			Sys_Printf( "Skylight panorama mode set to %s\n", SkyLightMode_ToString( g_skyLightMode ) );
+		}
+		else if ( !strcmp( argv[ i ], "-skylightpanorama" ) || !strcmp( argv[ i ], "-skypanorama" ) ) {
+			if ( i + 1 >= argc ) {
+				Error( "Missing file path for -skylightpanorama" );
+			}
+			strcpy( g_skyLightPanoramaPath, argv[ i + 1 ] );
+			Sys_Printf( "Skylight panorama source set to %s\n", g_skyLightPanoramaPath );
+			i++;
+		}
+		else if ( !strcmp( argv[ i ], "-skylightpanoramafacesize" ) || !strcmp( argv[ i ], "-skypanofacesize" ) ) {
+			if ( i + 1 >= argc ) {
+				Error( "Missing integer for -skylightpanoramafacesize" );
+			}
+			g_skyLightPanoramaFaceSize = atoi( argv[ i + 1 ] );
+			if ( g_skyLightPanoramaFaceSize < 16 ) {
+				g_skyLightPanoramaFaceSize = 16;
+			}
+			else if ( g_skyLightPanoramaFaceSize > 4096 ) {
+				g_skyLightPanoramaFaceSize = 4096;
+			}
+			Sys_Printf( "Skylight panorama conversion face size set to %d\n", g_skyLightPanoramaFaceSize );
+			i++;
+		}
+		else if ( !strcmp( argv[ i ], "-skylightpanoramaconvert" ) || !strcmp( argv[ i ], "-skypanoconvert" ) ) {
+			if ( i + 1 >= argc ) {
+				Error( "Missing output base path for -skylightpanoramaconvert" );
+			}
+			strcpy( g_skyLightPanoramaConvertBase, argv[ i + 1 ] );
+			Sys_Printf( "Skylight panorama cube-face export base set to %s\n", g_skyLightPanoramaConvertBase );
+			i++;
+		}
+		else if ( !strcmp( argv[ i ], "-skylightauto" ) ) {
+			g_skyLightMode = SKYLIGHT_MODE_AUTO;
+			Sys_Printf( "Skylight panorama mode set to %s\n", SkyLightMode_ToString( g_skyLightMode ) );
 		}
 
 		else if ( !strcmp( argv[ i ], "-bouncescale" ) ) {

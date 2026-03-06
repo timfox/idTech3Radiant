@@ -58,6 +58,10 @@ bool EdgeMode(){
 	    && GlobalSelectionSystem().ComponentMode() == SelectionSystem::eEdge;
 }
 
+bool PrimitiveMode(){
+	return GlobalSelectionSystem().Mode() == SelectionSystem::ePrimitive;
+}
+
 bool VertexMode(){
 	return GlobalSelectionSystem().Mode() == SelectionSystem::eComponent
 	    && GlobalSelectionSystem().ComponentMode() == SelectionSystem::eVertex;
@@ -82,6 +86,11 @@ EdgeModeApplyCaller g_edgeMode_button_caller;
 BoolExportCallback g_edgeMode_button_callback( g_edgeMode_button_caller );
 ToggleItem g_edgeMode_button( g_edgeMode_button_callback );
 
+typedef FreeCaller<void(const BoolImportCallback&), &BoolFunctionExport<PrimitiveMode>::apply> PrimitiveModeApplyCaller;
+PrimitiveModeApplyCaller g_primitiveMode_button_caller;
+BoolExportCallback g_primitiveMode_button_callback( g_primitiveMode_button_caller );
+ToggleItem g_primitiveMode_button( g_primitiveMode_button_callback );
+
 typedef FreeCaller<void(const BoolImportCallback&), &BoolFunctionExport<VertexMode>::apply> VertexModeApplyCaller;
 VertexModeApplyCaller g_vertexMode_button_caller;
 BoolExportCallback g_vertexMode_button_callback( g_vertexMode_button_caller );
@@ -93,6 +102,7 @@ BoolExportCallback g_faceMode_button_callback( g_faceMode_button_caller );
 ToggleItem g_faceMode_button( g_faceMode_button_callback );
 
 void ComponentModeChanged(){
+	g_primitiveMode_button.update();
 	g_edgeMode_button.update();
 	g_vertexMode_button.update();
 	g_faceMode_button.update();
@@ -127,6 +137,16 @@ void SelectEdgeMode(){
 
 	ComponentModeChanged();
 
+	ModeChangeNotify();
+}
+
+void SelectPrimitiveMode(){
+	if ( PrimitiveMode() ) {
+		return;
+	}
+
+	SelectionSystem_DefaultMode();
+	ComponentModeChanged();
 	ModeChangeNotify();
 }
 
@@ -428,6 +448,7 @@ void Tools_registerCommands(){
 	const auto faceAccel = QKeySequence( "F11" );
 	const auto scaleAccel = QKeySequence( "R" );
 
+	GlobalToggles_insert( "DragPrimitives", makeCallbackF( SelectPrimitiveMode ), ToggleItem::AddCallbackCaller( g_primitiveMode_button ), QKeySequence( "F8" ) );
 	GlobalToggles_insert( "DragVertices", makeCallbackF( SelectVertexMode ), ToggleItem::AddCallbackCaller( g_vertexMode_button ), QKeySequence( "F9" ) );
 	GlobalToggles_insert( "DragEdges", makeCallbackF( SelectEdgeMode ), ToggleItem::AddCallbackCaller( g_edgeMode_button ), edgeAccel );
 	GlobalToggles_insert( "DragFaces", makeCallbackF( SelectFaceMode ), ToggleItem::AddCallbackCaller( g_faceMode_button ), faceAccel );
@@ -437,7 +458,7 @@ void Tools_registerCommands(){
 	GlobalToggles_insert( "MouseTranslate", makeCallbackF( TranslateMode ), ToggleItem::AddCallbackCaller( g_translatemode_button ), QKeySequence( "W" ) );
 	GlobalToggles_insert( "MouseRotate", makeCallbackF( RotateMode ), ToggleItem::AddCallbackCaller( g_rotatemode_button ), QKeySequence( "E" ) );
 	GlobalToggles_insert( "MouseScale", makeCallbackF( ScaleMode ), ToggleItem::AddCallbackCaller( g_scalemode_button ), scaleAccel );
-	GlobalToggles_insert( "MouseTransform", makeCallbackF( SkewMode ), ToggleItem::AddCallbackCaller( g_skewmode_button ), QKeySequence( "T" ) );
+	GlobalToggles_insert( "MouseTransform", makeCallbackF( SkewMode ), ToggleItem::AddCallbackCaller( g_skewmode_button ) );
 	GlobalToggles_insert( "MouseDrag", makeCallbackF( DragMode ), ToggleItem::AddCallbackCaller( g_dragmode_button ) );
 	GlobalToggles_insert( "MouseBuild", makeCallbackF( BuildMode ), ToggleItem::AddCallbackCaller( g_build_button ), QKeySequence( "B" ) );
 	GlobalToggles_insert( "MouseUV", makeCallbackF( UVMode ), ToggleItem::AddCallbackCaller( g_uv_button ), QKeySequence( "F12" ) );

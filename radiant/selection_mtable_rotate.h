@@ -23,6 +23,11 @@
 
 #include "selection_.h"
 
+inline float rotateSnapRadians(){
+	const float degrees = g_ROTATE_SNAP > 0.0f ? g_ROTATE_SNAP : 15.0f;
+	return static_cast<float>( degrees_to_radians( degrees ) );
+}
+
 class RotateFree : public Manipulatable
 {
 	Vector3 m_start;
@@ -42,7 +47,7 @@ public:
 		if( g_modifiers.shift() )
 			for( std::size_t i = 0; i < 3; ++i )
 				if( current[i] == 0 )
-					return m_rotatable.rotate( quaternion_for_axisangle( g_vector3_axes[i], float_snapped( angle_for_axis( m_start, current, g_vector3_axes[i] ), static_cast<float>( c_pi / 12.0 ) ) ) );
+					return m_rotatable.rotate( quaternion_for_axisangle( g_vector3_axes[i], float_snapped( angle_for_axis( m_start, current, g_vector3_axes[i] ), rotateSnapRadians() ) ) );
 
 		m_rotatable.rotate( quaternion_for_unit_vectors( m_start, current ) );
 	//	m_rotatable.rotate( quaternion_for_sphere_vectors( m_start, current ) ); //wrong math, 2x more sensitive
@@ -90,7 +95,7 @@ public:
 		}
 
 		if( g_modifiers.shift() ){
-			m_rotatable.rotate( quaternion_for_axisangle( m_axis, float_snapped( angle_for_axis( m_start, current, m_axis ), static_cast<float>( c_pi / 12.0 ) ) ) );
+			m_rotatable.rotate( quaternion_for_axisangle( m_axis, float_snapped( angle_for_axis( m_start, current, m_axis ), rotateSnapRadians() ) ) );
 		}
 		else{
 			m_rotatable.rotate( quaternion_for_axisangle( m_axis, angle_for_axis( m_start, current, m_axis ) ) );

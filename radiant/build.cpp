@@ -26,11 +26,13 @@
 #include <libxml/tree.h>
 
 #include <array>
+#include <cstdlib>
 #include <cstdio>
 #include <iterator>
 #include <list>
 #include <map>
 #include <string>
+#include "os/file.h"
 #include "os/path.h"
 #include "string/string.h"
 #include "stream/textfilestream.h"
@@ -612,6 +614,116 @@ bool g_build_changed = false;
 Project::const_iterator g_lastExecutedBuild;
 Tools g_build_tools;
 bool g_tools_changed = false;
+
+struct WishGILodSettings
+{
+	int probes;
+	int links;
+	int iterations;
+	int maxSamples;
+};
+
+struct WishGILodPreset
+{
+	const char* label;
+	const char* variable;
+	WishGILodSettings defaults;
+};
+
+constexpr std::array<WishGILodPreset, 3> c_wishgiLodPresets{ {
+	{ "UltraLite", "WishGIFlagsUltraLite", { 48, 1, 0, 8000 } },
+	{ "Lite", "WishGIFlagsLite", { 96, 2, 1, 20000 } },
+	{ "Quality", "WishGIFlagsQuality", { 256, 4, 4, 80000 } },
+} };
+
+bool wishgi_parseIntArg( StringTokeniser& tokeniser, int& value ){
+	const char* token = tokeniser.getToken();
+	if ( string_empty( token ) ) {
+		return false;
+	}
+	value = std::atoi( token );
+	return true;
+}
+
+WishGILodSettings wishgi_parseLodFlags( const char* flags, const WishGILodSettings& defaults ){
+	WishGILodSettings settings = defaults;
+	StringTokeniser tokeniser( flags );
+	for ( const char* token = tokeniser.getToken(); !string_empty( token ); token = tokeniser.getToken() )
+	{
+		if ( string_equal( token, "-wishgi-probes" ) ) {
+			wishgi_parseIntArg( tokeniser, settings.probes );
+		}
+		else if ( string_equal( token, "-wishgi-links" ) ) {
+			wishgi_parseIntArg( tokeniser, settings.links );
+		}
+		else if ( string_equal( token, "-wishgi-iterations" ) ) {
+			wishgi_parseIntArg( tokeniser, settings.iterations );
+		}
+		else if ( string_equal( token, "-wishgi-maxsamples" ) ) {
+			wishgi_parseIntArg( tokeniser, settings.maxSamples );
+		}
+	}
+	return settings;
+}
+
+CopiedString wishgi_formatLodFlags( const WishGILodSettings& settings ){
+	StringOutputStream stream( 128 );
+	stream << "-wishgi-probes " << settings.probes;
+	stream << " -wishgi-links " << settings.links;
+	stream << " -wishgi-iterations " << settings.iterations;
+	stream << " -wishgi-maxsamples " << settings.maxSamples;
+	return stream.c_str();
+}
+
+bool wishgi_hasFlag( const char* flags, const char* flag ){
+	StringTokeniser tokeniser( flags );
+	for ( const char* token = tokeniser.getToken(); !string_empty( token ); token = tokeniser.getToken() )
+	{
+		if ( string_equal( token, flag ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+CopiedString wishgi_formatDataCreationFlags( bool saveAssoc, bool dumpProbes, bool dumpSH ){
+	StringOutputStream stream( 128 );
+	bool first = true;
+	auto appendFlag = [&]( const char* flag ){
+		if ( !first ) {
+			stream << ' ';
+		}
+		stream << flag;
+		first = false;
+	};
+
+	if ( saveAssoc ) {
+		appendFlag( "-wishgi-saveassoc" );
+	}
+	if ( dumpProbes ) {
+		appendFlag( "-wishgi-dumpprobes-default" );
+	}
+	if ( dumpSH ) {
+		appendFlag( "-wishgi-dumpsh-default" );
+	}
+
+	return stream.c_str();
+}
+
+CopiedString wishgi_formatDataReuseFlags( bool loadAssoc ){
+	return loadAssoc ? CopiedString( "-wishgi-loadassoc" ) : CopiedString( "" );
+}
+
+Tool make_literal_tool( const char* value ){
+	Tool tool;
+	tool.push_back( new VariableString( value ) );
+	return tool;
+}
+
+void set_tool_literal( const char* name, const char* value ){
+	g_build_tools[name] = make_literal_tool( value );
+	g_tools_changed = true;
+}
 }
 
 void build_error_undefined_tool( const char* build, const char* tool ){
@@ -1182,9 +1294,11 @@ protected:
 };
 
 #include "gtkutil/guisettings.h"
+#include <QCheckBox>
 #include <QTableWidget>
 #include <QStyledItemDelegate>
 #include <QLineEdit>
+#include <QSpinBox>
 #include <QApplication>
 #include <QClipboard>
 #include <QToolTip>
@@ -1266,6 +1380,45 @@ public:
 		}
 	}
 };
+
+namespace
+{
+void update_editable_tool_row( QTableWidget* table, const char* variable ){
+	if ( table == nullptr ) {
+		return;
+	}
+
+	const auto toolIt = g_build_tools.find( variable );
+	if ( toolIt == g_build_tools.end() ) {
+		return;
+	}
+
+	for ( int row = 0; row < table->rowCount(); ++row )
+	{
+		QTableWidgetItem* nameItem = table->item( row, 0 );
+		if ( nameItem == nullptr || nameItem->text() != variable ) {
+			continue;
+		}
+
+		QTableWidgetItem* valueItem = table->item( row, 1 );
+		if ( valueItem == nullptr ) {
+			valueItem = new QTableWidgetItem;
+			table->setItem( row, 1, valueItem );
+		}
+
+		valueItem->setText( toolIt->second.evaluate().c_str() );
+		StringOutputStream stream( 256 );
+		{
+			XMLStreamWriter writer( stream );
+			toolIt->second.exportXML( writer );
+		}
+		if ( const char* xml = strchr( stream, '>' ) ) {
+			valueItem->setData( Qt::ItemDataRole::UserRole, xml + 1 );
+		}
+		return;
+	}
+}
+}
 
 EMessageBoxReturn BuildMenuDialog_construct( ProjectList& projectList ){
 	static auto [dialog, rootLayout] = [](){
@@ -1371,9 +1524,10 @@ EMessageBoxReturn BuildMenuDialog_construct( ProjectList& projectList ){
 				}
 			}
 			build_init_tools();
+			QTableWidget* editableToolsTable = nullptr;
 			{ // mutable 'Tool' variables
 				vbox->addWidget( new QLabel( "Editables:" ) );
-				auto *table = new QTableWidget( 0, 2 );
+				auto *table = editableToolsTable = new QTableWidget( 0, 2 );
 				vbox->addWidget( table );
 				table->horizontalHeader()->hide();
 				// table->setHorizontalHeaderLabels( { "Name", "Variable" } );
@@ -1399,6 +1553,149 @@ EMessageBoxReturn BuildMenuDialog_construct( ProjectList& projectList ){
 				}
 				table->insertRow( table->rowCount() );
 				table->setItem( table->rowCount() - 1, 0, new QTableWidgetItem( LAST_ITER_STRING ) );
+			}
+			{
+				const bool hasWishGIDataCreation = g_build_tools.contains( "WishGIDataCreationFlags" );
+				const bool hasWishGIDataReuse = g_build_tools.contains( "WishGIDataReuseFlags" );
+				bool hasWishGILod = false;
+				for ( const WishGILodPreset& preset : c_wishgiLodPresets )
+				{
+					if ( g_build_tools.contains( preset.variable ) ) {
+						hasWishGILod = true;
+						break;
+					}
+				}
+
+				if ( hasWishGIDataCreation || hasWishGIDataReuse || hasWishGILod ) {
+					auto *wishgiFrame = new QGroupBox( "MapBake3 WishGI Controls" );
+					vbox->addWidget( wishgiFrame );
+					auto *wishgiGrid = new QGridLayout( wishgiFrame );
+					int row = 0;
+
+					if ( hasWishGIDataCreation || hasWishGIDataReuse ) {
+						wishgiGrid->addWidget( new QLabel( "Data creation:" ), row, 0 );
+						auto *rowBox = new QWidget;
+						auto *rowLayout = new QHBoxLayout( rowBox );
+						rowLayout->setContentsMargins( 0, 0, 0, 0 );
+
+						QCheckBox* saveAssoc = nullptr;
+						QCheckBox* dumpProbes = nullptr;
+						QCheckBox* dumpSH = nullptr;
+						if ( hasWishGIDataCreation ) {
+							const StringBuffer flags = g_build_tools.find( "WishGIDataCreationFlags" )->second.evaluate();
+							saveAssoc = new QCheckBox( "Save assoc cache" );
+							saveAssoc->setChecked( wishgi_hasFlag( flags.c_str(), "-wishgi-saveassoc" ) );
+							rowLayout->addWidget( saveAssoc );
+
+							dumpProbes = new QCheckBox( "Dump probes" );
+							dumpProbes->setChecked( wishgi_hasFlag( flags.c_str(), "-wishgi-dumpprobes-default" ) );
+							rowLayout->addWidget( dumpProbes );
+
+							dumpSH = new QCheckBox( "Dump SH" );
+							dumpSH->setChecked( wishgi_hasFlag( flags.c_str(), "-wishgi-dumpsh-default" ) );
+							rowLayout->addWidget( dumpSH );
+						}
+
+						if ( hasWishGIDataReuse ) {
+							bool loadAssocChecked = false;
+							const StringBuffer flags = g_build_tools.find( "WishGIDataReuseFlags" )->second.evaluate();
+							loadAssocChecked = wishgi_hasFlag( flags.c_str(), "-wishgi-loadassoc" );
+							auto *loadAssoc = new QCheckBox( "Load assoc for finals" );
+							loadAssoc->setChecked( loadAssocChecked );
+							rowLayout->addWidget( loadAssoc );
+							QObject::connect( loadAssoc, &QCheckBox::toggled, [editableToolsTable]( bool checked ){
+								const CopiedString flags = wishgi_formatDataReuseFlags( checked );
+								set_tool_literal( "WishGIDataReuseFlags", flags.c_str() );
+								update_editable_tool_row( editableToolsTable, "WishGIDataReuseFlags" );
+							} );
+						}
+
+						rowLayout->addStretch();
+						wishgiGrid->addWidget( rowBox, row, 1 );
+						++row;
+
+						if ( hasWishGIDataCreation ) {
+							auto updateCreationFlags = [editableToolsTable, saveAssoc, dumpProbes, dumpSH](){
+								const CopiedString flags = wishgi_formatDataCreationFlags( saveAssoc->isChecked(), dumpProbes->isChecked(), dumpSH->isChecked() );
+								set_tool_literal( "WishGIDataCreationFlags", flags.c_str() );
+								update_editable_tool_row( editableToolsTable, "WishGIDataCreationFlags" );
+							};
+							QObject::connect( saveAssoc, &QCheckBox::toggled, [updateCreationFlags]( bool ){ updateCreationFlags(); } );
+							QObject::connect( dumpProbes, &QCheckBox::toggled, [updateCreationFlags]( bool ){ updateCreationFlags(); } );
+							QObject::connect( dumpSH, &QCheckBox::toggled, [updateCreationFlags]( bool ){ updateCreationFlags(); } );
+						}
+					}
+
+					if ( hasWishGILod ) {
+						auto *title = new QLabel( "LOD presets (probes, links, iterations, max samples):" );
+						wishgiGrid->addWidget( title, row, 0, 1, 2 );
+						++row;
+
+						for ( const WishGILodPreset& preset : c_wishgiLodPresets )
+						{
+							if ( !g_build_tools.contains( preset.variable ) ) {
+								continue;
+							}
+
+							WishGILodSettings settings = preset.defaults;
+							const StringBuffer flags = g_build_tools.find( preset.variable )->second.evaluate();
+							settings = wishgi_parseLodFlags( flags.c_str(), preset.defaults );
+
+							wishgiGrid->addWidget( new QLabel( preset.label ), row, 0 );
+							auto *values = new QWidget;
+							auto *valuesLayout = new QHBoxLayout( values );
+							valuesLayout->setContentsMargins( 0, 0, 0, 0 );
+
+							auto *probes = new QSpinBox;
+							probes->setRange( 1, 1000000 );
+							probes->setValue( settings.probes );
+							probes->setPrefix( "P " );
+							valuesLayout->addWidget( probes );
+
+							auto *links = new QSpinBox;
+							links->setRange( 1, 8 );
+							links->setValue( settings.links );
+							links->setPrefix( "L " );
+							valuesLayout->addWidget( links );
+
+							auto *iterations = new QSpinBox;
+							iterations->setRange( 0, 64 );
+							iterations->setValue( settings.iterations );
+							iterations->setPrefix( "I " );
+							valuesLayout->addWidget( iterations );
+
+							auto *maxSamples = new QSpinBox;
+							maxSamples->setRange( 1, 2000000 );
+							maxSamples->setValue( settings.maxSamples );
+							maxSamples->setPrefix( "S " );
+							valuesLayout->addWidget( maxSamples );
+							valuesLayout->addStretch();
+
+							wishgiGrid->addWidget( values, row, 1 );
+							++row;
+
+							auto updatePreset = [variable = CopiedString( preset.variable ), editableToolsTable, probes, links, iterations, maxSamples](){
+								const WishGILodSettings lod{
+									probes->value(),
+									links->value(),
+									iterations->value(),
+									maxSamples->value(),
+								};
+								const CopiedString flags = wishgi_formatLodFlags( lod );
+								set_tool_literal( variable.c_str(), flags.c_str() );
+								update_editable_tool_row( editableToolsTable, variable.c_str() );
+							};
+
+							auto connectSpin = [updatePreset]( QSpinBox* spin ){
+								QObject::connect( spin, static_cast<void ( QSpinBox::* )( int )>( &QSpinBox::valueChanged ), [updatePreset]( int ){ updatePreset(); } );
+							};
+							connectSpin( probes );
+							connectSpin( links );
+							connectSpin( iterations );
+							connectSpin( maxSamples );
+						}
+					}
+				}
 			}
 			build_clear_variables();
 		}
@@ -1521,6 +1818,8 @@ const char* g_buildMenuFullPah(){
 
 void LoadBuildMenu(){
 	auto tryParse = []( const char* filename ) -> bool {
+		if( string_empty( filename ) || !file_exists( filename ) || file_is_directory( filename ) )
+			return false;
 		build_commands_clear();
 		return build_commands_parse( filename ) || build_commands_parse_compat( filename );
 	};
@@ -1532,6 +1831,24 @@ void LoadBuildMenu(){
 				return;
 		}
 		{
+			const auto gameToolsDefault = StringStream( GameToolsPath_get(), "default_build_menu.xml" );
+			if( tryParse( gameToolsDefault ) )
+				return;
+		}
+		{
+			// Some gamepacks keep .game descriptors in a "games/" subdirectory.
+			// In that case, default_build_menu.xml is often placed one level above.
+			const auto parentOfGamesDefault = StringStream( GameToolsPath_get(), "../default_build_menu.xml" );
+			if( tryParse( parentOfGamesDefault ) )
+				return;
+		}
+		{
+			const auto gamepackRootDefault = StringStream( GamePacksPath_get(), "default_build_menu.xml" );
+			if( tryParse( gamepackRootDefault ) )
+				return;
+		}
+		{
+			// legacy path variant: <gamepacks>/<gamefile>/default_build_menu.xml
 			const auto gamepackDefault = StringStream( GamePacksPath_get(), g_pGameDescription->mGameFile, "/default_build_menu.xml" );
 			if( tryParse( gamepackDefault ) )
 				return;
@@ -1542,13 +1859,6 @@ void LoadBuildMenu(){
 			if( tryParse( appDefault ) )
 				return;
 		}
-		{
-			// fallback for configs that keep build-menu defaults next to tools (q3map2, bspc, ...)
-			const auto toolsDefault = StringStream( GameToolsPath_get(), "default_build_menu.xml" );
-			if( tryParse( toolsDefault ) )
-				return;
-		}
-
 		globalErrorStream() << "failed to load default build menu for " << Quoted( g_pGameDescription->mGameFile ) << '\n';
 	}
 }

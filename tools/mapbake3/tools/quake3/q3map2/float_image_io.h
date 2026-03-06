@@ -11,6 +11,9 @@ int MapBake3_LoadEXRBufferToRGBA8( const unsigned char *buffer, int size, unsign
 int MapBake3_LoadHDRBufferToRGB8( const unsigned char *buffer, int size, unsigned char **pixels, int *width, int *height );
 int MapBake3_LoadEXRBufferToRGB8( const unsigned char *buffer, int size, unsigned char **pixels, int *width, int *height );
 
+int MapBake3_LoadHDRBufferToRGBAF32( const unsigned char *buffer, int size, float **pixels, int *width, int *height );
+int MapBake3_LoadEXRBufferToRGBAF32( const unsigned char *buffer, int size, float **pixels, int *width, int *height );
+
 int MapBake3_WriteRGB8AsHDR32( const char *filename, const unsigned char *pixels, int width, int height, int flip );
 int MapBake3_WriteRGB8AsEXR32( const char *filename, const unsigned char *pixels, int width, int height, int flip );
 

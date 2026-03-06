@@ -448,6 +448,33 @@ void DoCommandListDlg(){
 
 const char* const COMMANDS_VERSION = "1.0-gtk-accelnames";
 
+static void MigrateLegacyShortcuts(){
+	auto toggleTextures = g_shortcuts.find( "ToggleTextures" );
+	auto mouseTransform = g_shortcuts.find( "MouseTransform" );
+	if ( toggleTextures != g_shortcuts.end() && mouseTransform != g_shortcuts.end() ) {
+		// Migrate only the exact legacy defaults:
+		// ToggleTextures=Alt+T and MouseTransform=T.
+		// This avoids overriding user-customized mappings.
+		if ( toggleTextures->second.accelerator == QKeySequence( "Alt+T" )
+		  && mouseTransform->second.accelerator == QKeySequence( "T" ) ) {
+			toggleTextures->second.accelerator = QKeySequence( "T" );
+			mouseTransform->second.accelerator = {};
+			globalOutputStream() << "migrated legacy shortcuts: ToggleTextures Alt+T->T, MouseTransform T->unbound\n";
+		}
+	}
+
+	// Migrate NavMesh rebuild away from RegionSetSelection legacy clash.
+	auto navmeshRebuild = g_shortcuts.find( "NavMesh_Rebuild" );
+	auto regionSetSelection = g_shortcuts.find( "RegionSetSelection" );
+	if ( navmeshRebuild != g_shortcuts.end() && regionSetSelection != g_shortcuts.end()
+	  && navmeshRebuild->second.accelerator_default == QKeySequence( "Ctrl+Shift+N" )
+	  && navmeshRebuild->second.accelerator == QKeySequence( "Ctrl+Shift+R" )
+	  && regionSetSelection->second.accelerator == QKeySequence( "Ctrl+Shift+R" ) ) {
+		navmeshRebuild->second.accelerator = navmeshRebuild->second.accelerator_default;
+		globalOutputStream() << "migrated legacy shortcuts: NavMesh_Rebuild Ctrl+Shift+R->Ctrl+Shift+N\n";
+	}
+}
+
 void SaveCommandMap( const char* path ){
 	const auto strINI = StringStream( path, "shortcuts.ini" );
 
@@ -509,6 +536,7 @@ void LoadCommandMap( const char* path ){
 			globalOutputStream() << "commands import: data version " << dataVersion << " is compatible with code version " << version << '\n';
 			ReadCommandMap visitor( ini );
 			GlobalShortcuts_foreach( visitor );
+			MigrateLegacyShortcuts();
 			globalOutputStream() << "parsed " << visitor.count() << " custom shortcuts\n";
 		}
 		else

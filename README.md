@@ -30,6 +30,7 @@ The open-source, cross-platform level editor for id Tech based games.
 * Quick vertices drag / brush faces shear shortcut
 * QE tool component mode: drag without hitting handles
 * New bbox manipulator: move, rotate, scale, skew
+* Configurable rotate snap increment for rotate manipulator
 * Connected entities selector/walker
 
 #### Texturing

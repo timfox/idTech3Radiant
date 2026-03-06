@@ -233,7 +233,7 @@ static void HelpLight()
 		{ "-nogrid", "Disable grid light calculation (makes all entities fullbright)" },
 		{ "-nolightmapsearch", "Do not optimize lightmap packing for GPU memory usage (as doing so costs fps)" },
 		{ "-nolm", "Skip lightmaps calculation" },
-		{ "-normalmap", "Color the lightmaps according to the direction of the surface normal (TODO is this identical to `-debugnormals`?)" },
+		{ "-normalmap", "Color lightmaps by surface normal direction (similar to `-debugnormals`)" },
 		{ "-nosRGB", "Treat colors, textures, and lightmaps as linear colorspace" },
 		{ "-nosRGBcolor", "Treat shader and light entity colors as linear colorspace" },
 		{ "-nosRGBlight", "Write lightmaps as linear colorspace" },

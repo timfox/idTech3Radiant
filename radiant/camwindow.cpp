@@ -2595,8 +2595,8 @@ void CamWnd_Construct(){
 	GlobalShortcuts_insert( "CameraFreeMoveLeft2", QKeySequence( "Left" ) );
 	GlobalShortcuts_insert( "CameraFreeMoveRight2", QKeySequence( "Right" ) );
 
-	GlobalShortcuts_insert( "CameraFreeMoveUp" );
-	GlobalShortcuts_insert( "CameraFreeMoveDown" );
+	GlobalShortcuts_insert( "CameraFreeMoveUp", QKeySequence( "E" ) );
+	GlobalShortcuts_insert( "CameraFreeMoveDown", QKeySequence( "Q" ) );
 
 	GlobalShortcuts_insert( "CameraFreeFocus", QKeySequence( "Tab" ) );
 

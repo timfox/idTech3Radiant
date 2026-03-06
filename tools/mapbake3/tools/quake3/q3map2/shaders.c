@@ -36,6 +36,25 @@
 /* dependencies */
 #include "q3map2.h"
 
+static qboolean IsUtilityNoImageShader( const char *shader ){
+	const char *name;
+
+	if ( shader == NULL || shader[ 0 ] == '\0' ) {
+		return qfalse;
+	}
+
+	name = strrchr( shader, '/' );
+	if ( name != NULL ) {
+		name++;
+	}
+	else
+	{
+		name = shader;
+	}
+
+	return ( !Q_stricmp( name, "nodraw" ) || !Q_stricmp( name, "nodrawnonsolid" ) ) ? qtrue : qfalse;
+}
+
 
 
 /*
@@ -772,7 +791,7 @@ static void LoadShaderImages( shaderInfo_t *si ){
 		/* otherwise, use default image */
 		if ( si->shaderImage == NULL ) {
 			si->shaderImage = ImageLoad( DEFAULT_IMAGE );
-			if ( warnImage && strcmp( si->shader, "noshader" ) ) {
+			if ( warnImage && strcmp( si->shader, "noshader" ) && !IsUtilityNoImageShader( si->shader ) ) {
 				Sys_Printf( "WARNING: Couldn't find image for shader %s\n", si->shader );
 			}
 		}

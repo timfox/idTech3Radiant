@@ -144,6 +144,23 @@ struct ToolbarItem
 	bool m_enabled = true;
 };
 
+static QString shortcut_tooltip_suffix( const QKeySequence& shortcut ){
+	return QKeySequence_valid( shortcut ) ? shortcut.toString() : "unbound";
+}
+
+static void set_hotkey_tooltip( QAction *action, const char *description, const QKeySequence& shortcut ){
+	QString out;
+	const char *p = description;
+	for( ; *p && *p != '\n'; ++p ) // append 1st line
+		out += *p;
+	out += " [Hotkey: ";
+	out += shortcut_tooltip_suffix( shortcut );
+	out += "]";
+	for( ; *p; ++p )  // append the rest
+		out += *p;
+	action->setToolTip( out );
+}
+
 CopiedString g_toolbarHiddenButtons =
 	"%OpenMap%"
 	"%SaveMap%"
@@ -240,6 +257,7 @@ public:
 					update_separators_visibility();
 					exportState( item->m_commandName.c_str(), checked );
 				} );
+				set_hotkey_tooltip( action, item->m_commandName.c_str(), item->m_action->shortcut() );
 				action->setCheckable( true );
 				action->setChecked( item->m_enabled );
 				// separate different toolbars
@@ -285,21 +303,7 @@ void toolbar_construct_control_menu( QMenu *menu ){
 
 // can update this on QAction::changed() signal, but it's called too often and even on setChecked(); let's only have this on construction
 static void toolbar_action_set_tooltip( QAction *action, const char *description ){
-	if( QKeySequence_valid( action->shortcut() ) ){
-		QString out;
-		const char *p = description;
-		for( ; *p && *p != '\n'; ++p ) // append 1st line
-			out += *p;
-		out += " (";
-		out += action->shortcut().toString();  // append shortcut
-		out += ")";
-		for( ; *p; ++p )  // append the rest
-			out += *p;
-		action->setToolTip( out );
-	}
-	else{
-		action->setToolTip( description );
-	}
+	set_hotkey_tooltip( action, description, action->shortcut() );
 }
 
 QAction* toolbar_append_button( QToolBar* toolbar, const char* description, const QIcon& icon, const char* commandName ){

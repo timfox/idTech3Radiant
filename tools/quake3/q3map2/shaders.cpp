@@ -38,6 +38,12 @@ static bool g_warnImage = true;
 static surfaceParm_t custSurfaceParms[ 256 ];
 static int numCustSurfaceParms;
 
+static bool IsUtilityNoImageShader( const char* shader ){
+	return shader != nullptr
+	       && ( striEqualSuffix( shader, "/nodraw" )
+	            || striEqualSuffix( shader, "/nodrawnonsolid" ) );
+}
+
 
 
 /*
@@ -671,7 +677,9 @@ static void LoadShaderImages( shaderInfo_t& si ){
 		/* otherwise, use default image */
 		if ( si.shaderImage == nullptr ) {
 			si.shaderImage = ImageLoad( DEFAULT_IMAGE );
-			if ( g_warnImage && !strEqual( si.shader, "noshader" ) ) {
+			if ( g_warnImage
+			     && !strEqual( si.shader, "noshader" )
+			     && !IsUtilityNoImageShader( si.shader.c_str() ) ) {
 				Sys_Warning( "Couldn't find image for shader %s\n", si.shader.c_str() );
 			}
 		}

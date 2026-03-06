@@ -48,3 +48,5 @@ void Console_releaseStdStreams();
 void Console_buildProgressUpdate( int step, int total, const char* stepName );
 /// Find next error/warning/leak in console output.
 void Console_findNext( const char* pattern );
+/// Scroll console output to the latest line.
+void Console_scrollBottom();

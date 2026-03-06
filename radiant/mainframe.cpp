@@ -87,6 +87,7 @@
 #include <QClipboard>
 #include <QTextStream>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QOpenGLWidget>
@@ -805,7 +806,7 @@ int UpdateCheck_compareVersions( const QString& lhs, const QString& rhs, bool& c
 }
 
 void OpenUpdateURL(){
-	OpenURL( "https://github.com/Garux/netradiant-custom/releases/latest" );
+	OpenURL( "https://github.com/timfox/idtech3radiant/releases" );
 }
 
 constexpr const char* c_idTech3WebsiteUrl = "https://idtech3.com";
@@ -815,9 +816,9 @@ constexpr const char* c_idTech3LinksUrl = "https://idtech3.com/links";
 static void CheckForUpdate_showResult( QByteArray payload, QString fetchError, int tryNext );
 
 static void CheckForUpdate_tryFetch( int index ){
-	const char* releaseApiUrl = "https://api.github.com/repos/Garux/netradiant-custom/releases/latest";
+	const char* releaseApiUrl = "https://api.github.com/repos/timfox/idtech3radiant/releases?per_page=1";
 	const QString acceptHeader = "Accept: application/vnd.github+json";
-	const QString userAgentHeader = StringStream( "User-Agent: NetRadiant-Custom/", RADIANT_VERSION ).c_str();
+	const QString userAgentHeader = StringStream( "User-Agent: idtech3radiant/", RADIANT_VERSION ).c_str();
 	struct FetchCommand { const char* executable; QStringList arguments; };
 	const FetchCommand commands[] = {
 		{ "wget", { "-qO-", "--header", acceptHeader, "--header", userAgentHeader, releaseApiUrl } },
@@ -861,7 +862,25 @@ static void CheckForUpdate_showResult( QByteArray payload, QString fetchError, i
 
 	if ( !payload.isEmpty() ) {
 		const auto json = QJsonDocument::fromJson( payload );
-		if ( !json.isObject() ) {
+		QJsonObject object;
+		if ( json.isObject() ) {
+			object = json.object();
+		}
+		else if ( json.isArray() ) {
+			const auto releases = json.array();
+			if ( !releases.isEmpty() && releases.first().isObject() ) {
+				object = releases.first().toObject();
+			}
+			else{
+				if ( QMessageBox::information( MainFrame_getWindow(), "Check for Update",
+				                               "No published GitHub releases were found for this project yet.\n\nOpen the releases page?",
+				                               QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes ) == QMessageBox::Yes ) {
+					OpenUpdateURL();
+				}
+				return;
+			}
+		}
+		else{
 			if ( QMessageBox::question( MainFrame_getWindow(), "Check for Update",
 			                            "Could not parse update response.\nOpen the releases page instead?",
 			                            QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes ) == QMessageBox::Yes ) {
@@ -869,10 +888,9 @@ static void CheckForUpdate_showResult( QByteArray payload, QString fetchError, i
 			}
 			return;
 		}
-		const auto object = json.object();
 		const QString latestTag = object.value( "tag_name" ).toString();
 		const QString latestName = object.value( "name" ).toString( latestTag );
-		const QString latestUrl = object.value( "html_url" ).toString( "https://github.com/Garux/netradiant-custom/releases/latest" );
+		const QString latestUrl = object.value( "html_url" ).toString( "https://github.com/timfox/idtech3radiant/releases" );
 		const QString publishedAt = object.value( "published_at" ).toString();
 		const QString currentVersion = RADIANT_VERSION;
 		bool comparable = false;
@@ -927,7 +945,7 @@ void OpenHelpURL(){
 
 void OpenBugReportURL(){
 	// OpenURL( "http://www.icculus.org/netradiant/?cmd=bugs" );
-	OpenURL( "https://github.com/Garux/netradiant-custom/issues" );
+	OpenURL( "https://github.com/timfox/idtech3radiant/issues" );
 }
 
 
@@ -2140,6 +2158,7 @@ void create_selection_menu( QMenuBar *menubar ){
 
 		submenu->setTearOffEnabled( g_Layout_enableDetachableMenus.m_value );
 
+		create_check_menu_item_with_mnemonic( submenu, "&Primitives", "DragPrimitives" );
 		create_check_menu_item_with_mnemonic( submenu, "&Edges", "DragEdges" );
 		create_check_menu_item_with_mnemonic( submenu, "&Vertices", "DragVertices" );
 		create_check_menu_item_with_mnemonic( submenu, "&Faces", "DragFaces" );
@@ -2473,9 +2492,11 @@ void CSG_constructToolbar( QToolBar* toolbar ){
 	toolbar_append_button( toolbar, "CSG Wrap Merge", "selection_csgmerge.png", "CSGWrapMerge" );
 	toolbar_append_button( toolbar, "Room", "selection_makeroom.png", "CSGroom" );
 	toolbar_append_button( toolbar, "CSG Tool", "ellipsis.png", "CSGTool" );
+	toolbar_append_button( toolbar, "Auto-Caulk Selected", "f-caulk.png", "AutoCaulkSelected" );
 }
 
 void ComponentModes_constructToolbar( QToolBar* toolbar ){
+	toolbar_append_toggle_button( toolbar, "Select Primitives", "status_brush.png", "DragPrimitives" );
 	toolbar_append_toggle_button( toolbar, "Select Vertices", "modify_vertices.png", "DragVertices" );
 	toolbar_append_toggle_button( toolbar, "Select Edges", "modify_edges.png", "DragEdges" );
 	toolbar_append_toggle_button( toolbar, "Select Faces", "modify_faces.png", "DragFaces" );
@@ -2486,12 +2507,12 @@ void XYWnd_constructToolbar( QToolBar* toolbar ){
 }
 
 void Manipulators_constructToolbar( QToolBar* toolbar ){
-	toolbar_append_toggle_button( toolbar, "Resize (Q)", "select_mouseresize.png", "MouseDrag" ); // hardcoded shortcut tip of "MouseDragOrTransform"...
+	toolbar_append_toggle_button( toolbar, "Resize", "select_mouseresize.png", "MouseDrag" );
 	toolbar_append_toggle_button( toolbar, "Clipper", "select_clipper.png", "ToggleClipper" );
 	toolbar_append_toggle_button( toolbar, "Translate", "select_mousetranslate.png", "MouseTranslate" );
 	toolbar_append_toggle_button( toolbar, "Rotate", "select_mouserotate.png", "MouseRotate" );
 	toolbar_append_toggle_button( toolbar, "Scale", "select_mousescale.png", "MouseScale" );
-	toolbar_append_toggle_button( toolbar, "Transform (Q)", "select_mousetransform.png", "MouseTransform" ); // hardcoded shortcut tip of "MouseDragOrTransform"...
+	toolbar_append_toggle_button( toolbar, "Transform", "select_mousetransform.png", "MouseTransform" );
 //	toolbar_append_toggle_button( toolbar, "Build", "select_mouserotate.png", "MouseBuild" );
 	toolbar_append_toggle_button( toolbar, "UV Tool", "select_mouseuv.png", "MouseUV" );
 }
