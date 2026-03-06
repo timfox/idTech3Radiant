@@ -27,6 +27,7 @@
 </message><message level="1">--- ProcessCommandLine ---
 </message><message level="1">Skylight panorama mode set to panorama
 </message><message level="1">Skylight panorama source set to textures/skies/test.exr
+</message><message level="1">Skylight panorama exposure multiplier set to 2.0000
 </message><message level="1">Ambient occlusion: enabled
 </message><message level="1">IBL ambient floodlight: enabled
 </message><message level="1">Lightmap file format: tga

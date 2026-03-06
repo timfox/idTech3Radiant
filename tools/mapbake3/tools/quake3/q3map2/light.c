@@ -107,6 +107,8 @@ static skyLightMode_t g_skyLightMode = SKYLIGHT_MODE_AUTO;
 static char g_skyLightPanoramaPath[ MAX_QPATH ] = { 0 };
 static char g_skyLightPanoramaConvertBase[ MAX_QPATH ] = { 0 };
 static int g_skyLightPanoramaFaceSize = 512;
+static float g_skyLightPanoramaExposure = 1.0f;
+static qboolean g_skyLightPanoramaExposureSet = qfalse;
 static char g_skyLightLastConvertedPath[ MAX_QPATH ] = { 0 };
 static char g_skyLightLastConvertedBase[ MAX_QPATH ] = { 0 };
 static int g_skyLightLastConvertedSize = 0;
@@ -299,6 +301,17 @@ static void SkyPanorama_SampleDirection( const skyFloatImage_t *image, const vec
 	if ( color[ 0 ] < 0.0f ) color[ 0 ] = 0.0f;
 	if ( color[ 1 ] < 0.0f ) color[ 1 ] = 0.0f;
 	if ( color[ 2 ] < 0.0f ) color[ 2 ] = 0.0f;
+}
+
+static float SkyPanorama_MaxComponent( const vec3_t color ){
+	float maxValue = color[ 0 ];
+	if ( color[ 1 ] > maxValue ) {
+		maxValue = color[ 1 ];
+	}
+	if ( color[ 2 ] > maxValue ) {
+		maxValue = color[ 2 ];
+	}
+	return maxValue;
 }
 
 static void SkyPanorama_DirectionForFaceUV( int face, float u, float v, vec3_t direction ){
@@ -538,6 +551,7 @@ static void CreateSkyLights( shaderInfo_t *si, vec3_t color, float value, int it
 	float angle, elevation;
 	float angleStep, elevationStep;
 	float basePhotons;
+	float panoramaExposure = 1.0f;
 	sun_t sun;
 	skyFloatImage_t panorama = { 0, 0, NULL };
 	qboolean usePanorama = qfalse;
@@ -585,6 +599,71 @@ static void CreateSkyLights( shaderInfo_t *si, vec3_t color, float value, int it
 	elevationStep = DEG2RAD( 90.0f / iterations );  /* skip elevation 0 */
 	angleStep = DEG2RAD( 360.0f / angleSteps );
 
+	if ( usePanorama ) {
+		panoramaExposure = g_skyLightPanoramaExposure;
+		if ( panoramaExposure < 0.0f ) {
+			panoramaExposure = 0.0f;
+		}
+
+		if ( g_skyLightPanoramaExposureSet ) {
+			Sys_Printf( "Skylight panorama exposure multiplier: %0.4f (manual)\n", panoramaExposure );
+		}
+		else
+		{
+			float preAngle = 0.0f;
+			float preElevation = elevationStep * 0.5f;
+			float scaleSum = 0.0f;
+			int scaleCount = 0;
+
+			for ( i = 0; i < elevationSteps; ++i )
+			{
+				for ( j = 0; j < angleSteps; ++j )
+				{
+					vec3_t direction;
+					vec3_t sampled;
+					float scale;
+					direction[ 0 ] = cos( preAngle ) * cos( preElevation );
+					direction[ 1 ] = sin( preAngle ) * cos( preElevation );
+					direction[ 2 ] = sin( preElevation );
+					SkyPanorama_SampleDirection( &panorama, direction, sampled );
+					scale = SkyPanorama_MaxComponent( sampled );
+					if ( scale > 0.0f ) {
+						scaleSum += scale;
+						scaleCount++;
+					}
+					preAngle += angleStep;
+				}
+				preElevation += elevationStep;
+				preAngle += angleStep / elevationSteps;
+			}
+
+			VectorSet( sun.direction, 0.0f, 0.0f, 1.0f );
+			{
+				vec3_t sampled;
+				float scale;
+				SkyPanorama_SampleDirection( &panorama, sun.direction, sampled );
+				scale = SkyPanorama_MaxComponent( sampled );
+				if ( scale > 0.0f ) {
+					scaleSum += scale;
+					scaleCount++;
+				}
+			}
+
+			if ( scaleCount > 0 && scaleSum > 0.0f ) {
+				float avgScale = scaleSum / scaleCount;
+				float autoExposure = 1.0f / avgScale;
+				if ( autoExposure < 0.125f ) {
+					autoExposure = 0.125f;
+				}
+				else if ( autoExposure > 64.0f ) {
+					autoExposure = 64.0f;
+				}
+				panoramaExposure *= autoExposure;
+				Sys_Printf( "Skylight panorama auto exposure: %0.4f (avg scale %0.4f)\n", autoExposure, avgScale );
+			}
+		}
+	}
+
 	/* calc individual sun brightness */
 	numSuns = angleSteps * elevationSteps + 1;
 	basePhotons = value / numSuns;
@@ -612,7 +691,7 @@ static void CreateSkyLights( shaderInfo_t *si, vec3_t color, float value, int it
 					angle += angleStep;
 					continue;
 				}
-				sun.photons = basePhotons * scale;
+				sun.photons = basePhotons * scale * panoramaExposure;
 			}
 			else{
 				VectorCopy( color, sun.color );
@@ -638,7 +717,7 @@ static void CreateSkyLights( shaderInfo_t *si, vec3_t color, float value, int it
 		SkyPanorama_SampleDirection( &panorama, sun.direction, sampled );
 		scale = ColorNormalize( sampled, sun.color );
 		if ( scale > 0.0f ) {
-			sun.photons = basePhotons * scale;
+			sun.photons = basePhotons * scale * panoramaExposure;
 			CreateSunLight( &sun );
 		}
 	}
@@ -3616,6 +3695,18 @@ int LightMain( int argc, char **argv ){
 			}
 			strcpy( g_skyLightPanoramaPath, argv[ i + 1 ] );
 			Sys_Printf( "Skylight panorama source set to %s\n", g_skyLightPanoramaPath );
+			i++;
+		}
+		else if ( !strcmp( argv[ i ], "-skylightpanoramaexposure" ) || !strcmp( argv[ i ], "-skypanoexp" ) ) {
+			if ( i + 1 >= argc ) {
+				Error( "Missing float value for -skylightpanoramaexposure" );
+			}
+			g_skyLightPanoramaExposure = atof( argv[ i + 1 ] );
+			if ( g_skyLightPanoramaExposure < 0.0f ) {
+				g_skyLightPanoramaExposure = 0.0f;
+			}
+			g_skyLightPanoramaExposureSet = qtrue;
+			Sys_Printf( "Skylight panorama exposure multiplier set to %0.4f\n", g_skyLightPanoramaExposure );
 			i++;
 		}
 		else if ( !strcmp( argv[ i ], "-skylightpanoramafacesize" ) || !strcmp( argv[ i ], "-skypanofacesize" ) ) {

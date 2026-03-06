@@ -239,6 +239,7 @@ void HelpLight()
 		{"-skylightmode <auto|legacy|shader|panorama>", "Select skylight source mode"},
 		{"-skylightauto, -skylightlegacy, -skylightshader", "Quick toggles for skylight source mode"},
 		{"-skylightpanorama <file>, -skypanorama <file>", "Set equirectangular panorama source (HDR/EXR); pair with `-skylightmode panorama` to force it"},
+		{"-skylightpanoramaexposure <F>, -skypanoexp <F>", "Skylight panorama exposure multiplier (default: auto-normalized to preserve brightness)"},
 		{"-skylightpanoramafacesize <N>, -skypanofacesize <N>", "Face size (16..4096) for optional panorama-to-cubeface export"},
 		{"-skylightpanoramaconvert <base>, -skypanoconvert <base>", "Write converted cube faces to `<base>_{lf,rt,ft,bk,up,dn}.tga`"},
 		{"-smooth", "Deprecated alias for `-samples 2`"},
