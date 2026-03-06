@@ -262,7 +262,7 @@ void environment_init( int argc, char* argv[] ){
 	}
 
 	if ( !portable_app_setup() ) {
-		home_path = StringStream( DirectoryCleaned( g_get_home_dir() ), ".netradiant/" );
+		home_path = StringStream( DirectoryCleaned( g_get_home_dir() ), ".fox/" );
 		Q_mkdir( home_path.c_str() );
 	}
 	gamedetect();
@@ -297,7 +297,7 @@ void environment_init( int argc, char* argv[] ){
 		{
 			home << PathCleaned( appdata );
 		}
-		home << "/NetRadiantSettings/";
+		home << "/Fox/";
 		Q_mkdir( home );
 		home_path = home;
 	}

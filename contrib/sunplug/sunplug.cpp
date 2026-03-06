@@ -167,7 +167,7 @@ Entity* Scene_FindEntityByClass( const char* name ){
 
 // About dialog
 void about_plugin_window(){
-	GlobalRadiant().m_pfnMessageBox( SunPlug::main_window, "SunPlug v1.0 for NetRadiant 1.5\nby Topsun", "About SunPlug", EMessageBoxType::Info, 0 );
+	GlobalRadiant().m_pfnMessageBox( SunPlug::main_window, "SunPlug v1.0 for Radiant 1.5\nby Topsun", "About SunPlug", EMessageBoxType::Info, 0 );
 }
 
 

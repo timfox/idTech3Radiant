@@ -179,6 +179,7 @@ void build_init_variables(){
 	build_set_variable( "GameName", gamename_get() );
 
 	const char* mapname = Map_Name( g_map );
+	const auto mapdir = stream( PathCleaned( PathFilenameless( mapname ) ) );
 
 	build_set_variable( "BspFile", stream( PathExtensionless( mapname ), ".bsp" ) );
 
@@ -189,8 +190,26 @@ void build_init_variables(){
 		build_set_variable( "MapFile", mapname );
 	}
 
-	build_set_variable( "MapDir", stream( PathFilenameless( mapname ) ) );
+	build_set_variable( "MapDir", mapdir );
 	build_set_variable( "MapName", stream( PathFilename( mapname ) ) );
+
+	/* MapsrcDir = MapDir; BspOutputDir/BspOutputFile = content/maps for final BSP */
+	build_set_variable( "MapsrcDir", mapdir );
+	const auto parentDir = stream( PathCleaned( PathFilenameless( mapdir.c_str() ) ) );
+	const auto bspOutputDir = string_empty( parentDir.c_str() )
+		? StringStream<256>( "content/maps" )
+		: StringStream<256>( PathCleaned( parentDir.c_str() ), "/content/maps" );
+	build_set_variable( "BspOutputDir", bspOutputDir );
+	const auto bspOutputFile = stream( bspOutputDir, "/", PathFilename( mapname ), ".bsp" );
+	build_set_variable( "BspOutputFile", bspOutputFile );
+
+#if defined( POSIX )
+	build_set_variable( "CopyBspCommand", stream( "mkdir -p ", Quoted( bspOutputDir ), " && cp ", Quoted( stream( PathExtensionless( mapname ), ".bsp" ) ), " ", Quoted( bspOutputFile ) ) );
+#elif defined( WIN32 )
+	build_set_variable( "CopyBspCommand", stream( "mkdir ", Quoted( bspOutputDir ), " 2>nul & copy /Y ", Quoted( stream( PathExtensionless( mapname ), ".bsp" ) ), " ", Quoted( bspOutputFile ) ) );
+#else
+	build_set_variable( "CopyBspCommand", "" );
+#endif
 }
 
 class BatchCommandListener

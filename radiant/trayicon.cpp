@@ -90,7 +90,7 @@ void TrayIcon_construct(){
 	}
 
 	g_trayIcon = new QSystemTrayIcon( new_local_icon( "radiant.ico" ) );
-	g_trayIcon->setToolTip( "NetRadiant" );
+	g_trayIcon->setToolTip( "Radiant" );
 
 	g_trayMenu = new QMenu;
 

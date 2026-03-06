@@ -1,6 +1,6 @@
 
-developer documentation for NetRadiant-custom
-======================================
+developer documentation for Radiant
+===================================
 
 getting the source
 ==================
@@ -68,7 +68,7 @@ run 'export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/opt/X11/lib/pkgconfig
 make'
 
 run:
-Switch into the install folder, and run NetRadiant.app
+Switch into the install folder, and run Radiant.app
 
 
 Win32 (using MSYS2)
@@ -87,10 +87,10 @@ environment:
 
 build:
 - Start respective mingw shell
-- Switch to the directory with NetRadiant-custom source
+- Switch to the directory with Radiant source
 - Typical release build:
   make MAKEFILE_CONF=msys2-Makefile.conf BUILD=release -j$(nproc)
 - Typical developer's build:
-  make MAKEFILE_CONF=msys2-Makefile.conf DEPENDENCIES_CHECK=off DOWNLOAD_GAMEPACKS=no INSTALL_DLLS=no BUILD=debug RADIANT_ABOUTMSG="NetRadiant custom dev build" -j$(nproc)
+  make MAKEFILE_CONF=msys2-Makefile.conf DEPENDENCIES_CHECK=off DOWNLOAD_GAMEPACKS=no INSTALL_DLLS=no BUILD=debug RADIANT_ABOUTMSG="Radiant dev build" -j$(nproc)
 run:
 - in the "install" directory, double click radiant.exe

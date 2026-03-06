@@ -1,15 +1,15 @@
-# Makefile for NetRadiant.app, requires http://macdylibbundler.sourceforge.net/
+# Makefile for Radiant.app, requires http://macdylibbundler.sourceforge.net/
 
 INSTALL = ../../install
 TARGET = target
-RESOURCES = $(TARGET)/NetRadiant.app/Contents/Resources
+RESOURCES = $(TARGET)/Radiant.app/Contents/Resources
 BINDIR = $(RESOURCES)/install
 CONFDIR = $(RESOURCES)/etc
 DATADIR = $(RESOURCES)/share
 LIBDIR = $(RESOURCES)/lib
 VERSION = 1.5.0
-DMG = $(TARGET)/NetRadiant-$(VERSION).dmg
-VOLUME_NAME = "NetRadiant $(VERSION)"
+DMG = $(TARGET)/Radiant-$(VERSION).dmg
+VOLUME_NAME = "Radiant $(VERSION)"
 
 # We must rewrite some Gtk configuration files, which vary from environment to
 # environment depending on where you've installed MacPorts. Fun!
@@ -21,7 +21,7 @@ all: install bundle
 
 -pre-install:
 	install -d $(TARGET)
-	cp -r NetRadiant.app $(TARGET)
+	cp -r Radiant.app $(TARGET)
 	find $(TARGET) -name .turd -delete
 	
 -gtk-runtime-gdk-pixbuf-2.0:
@@ -83,7 +83,7 @@ bundle:
 
 	rm -f install
 
-	chmod +x $(TARGET)/NetRadiant.app/Contents/MacOS/radiant
+	chmod +x $(TARGET)/Radiant.app/Contents/MacOS/radiant
 
 image:
 	find $(TARGET) -name .DS_Store -delete

@@ -31,9 +31,14 @@ Predefined:
   MapDir         - directory containing the map
   MapName        - map filename only
   BspFile        - output .bsp path (same base as MapFile)
-  MapName        - map filename
   MonitorAddress - build monitor (when enabled)
   VolumetricFogConfig - path to fog config (when applicable)
+
+  MapsrcDir      - same as MapDir (for map sources: .map, .bak, .prt, .srf)
+  BspOutputDir   - content/maps (sibling of mapsrc, for final BSP)
+  BspOutputFile  - content/maps/[MapName].bsp
+  CopyBspCommand - platform-specific command to copy BspFile to BspOutputFile
+                   (add as final <cmd> to copy BSP from mapsrc to content/maps)
 
 Custom (define in <tool>):
   <tool name="q3map2">"[RadiantPath]q3map2.[ExecutableType]"</tool>
@@ -47,6 +52,18 @@ Becomes:
   "C:\Radiant\q3map2.exe" -bsp "C:\maps\mymap.map"
 
 Use quotes around paths (MapFile, etc.) in case of spaces.
+
+Mapsrc / content/maps layout
+----------------------------
+To keep map sources (.map, .bak, .prt, .srf) in mapsrc/ and the final BSP in
+content/maps/:
+  1. Save maps to mapsrc/ (e.g. mapsrc/mymap.map)
+  2. Add [CopyBspCommand] as the final <cmd> in each build:
+     <cmd>[q3map2] -meta "[MapFile]"</cmd>
+     <cmd>[q3map2] -vis "[MapFile]"</cmd>
+     <cmd>[q3map2] -light "[MapFile]"</cmd>
+     <cmd>[CopyBspCommand]</cmd>
+  q3map2 writes BSP alongside the map; CopyBspCommand copies it to content/maps/.
 
 Legacy format (buildmenu)
 -------------------------

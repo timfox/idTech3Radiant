@@ -1,10 +1,10 @@
 #!/bin/bash
 set -e
 
-APPDIR="NetRadiant-Custom.AppDir"
-APPNAME="NetRadiant-Custom"
+APPDIR="Radiant.AppDir"
+APPNAME="Radiant"
 BINARY="radiant.x86_64"
-DESKTOP="netradiantcustom.desktop"
+DESKTOP="radiant.desktop"
 ICON="$BINARY"
 ICON_SRC="install/bitmaps/logo.svg"
 ICON_DEST="$APPDIR/$ICON.svg"
@@ -25,7 +25,7 @@ Exec=$BINARY %F
 Icon=$ICON
 Type=Application
 Categories=Game;Graphics;
-StartupWMClass=NetRadiant-Custom
+StartupWMClass=Radiant
 EOF
 
 install "$ICON_SRC"  "$ICON_DEST"

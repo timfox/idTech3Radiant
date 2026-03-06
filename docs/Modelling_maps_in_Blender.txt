@@ -12,7 +12,7 @@ structure for VIS and physical boundaries.
 
 WORKFLOW
 
-1. Create a brush template in NetRadiant
+1. Create a brush template in Radiant
    - Block out the map layout with brushes (rooms, boundaries, etc.)
    - Texture faces you want to keep; caulk faces are ignored on export
    - Compile to BSP (Build > BSP) so you have a .bsp file
@@ -39,7 +39,7 @@ WORKFLOW
 
 5. Export to ASE
    - Blender: use an ASE exporter (e.g. goofos script, USMase)
-   - Maya: export to OBJ or FBX; NetRadiant's assmodel plugin also loads OBJ/FBX
+   - Maya: export to OBJ or FBX; Radiant's assmodel plugin also loads OBJ/FBX
 
 6. Place in Radiant
    - Add misc_model entities

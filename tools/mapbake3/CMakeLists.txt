@@ -11,10 +11,10 @@ endif ()
 #-----------------------------------------------------------------------
 
 # CMake 3.0+ would allow this in project()
-set(NetRadiant_VERSION_MAJOR 1)
-set(NetRadiant_VERSION_MINOR 5)
-set(NetRadiant_VERSION_PATCH 0)
-set(NetRadiant_VERSION "${NetRadiant_VERSION_MAJOR}.${NetRadiant_VERSION_MINOR}.${NetRadiant_VERSION_PATCH}")
+set(Radiant_VERSION_MAJOR 1)
+set(Radiant_VERSION_MINOR 5)
+set(Radiant_VERSION_PATCH 0)
+set(Radiant_VERSION "${Radiant_VERSION_MAJOR}.${Radiant_VERSION_MINOR}.${Radiant_VERSION_PATCH}")
 
 
 #-----------------------------------------------------------------------
@@ -56,11 +56,11 @@ set(CMAKE_POSITION_INDEPENDENT_CODE 1)
 # Defs
 #-----------------------------------------------------------------------
 
-add_definitions(-DRADIANT_VERSION="${NetRadiant_VERSION}")
-add_definitions(-DRADIANT_MAJOR_VERSION="${NetRadiant_VERSION_MAJOR}")
-add_definitions(-DRADIANT_MINOR_VERSION="${NetRadiant_VERSION_MINOR}")
+add_definitions(-DRADIANT_VERSION="${Radiant_VERSION}")
+add_definitions(-DRADIANT_MAJOR_VERSION="${Radiant_VERSION_MAJOR}")
+add_definitions(-DRADIANT_MINOR_VERSION="${Radiant_VERSION_MINOR}")
 
-add_definitions(-DRADIANT_ABOUTMSG="${NetRadiant_ABOUT}")
+add_definitions(-DRADIANT_ABOUTMSG="Radiant")
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
     add_definitions(-D_DEBUG=1)

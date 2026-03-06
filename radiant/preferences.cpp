@@ -614,7 +614,7 @@ public:
 void PrefsDlg::BuildDialog(){
 	PreferencesDialog_addInterfacePreferences( makeCallbackF( Interface_constructPreferences ) );
 
-	GetWidget()->setWindowTitle( "NetRadiant Preferences" );
+	GetWidget()->setWindowTitle( "Radiant Preferences" );
 
 	{
 		auto *grid = new QGridLayout( GetWidget() );

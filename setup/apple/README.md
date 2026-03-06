@@ -1,7 +1,7 @@
-NetRadiant for Apple OS X
-========================
+Radiant for Apple OS X
+======================
 
-This directory provides packaging steps for NetRadiant for OS X. This document describes compiling the application on OSX as well as generating distributable bundles using the framework provided in this directory.
+This directory provides packaging steps for Radiant for OS X. This document describes compiling the application on OSX as well as generating distributable bundles using the framework provided in this directory.
 
 Dependencies & Compilation
 --------------------------
@@ -17,7 +17,7 @@ Directions for OS X Yosemite 10.10 - your mileage may vary:
 sudo port install dylibbundler pkgconfig gtkglext
 ```
 
-- Get the NetRadiant code and compile:
+- Get the Radiant code and compile:
 
 ```
 git clone https://gitlab.com/xonotic/netradiant.git
@@ -27,17 +27,17 @@ make
 
 - Run the build:
 
-(from the netradiant/ directory)
+(from the project directory)
 ```
 ./install/radiant
 ```
 
 XQuartz note: on my configuration XQuartz doesn't automatically start for some reason. I have to open another terminal, and run the following command: `/Applications/Utilities/XQuartz.app/Contents/MacOS/X11.bin`, then start radiant. 
     
-Building NetRadiant.app
------------------------
+Building Radiant.app
+-------------------
 
-The `Makefile` in the 'setup/apple/' directory will produce a distributable .app bundle for NetRadiant using `dylibbundler`:
+The `Makefile` in the 'setup/apple/' directory will produce a distributable .app bundle for Radiant using `dylibbundler`:
 
 ```
 make

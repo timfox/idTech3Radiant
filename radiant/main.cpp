@@ -417,7 +417,7 @@ int main( int argc, char* argv[] ){
 	qInstallMessageHandler( qute_messageHandler );
 	Console_captureStdStreams();
 	QCoreApplication::setOrganizationName( "QtRadiant" );
-	QCoreApplication::setApplicationName( "NetRadiant-Custom" );
+	QCoreApplication::setApplicationName( "Radiant" );
 	QCoreApplication::setApplicationVersion( QT_VERSION_STR );
 
 	GlobalDebugMessageHandler::instance().setHandler( GlobalPopupDebugMessageHandler::instance() );

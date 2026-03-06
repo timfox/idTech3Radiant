@@ -24,10 +24,10 @@ case $pack in
 		pack="$pack/bin"
 	;;
 	*/SmokinGunsPack|*/UnvanquishedPack)
-		pack="$pack/build/netradiant"
+		pack="$pack/build/radiant"
 	;;
 	*/WoPPack)
-		pack="$pack/netradiant"
+		pack="$pack/radiant"
 	;;
 esac
 

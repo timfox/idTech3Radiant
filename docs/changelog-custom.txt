@@ -34,7 +34,7 @@ Q3map2:
 	* numBspModels ('brusmodels') stat emitting
 	* -pk3: autopackager mode(complete Q3 support); bsp path as input; switches: -dbg - talkative mode, -png - include pngs, at highest priority
 		is using file 'gamename.exclude' to exclude vanilla game resources
-		tip: ioq3, netradiant, compiler (and packager) treat *.pk3dir directories as separate pk3 files
+		tip: ioq3, radiant, compiler (and packager) treat *.pk3dir directories as separate pk3 files
 	* packer: rewrote logic to make sure not to include excluded stuff
 	* packer: preserves file date, if grabbing file from .pk3 too
 	* packer: in case of missing *ingame* resources pk3 gets _FAILEDpack suffix
@@ -361,7 +361,7 @@ menus...
 	* view menu: +patch inspector
 	* curve->texture+: flip patch tex ( {ctrl}shift+i ), naturalize, cycle projection
 	* cleaned, updated help menu links,+: Mouse Shortcuts, recent offline&fixed Shader Manual,
-		netRadiant specific docs, lists of q3map2 switches/entity keys/shader directives
+		Radiant specific docs, lists of q3map2 switches/entity keys/shader directives
 	* make .pk3 to q3 build menu
 	* help+: Blendmodes cheatsheet
 	* simplified curve menu
