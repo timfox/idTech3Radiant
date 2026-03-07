@@ -1454,6 +1454,8 @@ void create_file_menu( QMenuBar *menubar ){
 	menu->addSeparator();
 	create_menu_item_with_mnemonic( menu, "&Pointfile", "TogglePointfile" );
 	menu->addSeparator();
+	create_menu_item_with_mnemonic( menu, "Save wor&kspace", "LayoutSaveWorkspace" );
+	menu->addSeparator();
 	MRU_constructMenu( menu );
 	menu->addSeparator();
 	create_menu_item_with_mnemonic( menu, "E&xit", "Exit" );
@@ -2209,6 +2211,7 @@ void create_selection_menu( QMenuBar *menubar ){
 	menu->addSeparator();
 	create_menu_item_with_mnemonic( menu, "Arbitrary rotation", "ArbitraryRotation" );
 	create_menu_item_with_mnemonic( menu, "Arbitrary scale", "ArbitraryScale" );
+	create_menu_item_with_mnemonic( menu, "&Transform (Position/Rotation/Scale)", "TransformDialog" );
 	menu->addSeparator();
 	{
 		QMenu* submenu = menu->addMenu( "Repeat" );
@@ -2461,6 +2464,7 @@ void register_shortcuts(){
 void File_constructToolbar( QToolBar* toolbar ){
 	toolbar_append_button( toolbar, "Open an existing map", "file_open.png", "OpenMap" );
 	toolbar_append_button( toolbar, "Save the active map", "file_save.png", "SaveMap" );
+	toolbar_append_button( toolbar, "Make Room", "selection_makeroom.png", "CSGroom" );
 }
 
 void UndoRedo_constructToolbar( QToolBar* toolbar ){

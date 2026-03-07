@@ -1763,6 +1763,137 @@ void DoScaleDlg(){
 }
 
 
+#include "math/aabb.h"
+#include <QGroupBox>
+#include <QVBoxLayout>
+
+class TransformDialog : public QObject
+{
+	QWidget *m_window{};
+	QDoubleSpinBox *m_pos_x, *m_pos_y, *m_pos_z;
+	QDoubleSpinBox *m_rot_x, *m_rot_y, *m_rot_z;
+	QDoubleSpinBox *m_scale_x, *m_scale_y, *m_scale_z;
+	void construct(){
+		m_window = new QWidget( MainFrame_getWindow(), Qt::Dialog | Qt::WindowCloseButtonHint );
+		m_window->setWindowTitle( "Transform (Position / Rotation / Scale)" );
+		m_window->setWindowModality( Qt::NonModal );
+		m_window->installEventFilter( this );
+
+		auto *vbox = new QVBoxLayout( m_window );
+		vbox->setSizeConstraint( QLayout::SizeConstraint::SetFixedSize );
+
+		{
+			auto *posGroup = new QGroupBox( "Position (X Y Z)" );
+			auto *posGrid = new QGridLayout( posGroup );
+			posGrid->addWidget( new SpinBoxLabel( "X", m_pos_x = new DoubleSpinBox( -32768, 32768, 0, 6, 8, false ) ), 0, 0 );
+			posGrid->addWidget( m_pos_x, 0, 1 );
+			posGrid->addWidget( new SpinBoxLabel( "Y", m_pos_y = new DoubleSpinBox( -32768, 32768, 0, 6, 8, false ) ), 1, 0 );
+			posGrid->addWidget( m_pos_y, 1, 1 );
+			posGrid->addWidget( new SpinBoxLabel( "Z", m_pos_z = new DoubleSpinBox( -32768, 32768, 0, 6, 8, false ) ), 2, 0 );
+			posGrid->addWidget( m_pos_z, 2, 1 );
+			auto *posApply = new QPushButton( "Apply" );
+			posGrid->addWidget( posApply, 0, 2, 3, 1 );
+			QObject::connect( posApply, &QPushButton::clicked, [this](){ applyPosition(); } );
+			vbox->addWidget( posGroup );
+		}
+		{
+			auto *rotGroup = new QGroupBox( "Rotation (Pitch Yaw Roll)" );
+			auto *rotGrid = new QGridLayout( rotGroup );
+			rotGrid->addWidget( new SpinBoxLabel( "X", m_rot_x = new DoubleSpinBox( -360, 360, 0, 6, 1, true ) ), 0, 0 );
+			rotGrid->addWidget( m_rot_x, 0, 1 );
+			rotGrid->addWidget( new SpinBoxLabel( "Y", m_rot_y = new DoubleSpinBox( -360, 360, 0, 6, 1, true ) ), 1, 0 );
+			rotGrid->addWidget( m_rot_y, 1, 1 );
+			rotGrid->addWidget( new SpinBoxLabel( "Z", m_rot_z = new DoubleSpinBox( -360, 360, 0, 6, 1, true ) ), 2, 0 );
+			rotGrid->addWidget( m_rot_z, 2, 1 );
+			auto *rotApply = new QPushButton( "Apply" );
+			rotGrid->addWidget( rotApply, 0, 2, 3, 1 );
+			QObject::connect( rotApply, &QPushButton::clicked, [this](){ applyRotation(); } );
+			vbox->addWidget( rotGroup );
+		}
+		{
+			auto *scaleGroup = new QGroupBox( "Scale (X Y Z)" );
+			auto *scaleGrid = new QGridLayout( scaleGroup );
+			scaleGrid->addWidget( new SpinBoxLabel( "X", m_scale_x = new DoubleSpinBox( -32768, 32768, 1, 6, 1, false ) ), 0, 0 );
+			scaleGrid->addWidget( m_scale_x, 0, 1 );
+			scaleGrid->addWidget( new SpinBoxLabel( "Y", m_scale_y = new DoubleSpinBox( -32768, 32768, 1, 6, 1, false ) ), 1, 0 );
+			scaleGrid->addWidget( m_scale_y, 1, 1 );
+			scaleGrid->addWidget( new SpinBoxLabel( "Z", m_scale_z = new DoubleSpinBox( -32768, 32768, 1, 6, 1, false ) ), 2, 0 );
+			scaleGrid->addWidget( m_scale_z, 2, 1 );
+			auto *scaleApply = new QPushButton( "Apply" );
+			scaleGrid->addWidget( scaleApply, 0, 2, 3, 1 );
+			QObject::connect( scaleApply, &QPushButton::clicked, [this](){ applyScale(); } );
+			vbox->addWidget( scaleGroup );
+		}
+		{
+			auto *buttons = new QDialogButtonBox();
+			QObject::connect( buttons->addButton( QDialogButtonBox::StandardButton::Close ), &QPushButton::clicked, [this](){ m_window->hide(); } );
+			vbox->addWidget( buttons );
+		}
+	}
+	void updatePositionFromSelection(){
+		const AABB bounds = GlobalSelectionSystem().getBoundsSelected();
+		if( aabb_valid( bounds ) ){
+			m_pos_x->setValue( bounds.origin.x() );
+			m_pos_y->setValue( bounds.origin.y() );
+			m_pos_z->setValue( bounds.origin.z() );
+		}
+	}
+	void applyPosition(){
+		const Vector3 target( m_pos_x->value(), m_pos_y->value(), m_pos_z->value() );
+		const AABB bounds = GlobalSelectionSystem().getBoundsSelected();
+		if( !aabb_valid( bounds ) )
+			return;
+		const Vector3 translation = vector3_subtracted( target, bounds.origin );
+		const auto command = StringStream<64>( "translateSelected ", translation.x(), " ", translation.y(), " ", translation.z() );
+		UndoableCommand undo( command );
+		GlobalSelectionSystem().translateSelected( translation );
+		updatePositionFromSelection();
+	}
+	void applyRotation(){
+		const Vector3 eulerXYZ( m_rot_x->value(), m_rot_y->value(), m_rot_z->value() );
+		const auto command = StringStream<64>( "rotateSelectedEulerXYZ -x ", eulerXYZ[0], " -y ", eulerXYZ[1], " -z ", eulerXYZ[2] );
+		UndoableCommand undo( command );
+		GlobalSelectionSystem().rotateSelected( quaternion_for_euler_xyz_degrees( eulerXYZ ) );
+	}
+	void applyScale(){
+		const float sx = m_scale_x->value(), sy = m_scale_y->value(), sz = m_scale_z->value();
+		const auto command = StringStream<64>( "scaleSelected -x ", sx, " -y ", sy, " -z ", sz );
+		UndoableCommand undo( command );
+		Select_Scale( sx, sy, sz );
+	}
+protected:
+	bool eventFilter( QObject *obj, QEvent *event ) override {
+		if( event->type() == QEvent::ShortcutOverride ) {
+			auto *keyEvent = static_cast<QKeyEvent*>( event );
+			if( keyEvent->key() == Qt::Key_Escape ){
+				m_window->hide();
+				event->accept();
+			}
+		}
+		else if( event->type() == QEvent::Close ) {
+			event->ignore();
+			m_window->hide();
+			return true;
+		}
+		return QObject::eventFilter( obj, event );
+	}
+public:
+	void show(){
+		if( m_window == nullptr )
+			construct();
+		updatePositionFromSelection();
+		m_window->show();
+		m_window->raise();
+		m_window->activateWindow();
+	}
+}
+g_transform_dialog;
+
+void DoTransformDlg(){
+	g_transform_dialog.show();
+}
+
+
 class EntityGetSelectedPropertyValuesWalker_nonEmpty : public scene::Graph::Walker
 {
 	PropertyValues& m_propertyvalues;
@@ -1888,6 +2019,7 @@ void Select_registerCommands(){
 
 	GlobalCommands_insert( "ArbitraryRotation", makeCallbackF( DoRotateDlg ), QKeySequence( "Shift+R" ) );
 	GlobalCommands_insert( "ArbitraryScale", makeCallbackF( DoScaleDlg ), QKeySequence( "Ctrl+Alt+S" ) );
+	GlobalCommands_insert( "TransformDialog", makeCallbackF( DoTransformDlg ) );
 
 	GlobalCommands_insert( "SnapToGrid", makeCallbackF( Selection_SnapToGrid ), QKeySequence( "X" ) );
 

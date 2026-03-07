@@ -1593,6 +1593,6 @@ void CSG_registerCommands(){
 	GlobalCommands_insert( "CSGMerge", makeCallbackF( CSG_Merge ) );
 	GlobalCommands_insert( "CSGWrapMerge", FreeCaller<void(), CSG_WrapMerge>(), QKeySequence( "Ctrl+U" ) );
 	GlobalCommands_insert( "CSGIntersect", makeCallbackF( CSG_Intersect ), QKeySequence( "Ctrl+Shift+U" ) );
-	GlobalCommands_insert( "CSGroom", makeCallbackF( CSG_MakeRoom ) );
+	GlobalCommands_insert( "CSGroom", makeCallbackF( CSG_MakeRoom ), QKeySequence( "Ctrl+Shift+R" ) );
 	GlobalCommands_insert( "CSGTool", makeCallbackF( CSG_Tool ) );
 }
