@@ -1470,7 +1470,7 @@ void Experimental_createDocks( QMainWindow* window ){
 		QObject::connect( g_exp_skyboxHDREdit, &QLineEdit::editingFinished, [](){
 			scene::Node* worldNode = Map_FindWorldspawn( g_map );
 			if ( worldNode != nullptr && g_exp_skyboxHDREdit != nullptr ) {
-				Entity* worldspawn = Node_getEntity( worldNode );
+				Entity* worldspawn = Node_getEntity( *worldNode );
 				if ( worldspawn != nullptr ) {
 					UndoableCommand undo( "entitySetKeyValue" );
 					worldspawn->setKeyValue( "_skyboxHDR", g_exp_skyboxHDREdit->text().trimmed().toLatin1().constData() );
