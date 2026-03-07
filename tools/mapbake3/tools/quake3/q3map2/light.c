@@ -2433,6 +2433,18 @@ void LightWorld( const char *BSPFilePath, qboolean fastAllocate ){
 	Sys_Printf( "--- SetupGrid ---\n" );
 	SetupGrid();
 
+	/* worldspawn _skyboxHDR: HDR/EXR equirectangular panorama for IBL skylight (mapbake3) */
+	{
+		const char *skyboxHDR = ValueForKey( &entities[ 0 ], "_skyboxHDR" );
+		if ( skyboxHDR != NULL && skyboxHDR[ 0 ] != '\0' && g_skyLightPanoramaPath[ 0 ] == '\0' ) {
+			Q_strncpyz( g_skyLightPanoramaPath, skyboxHDR, sizeof( g_skyLightPanoramaPath ) );
+			if ( g_skyLightMode == SKYLIGHT_MODE_AUTO ) {
+				g_skyLightMode = SKYLIGHT_MODE_PANORAMA;
+			}
+			Sys_Printf( "HDR skylight from worldspawn _skyboxHDR: %s\n", g_skyLightPanoramaPath );
+		}
+	}
+
 	/* find the optional minimum lighting values */
 	GetVectorForKey( &entities[ 0 ], "_color", color );
 	if ( VectorLength( color ) == 0.0f ) {

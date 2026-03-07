@@ -186,6 +186,28 @@ sky light color. Set q3map_lightImage to use a different image.
   - 0: use shader color (q3map_lightRGB / q3map_lightImage)
 
 ================================================================================
+7a. HDR Skybox for IBL (MapBake3)
+================================================================================
+
+MapBake3 supports true HDR/EXR equirectangular panoramas for Image-Based
+Lighting (IBL) during the light bake. The lightmap will be tinted by the
+sky: blue sky → blue-tinted light, yellow sky → yellow tint, etc.
+
+  Worldspawn key: _skyboxHDR "hdr/skies/mysky.hdr"
+  (or .exr for OpenEXR format)
+
+Supported formats:
+  - Radiance RGBE (.hdr)
+  - OpenEXR (.exr)
+
+The panorama must be equirectangular (2:1 aspect). Set _skyboxHDR on
+worldspawn in the Entity Inspector (select a world brush, press N, add
+the key). Use MapBake3 for the -light pass to apply HDR IBL.
+
+Command-line override (takes precedence):
+  -skylightmode panorama -skylightpanorama <path>
+
+================================================================================
 8. Foghull Skybox
 ================================================================================
 

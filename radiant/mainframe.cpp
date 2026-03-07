@@ -1146,6 +1146,7 @@ QDockWidget* g_exp_usdDock{};
 QLabel* g_exp_selectedCountLabel{};
 QLabel* g_exp_selectedComponentsLabel{};
 QLineEdit* g_exp_shaderEdit{};
+QLineEdit* g_exp_skyboxHDREdit{};
 QDoubleSpinBox* g_exp_locX{};
 QDoubleSpinBox* g_exp_locY{};
 QDoubleSpinBox* g_exp_locZ{};
@@ -1459,6 +1460,25 @@ void Experimental_createDocks( QMainWindow* window ){
 		form->addRow( "", applyButton );
 		QObject::connect( applyButton, &QPushButton::clicked, [](){ Experimental_applySelectedShader(); } );
 		vbox->addLayout( form );
+
+		auto* envGroup = new QGroupBox( "Environment", root );
+		auto* envForm = new QFormLayout( envGroup );
+		g_exp_skyboxHDREdit = new QLineEdit( root );
+		g_exp_skyboxHDREdit->setPlaceholderText( "hdr/skies/mysky.hdr (worldspawn _skyboxHDR)" );
+		g_exp_skyboxHDREdit->setClearButtonEnabled( true );
+		envForm->addRow( "HDR Sky (IBL)", g_exp_skyboxHDREdit );
+		QObject::connect( g_exp_skyboxHDREdit, &QLineEdit::editingFinished, [](){
+			scene::Node* worldNode = Map_FindWorldspawn( g_map );
+			if ( worldNode != nullptr && g_exp_skyboxHDREdit != nullptr ) {
+				Entity* worldspawn = Node_getEntity( worldNode );
+				if ( worldspawn != nullptr ) {
+					UndoableCommand undo( "entitySetKeyValue" );
+					worldspawn->setKeyValue( "_skyboxHDR", g_exp_skyboxHDREdit->text().trimmed().toLatin1().constData() );
+					SceneChangeNotify();
+				}
+			}
+		} );
+		vbox->addWidget( envGroup );
 
 		auto* transformGroup = new QGroupBox( "Transform", root );
 		auto* transformGrid = new QGridLayout( transformGroup );
