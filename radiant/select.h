@@ -52,6 +52,10 @@ void FindReplaceTextures( const char* pFind, const char* pReplace, bool bSelecte
 void Select_ShowAllHidden();
 void Select_registerCommands();
 
+void Select_Scale( float x, float y, float z );
+void Select_TranslateToPosition( const Vector3& target );
+void Select_RotateByEulerXYZ( float x, float y, float z );
+
 // updating workzone to a given brush (depends on current view)
 
 void Selection_construct();

@@ -23,6 +23,7 @@
 
 #include "debugging/debugging.h"
 
+#include "math/aabb.h"
 #include "ientity.h"
 #include "iselection.h"
 #include "iundo.h"
@@ -538,6 +539,14 @@ void Select_FlipAxis( int axis ){
 
 void Select_Scale( float x, float y, float z ){
 	GlobalSelectionSystem().scaleSelected( Vector3( x, y, z ) );
+}
+
+void Select_TranslateToPosition( const Vector3& target ){
+	const AABB bounds = GlobalSelectionSystem().getBoundsSelected();
+	if( !aabb_valid( bounds ) )
+		return;
+	const Vector3 translation = vector3_subtracted( target, bounds.origin );
+	GlobalSelectionSystem().translateSelected( translation );
 }
 
 enum axis_t
@@ -1158,6 +1167,9 @@ inline Quaternion quaternion_for_euler_xyz_degrees( const Vector3& eulerXYZ ){
 #endif
 }
 
+void Select_RotateByEulerXYZ( float x, float y, float z ){
+	GlobalSelectionSystem().rotateSelected( quaternion_for_euler_xyz_degrees( Vector3( x, y, z ) ) );
+}
 
 void Undo(){
 	GlobalUndoSystem().undo();

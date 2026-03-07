@@ -34,6 +34,7 @@
 
 #include "ifilesystem.h"
 #include "ientity.h"
+#include "iselection.h"
 #include "ishaders.h"
 #include "ieclass.h"
 #include "irender.h"
@@ -111,6 +112,8 @@
 #include "gtkutil/glfont.h"
 #include "gtkutil/glwidget.h"
 #include "gtkutil/image.h"
+#include "gtkutil/spinbox.h"
+#include "math/aabb.h"
 #include "gtkutil/menu.h"
 #include "gtkutil/guisettings.h"
 
@@ -1138,6 +1141,15 @@ QDockWidget* g_exp_usdDock{};
 QLabel* g_exp_selectedCountLabel{};
 QLabel* g_exp_selectedComponentsLabel{};
 QLineEdit* g_exp_shaderEdit{};
+QDoubleSpinBox* g_exp_locX{};
+QDoubleSpinBox* g_exp_locY{};
+QDoubleSpinBox* g_exp_locZ{};
+QDoubleSpinBox* g_exp_rotX{};
+QDoubleSpinBox* g_exp_rotY{};
+QDoubleSpinBox* g_exp_rotZ{};
+QDoubleSpinBox* g_exp_scaleX{};
+QDoubleSpinBox* g_exp_scaleY{};
+QDoubleSpinBox* g_exp_scaleZ{};
 QListWidget* g_exp_assetsList{};
 QListWidget* g_exp_historyList{};
 QTreeWidget* g_exp_usdTree{};
@@ -1194,6 +1206,56 @@ void Experimental_setUndoTrackerAttached( bool attached ){
 	}
 }
 
+void Experimental_refreshTransform(){
+	const bool hasSelection = GlobalSelectionSystem().countSelected() != 0;
+	const AABB bounds = GlobalSelectionSystem().getBoundsSelected();
+	const bool validBounds = hasSelection && aabb_valid( bounds );
+
+	if ( g_exp_locX != nullptr ) {
+		g_exp_locX->setEnabled( hasSelection );
+		g_exp_locY->setEnabled( hasSelection );
+		g_exp_locZ->setEnabled( hasSelection );
+		g_exp_rotX->setEnabled( hasSelection );
+		g_exp_rotY->setEnabled( hasSelection );
+		g_exp_rotZ->setEnabled( hasSelection );
+		g_exp_scaleX->setEnabled( hasSelection );
+		g_exp_scaleY->setEnabled( hasSelection );
+		g_exp_scaleZ->setEnabled( hasSelection );
+		if ( validBounds ) {
+			g_exp_locX->blockSignals( true );
+			g_exp_locY->blockSignals( true );
+			g_exp_locZ->blockSignals( true );
+			g_exp_locX->setValue( bounds.origin.x() );
+			g_exp_locY->setValue( bounds.origin.y() );
+			g_exp_locZ->setValue( bounds.origin.z() );
+			g_exp_locX->blockSignals( false );
+			g_exp_locY->blockSignals( false );
+			g_exp_locZ->blockSignals( false );
+		}
+		// Rotation and scale default to 0 and 1 when no selection or no stored transform
+		if ( hasSelection ) {
+			g_exp_rotX->blockSignals( true );
+			g_exp_rotY->blockSignals( true );
+			g_exp_rotZ->blockSignals( true );
+			g_exp_scaleX->blockSignals( true );
+			g_exp_scaleY->blockSignals( true );
+			g_exp_scaleZ->blockSignals( true );
+			g_exp_rotX->setValue( 0 );
+			g_exp_rotY->setValue( 0 );
+			g_exp_rotZ->setValue( 0 );
+			g_exp_scaleX->setValue( 1 );
+			g_exp_scaleY->setValue( 1 );
+			g_exp_scaleZ->setValue( 1 );
+			g_exp_rotX->blockSignals( false );
+			g_exp_rotY->blockSignals( false );
+			g_exp_rotZ->blockSignals( false );
+			g_exp_scaleX->blockSignals( false );
+			g_exp_scaleY->blockSignals( false );
+			g_exp_scaleZ->blockSignals( false );
+		}
+	}
+}
+
 void Experimental_refreshSelection(){
 	if ( g_exp_selectedCountLabel != nullptr ) {
 		g_exp_selectedCountLabel->setText( StringStream( GlobalSelectionSystem().countSelected() ).c_str() );
@@ -1201,6 +1263,7 @@ void Experimental_refreshSelection(){
 	if ( g_exp_selectedComponentsLabel != nullptr ) {
 		g_exp_selectedComponentsLabel->setText( StringStream( GlobalSelectionSystem().countSelectedComponents() ).c_str() );
 	}
+	Experimental_refreshTransform();
 }
 
 void Experimental_selectionChanged( const Selectable& ){
@@ -1329,7 +1392,8 @@ void Experimental_createDocks( QMainWindow* window ){
 	g_exp_propertiesDock->setObjectName( "dock_experimental_properties" );
 	{
 		auto* root = new QWidget( g_exp_propertiesDock );
-		auto* form = new QFormLayout( root );
+		auto* vbox = new QVBoxLayout( root );
+		auto* form = new QFormLayout();
 		g_exp_selectedCountLabel = new QLabel( "0", root );
 		g_exp_selectedComponentsLabel = new QLabel( "0", root );
 		g_exp_shaderEdit = new QLineEdit( root );
@@ -1339,6 +1403,68 @@ void Experimental_createDocks( QMainWindow* window ){
 		form->addRow( "Shader", g_exp_shaderEdit );
 		form->addRow( "", applyButton );
 		QObject::connect( applyButton, &QPushButton::clicked, [](){ Experimental_applySelectedShader(); } );
+		vbox->addLayout( form );
+
+		auto* transformGroup = new QGroupBox( "Transform", root );
+		auto* transformGrid = new QGridLayout( transformGroup );
+		transformGrid->addWidget( new QLabel( "Location X", transformGroup ), 0, 0 );
+		transformGrid->addWidget( g_exp_locX = new DoubleSpinBox( -32768, 32768, 0, 6, 8, false ), 0, 1 );
+		transformGrid->addWidget( new QLabel( "Y", transformGroup ), 1, 0 );
+		transformGrid->addWidget( g_exp_locY = new DoubleSpinBox( -32768, 32768, 0, 6, 8, false ), 1, 1 );
+		transformGrid->addWidget( new QLabel( "Z", transformGroup ), 2, 0 );
+		transformGrid->addWidget( g_exp_locZ = new DoubleSpinBox( -32768, 32768, 0, 6, 8, false ), 2, 1 );
+		transformGrid->addWidget( new QLabel( "Rotation X", transformGroup ), 3, 0 );
+		transformGrid->addWidget( g_exp_rotX = new DoubleSpinBox( -360, 360, 0, 6, 1, true ), 3, 1 );
+		transformGrid->addWidget( new QLabel( "Y", transformGroup ), 4, 0 );
+		transformGrid->addWidget( g_exp_rotY = new DoubleSpinBox( -360, 360, 0, 6, 1, true ), 4, 1 );
+		transformGrid->addWidget( new QLabel( "Z", transformGroup ), 5, 0 );
+		transformGrid->addWidget( g_exp_rotZ = new DoubleSpinBox( -360, 360, 0, 6, 1, true ), 5, 1 );
+		transformGrid->addWidget( new QLabel( "Scale X", transformGroup ), 6, 0 );
+		transformGrid->addWidget( g_exp_scaleX = new DoubleSpinBox( 0.001, 32768, 1, 6, 0.1, false ), 6, 1 );
+		transformGrid->addWidget( new QLabel( "Y", transformGroup ), 7, 0 );
+		transformGrid->addWidget( g_exp_scaleY = new DoubleSpinBox( 0.001, 32768, 1, 6, 0.1, false ), 7, 1 );
+		transformGrid->addWidget( new QLabel( "Z", transformGroup ), 8, 0 );
+		transformGrid->addWidget( g_exp_scaleZ = new DoubleSpinBox( 0.001, 32768, 1, 6, 0.1, false ), 8, 1 );
+		g_exp_locX->setEnabled( false );
+		g_exp_locY->setEnabled( false );
+		g_exp_locZ->setEnabled( false );
+		g_exp_rotX->setEnabled( false );
+		g_exp_rotY->setEnabled( false );
+		g_exp_rotZ->setEnabled( false );
+		g_exp_scaleX->setEnabled( false );
+		g_exp_scaleY->setEnabled( false );
+		g_exp_scaleZ->setEnabled( false );
+		auto applyLoc = [](){
+			if ( GlobalSelectionSystem().countSelected() == 0 ) return;
+			const Vector3 target( g_exp_locX->value(), g_exp_locY->value(), g_exp_locZ->value() );
+			UndoableCommand undo( "translateSelected" );
+			Select_TranslateToPosition( target );
+			SceneChangeNotify();
+			Experimental_refreshTransform();
+		};
+		auto applyRot = [](){
+			if ( GlobalSelectionSystem().countSelected() == 0 ) return;
+			UndoableCommand undo( "rotateSelectedEulerXYZ" );
+			Select_RotateByEulerXYZ( g_exp_rotX->value(), g_exp_rotY->value(), g_exp_rotZ->value() );
+			SceneChangeNotify();
+		};
+		auto applyScale = [](){
+			if ( GlobalSelectionSystem().countSelected() == 0 ) return;
+			UndoableCommand undo( "scaleSelected" );
+			Select_Scale( g_exp_scaleX->value(), g_exp_scaleY->value(), g_exp_scaleZ->value() );
+			SceneChangeNotify();
+		};
+		QObject::connect( g_exp_locX, &QDoubleSpinBox::editingFinished, applyLoc );
+		QObject::connect( g_exp_locY, &QDoubleSpinBox::editingFinished, applyLoc );
+		QObject::connect( g_exp_locZ, &QDoubleSpinBox::editingFinished, applyLoc );
+		QObject::connect( g_exp_rotX, &QDoubleSpinBox::editingFinished, applyRot );
+		QObject::connect( g_exp_rotY, &QDoubleSpinBox::editingFinished, applyRot );
+		QObject::connect( g_exp_rotZ, &QDoubleSpinBox::editingFinished, applyRot );
+		QObject::connect( g_exp_scaleX, &QDoubleSpinBox::editingFinished, applyScale );
+		QObject::connect( g_exp_scaleY, &QDoubleSpinBox::editingFinished, applyScale );
+		QObject::connect( g_exp_scaleZ, &QDoubleSpinBox::editingFinished, applyScale );
+		vbox->addWidget( transformGroup );
+
 		g_exp_propertiesDock->setWidget( root );
 	}
 	window->addDockWidget( Qt::RightDockWidgetArea, g_exp_propertiesDock );
@@ -1413,6 +1539,15 @@ void Experimental_destroyDocks(){
 	g_exp_selectedCountLabel = nullptr;
 	g_exp_selectedComponentsLabel = nullptr;
 	g_exp_shaderEdit = nullptr;
+	g_exp_locX = nullptr;
+	g_exp_locY = nullptr;
+	g_exp_locZ = nullptr;
+	g_exp_rotX = nullptr;
+	g_exp_rotY = nullptr;
+	g_exp_rotZ = nullptr;
+	g_exp_scaleX = nullptr;
+	g_exp_scaleY = nullptr;
+	g_exp_scaleZ = nullptr;
 	g_exp_assetsList = nullptr;
 	g_exp_historyList = nullptr;
 	g_exp_usdTree = nullptr;
