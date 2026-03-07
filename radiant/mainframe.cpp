@@ -114,6 +114,9 @@
 #include "gtkutil/image.h"
 #include "gtkutil/spinbox.h"
 #include "math/aabb.h"
+#include "math/matrix.h"
+#include "scenelib.h"
+#include "stringio.h"
 #include "gtkutil/menu.h"
 #include "gtkutil/guisettings.h"
 
@@ -125,6 +128,7 @@
 #include "commands.h"
 #include "console.h"
 #include "entity.h"
+#include "entityinspector.h"
 #include "eclasslib.h"
 #include "entityinspector.h"
 #include "entitylist.h"
@@ -1150,6 +1154,7 @@ QDoubleSpinBox* g_exp_rotZ{};
 QDoubleSpinBox* g_exp_scaleX{};
 QDoubleSpinBox* g_exp_scaleY{};
 QDoubleSpinBox* g_exp_scaleZ{};
+QCheckBox* g_exp_uniformScale{};
 QListWidget* g_exp_assetsList{};
 QListWidget* g_exp_historyList{};
 QTreeWidget* g_exp_usdTree{};
@@ -1206,6 +1211,50 @@ void Experimental_setUndoTrackerAttached( bool attached ){
 	}
 }
 
+static Vector3 Experimental_getScaleFromSelection(){
+	Vector3 scale( 1, 1, 1 );
+	if ( GlobalSelectionSystem().countSelected() != 1 ) {
+		return scale;
+	}
+	// Try entity keyvalues first (misc_model, etc.)
+	const char* vec = SelectedEntity_getValueForKey( "modelscale_vec" );
+	if ( !string_empty( vec ) ) {
+		DoubleVector3 v;
+		if ( string_parse_vector3( vec, v ) && v[0] != 0 && v[1] != 0 && v[2] != 0 ) {
+			return Vector3( v );
+		}
+	}
+	const char* uni = SelectedEntity_getValueForKey( "modelscale" );
+	if ( !string_empty( uni ) ) {
+		float f;
+		if ( string_parse_float( uni, f ) && f != 0 ) {
+			return Vector3( f, f, f );
+		}
+	}
+	// Try transform matrix for nodes with TransformNode (walk path from selected to root)
+	scene::Instance& inst = GlobalSelectionSystem().firstSelected();
+	const scene::Path& path = inst.path();
+	for ( std::size_t i = path.size(); i > 0; --i ) {
+		TransformNode* tn = Node_getTransformNode( path[i - 1].get() );
+		if ( tn != nullptr ) {
+			DoubleVector3 s = matrix4_get_scale_vec3( tn->localToParent() );
+			if ( s[0] > 0.0001 && s[1] > 0.0001 && s[2] > 0.0001 ) {
+				return Vector3( s );
+			}
+		}
+	}
+	return scale;
+}
+
+static bool Experimental_selectionHasModelScale(){
+	if ( GlobalSelectionSystem().countSelected() != 1 ) {
+		return false;
+	}
+	const char* vec = SelectedEntity_getValueForKey( "modelscale_vec" );
+	const char* uni = SelectedEntity_getValueForKey( "modelscale" );
+	return !string_empty( vec ) || !string_empty( uni );
+}
+
 void Experimental_refreshTransform(){
 	const bool hasSelection = GlobalSelectionSystem().countSelected() != 0;
 	const AABB bounds = GlobalSelectionSystem().getBoundsSelected();
@@ -1221,6 +1270,9 @@ void Experimental_refreshTransform(){
 		g_exp_scaleX->setEnabled( hasSelection );
 		g_exp_scaleY->setEnabled( hasSelection );
 		g_exp_scaleZ->setEnabled( hasSelection );
+		if ( g_exp_uniformScale != nullptr ) {
+			g_exp_uniformScale->setEnabled( hasSelection );
+		}
 		if ( validBounds ) {
 			g_exp_locX->blockSignals( true );
 			g_exp_locY->blockSignals( true );
@@ -1232,7 +1284,6 @@ void Experimental_refreshTransform(){
 			g_exp_locY->blockSignals( false );
 			g_exp_locZ->blockSignals( false );
 		}
-		// Rotation and scale default to 0 and 1 when no selection or no stored transform
 		if ( hasSelection ) {
 			g_exp_rotX->blockSignals( true );
 			g_exp_rotY->blockSignals( true );
@@ -1243,9 +1294,10 @@ void Experimental_refreshTransform(){
 			g_exp_rotX->setValue( 0 );
 			g_exp_rotY->setValue( 0 );
 			g_exp_rotZ->setValue( 0 );
-			g_exp_scaleX->setValue( 1 );
-			g_exp_scaleY->setValue( 1 );
-			g_exp_scaleZ->setValue( 1 );
+			const Vector3 scale = Experimental_getScaleFromSelection();
+			g_exp_scaleX->setValue( scale.x() );
+			g_exp_scaleY->setValue( scale.y() );
+			g_exp_scaleZ->setValue( scale.z() );
 			g_exp_rotX->blockSignals( false );
 			g_exp_rotY->blockSignals( false );
 			g_exp_rotZ->blockSignals( false );
@@ -1407,24 +1459,26 @@ void Experimental_createDocks( QMainWindow* window ){
 
 		auto* transformGroup = new QGroupBox( "Transform", root );
 		auto* transformGrid = new QGridLayout( transformGroup );
-		transformGrid->addWidget( new QLabel( "Location X", transformGroup ), 0, 0 );
-		transformGrid->addWidget( g_exp_locX = new DoubleSpinBox( -32768, 32768, 0, 6, 8, false ), 0, 1 );
-		transformGrid->addWidget( new QLabel( "Y", transformGroup ), 1, 0 );
-		transformGrid->addWidget( g_exp_locY = new DoubleSpinBox( -32768, 32768, 0, 6, 8, false ), 1, 1 );
-		transformGrid->addWidget( new QLabel( "Z", transformGroup ), 2, 0 );
-		transformGrid->addWidget( g_exp_locZ = new DoubleSpinBox( -32768, 32768, 0, 6, 8, false ), 2, 1 );
-		transformGrid->addWidget( new QLabel( "Rotation X", transformGroup ), 3, 0 );
-		transformGrid->addWidget( g_exp_rotX = new DoubleSpinBox( -360, 360, 0, 6, 1, true ), 3, 1 );
-		transformGrid->addWidget( new QLabel( "Y", transformGroup ), 4, 0 );
-		transformGrid->addWidget( g_exp_rotY = new DoubleSpinBox( -360, 360, 0, 6, 1, true ), 4, 1 );
-		transformGrid->addWidget( new QLabel( "Z", transformGroup ), 5, 0 );
-		transformGrid->addWidget( g_exp_rotZ = new DoubleSpinBox( -360, 360, 0, 6, 1, true ), 5, 1 );
-		transformGrid->addWidget( new QLabel( "Scale X", transformGroup ), 6, 0 );
-		transformGrid->addWidget( g_exp_scaleX = new DoubleSpinBox( 0.001, 32768, 1, 6, 0.1, false ), 6, 1 );
-		transformGrid->addWidget( new QLabel( "Y", transformGroup ), 7, 0 );
-		transformGrid->addWidget( g_exp_scaleY = new DoubleSpinBox( 0.001, 32768, 1, 6, 0.1, false ), 7, 1 );
-		transformGrid->addWidget( new QLabel( "Z", transformGroup ), 8, 0 );
-		transformGrid->addWidget( g_exp_scaleZ = new DoubleSpinBox( 0.001, 32768, 1, 6, 0.1, false ), 8, 1 );
+		// Layout: Label | X | Y | Z (Blender-style)
+		transformGrid->addWidget( new QLabel( "" ), 0, 0 );
+		transformGrid->addWidget( new QLabel( "X", transformGroup ), 0, 1 );
+		transformGrid->addWidget( new QLabel( "Y", transformGroup ), 0, 2 );
+		transformGrid->addWidget( new QLabel( "Z", transformGroup ), 0, 3 );
+		transformGrid->addWidget( new QLabel( "Location", transformGroup ), 1, 0 );
+		transformGrid->addWidget( g_exp_locX = new DoubleSpinBox( -32768, 32768, 0, 6, 8, false ), 1, 1 );
+		transformGrid->addWidget( g_exp_locY = new DoubleSpinBox( -32768, 32768, 0, 6, 8, false ), 1, 2 );
+		transformGrid->addWidget( g_exp_locZ = new DoubleSpinBox( -32768, 32768, 0, 6, 8, false ), 1, 3 );
+		transformGrid->addWidget( new QLabel( "Rotation", transformGroup ), 2, 0 );
+		transformGrid->addWidget( g_exp_rotX = new DoubleSpinBox( -360, 360, 0, 6, 1, true ), 2, 1 );
+		transformGrid->addWidget( g_exp_rotY = new DoubleSpinBox( -360, 360, 0, 6, 1, true ), 2, 2 );
+		transformGrid->addWidget( g_exp_rotZ = new DoubleSpinBox( -360, 360, 0, 6, 1, true ), 2, 3 );
+		transformGrid->addWidget( new QLabel( "Scale", transformGroup ), 3, 0 );
+		transformGrid->addWidget( g_exp_scaleX = new DoubleSpinBox( 0.001, 32768, 1, 6, 0.1, false ), 3, 1 );
+		transformGrid->addWidget( g_exp_scaleY = new DoubleSpinBox( 0.001, 32768, 1, 6, 0.1, false ), 3, 2 );
+		transformGrid->addWidget( g_exp_scaleZ = new DoubleSpinBox( 0.001, 32768, 1, 6, 0.1, false ), 3, 3 );
+		g_exp_uniformScale = new QCheckBox( "Uniform scale", transformGroup );
+		g_exp_uniformScale->setChecked( QSettings().value( "Properties/Experimental/UniformScale", true ).toBool() );
+		transformGrid->addWidget( g_exp_uniformScale, 4, 0, 1, 4 );
 		g_exp_locX->setEnabled( false );
 		g_exp_locY->setEnabled( false );
 		g_exp_locZ->setEnabled( false );
@@ -1451,8 +1505,30 @@ void Experimental_createDocks( QMainWindow* window ){
 		auto applyScale = [](){
 			if ( GlobalSelectionSystem().countSelected() == 0 ) return;
 			UndoableCommand undo( "scaleSelected" );
-			Select_Scale( g_exp_scaleX->value(), g_exp_scaleY->value(), g_exp_scaleZ->value() );
-			SceneChangeNotify();
+			const Vector3 target( g_exp_scaleX->value(), g_exp_scaleY->value(), g_exp_scaleZ->value() );
+			if ( Experimental_selectionHasModelScale() ) {
+				// misc_model: write directly to entity keyvalues so scale persists
+				char buf[64];
+				if ( target.x() == target.y() && target.y() == target.z() ) {
+					sprintf( buf, "%g", target.x() );
+					Scene_EntitySetKeyValue_Selected( "modelscale", buf );
+					Scene_EntitySetKeyValue_Selected( "modelscale_vec", "" );
+				} else {
+					sprintf( buf, "%g %g %g", target.x(), target.y(), target.z() );
+					Scene_EntitySetKeyValue_Selected( "modelscale", "" );
+					Scene_EntitySetKeyValue_Selected( "modelscale_vec", buf );
+				}
+				SceneChangeNotify();
+			} else {
+				// Brushes etc: Select_Scale expects a factor (target/current)
+				const Vector3 current = Experimental_getScaleFromSelection();
+				const float fx = ( current.x() > 0.0001f ) ? ( target.x() / current.x() ) : 1.f;
+				const float fy = ( current.y() > 0.0001f ) ? ( target.y() / current.y() ) : 1.f;
+				const float fz = ( current.z() > 0.0001f ) ? ( target.z() / current.z() ) : 1.f;
+				Select_Scale( fx, fy, fz );
+				SceneChangeNotify();
+			}
+			Experimental_refreshTransform();
 		};
 		QObject::connect( g_exp_locX, &QDoubleSpinBox::editingFinished, applyLoc );
 		QObject::connect( g_exp_locY, &QDoubleSpinBox::editingFinished, applyLoc );
@@ -1463,6 +1539,30 @@ void Experimental_createDocks( QMainWindow* window ){
 		QObject::connect( g_exp_scaleX, &QDoubleSpinBox::editingFinished, applyScale );
 		QObject::connect( g_exp_scaleY, &QDoubleSpinBox::editingFinished, applyScale );
 		QObject::connect( g_exp_scaleZ, &QDoubleSpinBox::editingFinished, applyScale );
+		// Uniform scale: sync X/Y/Z when any changes
+		auto syncUniformScale = []( QDoubleSpinBox* source ){
+			if ( g_exp_uniformScale != nullptr && g_exp_uniformScale->isChecked() && source != nullptr ) {
+				const double v = source->value();
+				g_exp_scaleX->blockSignals( true );
+				g_exp_scaleY->blockSignals( true );
+				g_exp_scaleZ->blockSignals( true );
+				g_exp_scaleX->setValue( v );
+				g_exp_scaleY->setValue( v );
+				g_exp_scaleZ->setValue( v );
+				g_exp_scaleX->blockSignals( false );
+				g_exp_scaleY->blockSignals( false );
+				g_exp_scaleZ->blockSignals( false );
+			}
+		};
+		QObject::connect( g_exp_scaleX, QOverload<double>::of( &QDoubleSpinBox::valueChanged ), [syncUniformScale](){ syncUniformScale( g_exp_scaleX ); } );
+		QObject::connect( g_exp_scaleY, QOverload<double>::of( &QDoubleSpinBox::valueChanged ), [syncUniformScale](){ syncUniformScale( g_exp_scaleY ); } );
+		QObject::connect( g_exp_scaleZ, QOverload<double>::of( &QDoubleSpinBox::valueChanged ), [syncUniformScale](){ syncUniformScale( g_exp_scaleZ ); } );
+		QObject::connect( g_exp_uniformScale, &QCheckBox::toggled, [syncUniformScale]( bool checked ){
+			QSettings().setValue( "Properties/Experimental/UniformScale", checked );
+			if ( checked && g_exp_scaleX != nullptr ) {
+				syncUniformScale( g_exp_scaleX );
+			}
+		} );
 		vbox->addWidget( transformGroup );
 
 		g_exp_propertiesDock->setWidget( root );

@@ -21,6 +21,8 @@
 
 #pragma once
 
+const char* SelectedEntity_getValueForKey( const char* key );
+
 class QWidget* EntityInspector_constructWindow( QWidget* parent );
 void EntityInspector_construct();
 void EntityInspector_destroy();
