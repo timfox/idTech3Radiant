@@ -582,11 +582,14 @@ const char* misc_model_dialog( QWidget* parent, const char* filepath ){
 			buffer << root << filepath;
 	}
 	if( buffer.empty() ){
-		buffer << g_qeglobals.m_userGamePath << "models/";
+		// Open at gamepack content/models (e.g. swamp.game -> .../content/models)
+		buffer << GameToolsPath_get() << "content/models/";
 
 		if ( !file_readable( buffer ) ) {
-			// just go to fsmain
-			buffer( g_qeglobals.m_userGamePath );
+			buffer << GameToolsPath_get() << "content/";
+			if ( !file_readable( buffer ) ) {
+				buffer( GameToolsPath_get() );
+			}
 		}
 	}
 
