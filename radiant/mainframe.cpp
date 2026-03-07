@@ -47,6 +47,7 @@
 #include <QWidget>
 #include <QSplashScreen>
 #include <QCoreApplication>
+#include <QTimer>
 #include <QMainWindow>
 #include <QLabel>
 #include <QSplitter>
@@ -1319,7 +1320,9 @@ void Experimental_refreshSelection(){
 }
 
 void Experimental_selectionChanged( const Selectable& ){
-	Experimental_refreshSelection();
+	// Defer refresh: selection callbacks run before onSelectedChanged updates m_selection,
+	// so firstSelected() would assert if we ran synchronously when selecting the first item.
+	QTimer::singleShot( 0, [](){ Experimental_refreshSelection(); } );
 }
 
 void Experimental_applySelectedShader(){
