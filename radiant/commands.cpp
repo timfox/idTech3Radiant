@@ -22,7 +22,6 @@
 #include "commands.h"
 
 #include "debugging/debugging.h"
-#include "itextstream.h"
 
 #include <map>
 #include <vector>
@@ -91,12 +90,8 @@ void GlobalCommands_insert( const char* name, const Callback<void()>& callback, 
 
 const Command& GlobalCommands_find( const char* command ){
 	Commands::iterator i = g_commands.find( command );
-	if ( i != g_commands.end() )
-		return ( *i ).second;
-	globalWarningStream() << "command not registered: " << Quoted( command ) << '\n';
-	static const QKeySequence s_emptyAccel;
-	static const Command s_noopCommand( [](){}, s_emptyAccel );
-	return s_noopCommand;
+	ASSERT_MESSAGE( i != g_commands.end(), "failed to lookup command " << Quoted( command ) );
+	return ( *i ).second;
 }
 
 typedef std::map<CopiedString, Toggle> Toggles;
@@ -110,13 +105,8 @@ void GlobalToggles_insert( const char* name, const Callback<void()>& callback, c
 }
 const Toggle& GlobalToggles_find( const char* name ){
 	Toggles::iterator i = g_toggles.find( name );
-	if ( i != g_toggles.end() )
-		return ( *i ).second;
-	globalWarningStream() << "toggle not registered: " << Quoted( name ) << '\n';
-	static const QKeySequence s_emptyAccel;
-	static bool s_noopToggleState = false;
-	static const Toggle s_noopToggle( [](){}, s_emptyAccel, BoolExportCaller( s_noopToggleState ) );
-	return s_noopToggle;
+	ASSERT_MESSAGE( i != g_toggles.end(), "failed to lookup toggle " << Quoted( name ) );
+	return ( *i ).second;
 }
 
 typedef std::map<CopiedString, KeyEvent> KeyEvents;
@@ -130,12 +120,8 @@ void GlobalKeyEvents_insert( const char* name, const Callback<void()>& keyDown, 
 }
 const KeyEvent& GlobalKeyEvents_find( const char* name ){
 	KeyEvents::iterator i = g_keyEvents.find( name );
-	if ( i != g_keyEvents.end() )
-		return ( *i ).second;
-	globalWarningStream() << "keyEvent not registered: " << Quoted( name ) << '\n';
-	static const QKeySequence s_emptyAccel;
-	static const KeyEvent s_noopKeyEvent( s_emptyAccel, [](){}, [](){} );
-	return s_noopKeyEvent;
+	ASSERT_MESSAGE( i != g_keyEvents.end(), "failed to lookup keyEvent " << Quoted( name ) );
+	return ( *i ).second;
 }
 
 
