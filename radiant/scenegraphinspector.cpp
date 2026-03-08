@@ -28,6 +28,21 @@ namespace
 
 QDockWidget* g_scenegraphDock{};
 QTreeView* g_scenegraphTreeView{};
+bool g_modelAttached{};
+
+void ScenegraphInspector_attachModel(){
+	if ( g_scenegraphTreeView != nullptr && !g_modelAttached ) {
+		g_scenegraphTreeView->setModel( scene_graph_get_tree_model() );
+		g_modelAttached = true;
+	}
+}
+
+void ScenegraphInspector_detachModel(){
+	if ( g_scenegraphTreeView != nullptr && g_modelAttached ) {
+		g_scenegraphTreeView->setModel( nullptr );
+		g_modelAttached = false;
+	}
+}
 
 void ScenegraphInspector_expandAll(){
 	if ( g_scenegraphTreeView != nullptr ) {
@@ -71,11 +86,16 @@ void ScenegraphInspector_createDock( QMainWindow* window ){
 	g_scenegraphTreeView->header()->setStretchLastSection( false );
 	g_scenegraphTreeView->header()->setSectionResizeMode( QHeaderView::ResizeMode::ResizeToContents );
 	g_scenegraphTreeView->setSelectionMode( QAbstractItemView::SelectionMode::ExtendedSelection );
-	g_scenegraphTreeView->setModel( scene_graph_get_tree_model() );
 	layout->addWidget( g_scenegraphTreeView, 1 );
 
 	QObject::connect( expandAllBtn, &QPushButton::clicked, ScenegraphInspector_expandAll );
 	QObject::connect( collapseAllBtn, &QPushButton::clicked, ScenegraphInspector_collapseAll );
+	QObject::connect( g_scenegraphDock, &QDockWidget::visibilityChanged, []( bool visible ){
+		if ( visible )
+			ScenegraphInspector_attachModel();
+		else
+			ScenegraphInspector_detachModel();
+	} );
 
 	g_scenegraphDock->setWidget( root );
 	window->addDockWidget( Qt::RightDockWidgetArea, g_scenegraphDock );
@@ -84,10 +104,8 @@ void ScenegraphInspector_createDock( QMainWindow* window ){
 
 void ScenegraphInspector_destroyDock(){
 	if ( g_scenegraphDock != nullptr ) {
-		if ( g_scenegraphTreeView != nullptr ) {
-			g_scenegraphTreeView->setModel( nullptr );
-			g_scenegraphTreeView = nullptr;
-		}
+		ScenegraphInspector_detachModel();
+		g_scenegraphTreeView = nullptr;
 		delete g_scenegraphDock;
 		g_scenegraphDock = nullptr;
 	}

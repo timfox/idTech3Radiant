@@ -116,10 +116,12 @@ void item_model_foreach( Functor f, QAbstractItemModel* model, QModelIndex paren
 void EntityList_UpdateSelection( QAbstractItemModel* model, QTreeView* view ){
 	item_model_foreach( [view]( QModelIndex &index ){
 		scene::Instance* instance = static_cast<scene::Instance*>( index.data( c_ItemDataRole_Instance ).value<void*>() );
-		if ( Selectable* selectable = Instance_getSelectable( *instance ) ) {
+                if ( instance != nullptr ) {
+                    if ( Selectable* selectable = Instance_getSelectable( *instance ) ) {
 			view->selectionModel()->select( index, selectable->isSelected()
 			                                     ? QItemSelectionModel::SelectionFlag::Select
 			                                     : QItemSelectionModel::SelectionFlag::Deselect );
+		}
 		}
 	}, model );
 }
@@ -148,9 +150,11 @@ void EntityList_SelectionUpdate(){
 			QTimer::singleShot( 0, [](){
 				for( const auto& index : getEntityList().m_tree_view->selectionModel()->selectedRows( 0 ) ){
 					scene::Instance* instance = static_cast<scene::Instance*>( index.data( c_ItemDataRole_Instance ).value<void*>() );
-					if ( Selectable* selectable = Instance_getSelectable( *instance ) )
+                                        if ( instance != nullptr ) {
+                                            if ( Selectable* selectable = Instance_getSelectable( *instance ) )
 						if( !selectable->isSelected() )
 							getEntityList().m_tree_view->selectionModel()->select( index, QItemSelectionModel::SelectionFlag::Deselect );
+				}
 				}
 			} );
 		}

@@ -9,7 +9,7 @@
 
 textures/common/toolsskybox
 {
-	qer_editorImage _skybox
+	qer_editorImage textures/common/toolsskybox_up
 	surfaceparm sky
 	surfaceparm noimpact
 	surfaceparm nolightmap
