@@ -2284,6 +2284,7 @@ void create_view_menu( QMenuBar *menubar, MainFrame::EViewStyle style ){
 	if ( ( style != MainFrame::eRegular && style != MainFrame::eRegularLeft ) || g_Layout_builtInGroupDialog.m_value ) {
 		create_menu_item_with_mnemonic( menu, "Texture Browser", "ToggleTextures" );
 	}
+	create_menu_item_with_mnemonic( menu, "Sky Browser", "SkyBrowser" );
 	create_menu_item_with_mnemonic( menu, "Model Browser", "ToggleModelBrowser" );
 	create_menu_item_with_mnemonic( menu, "Entity Inspector", "ToggleEntityInspector" );
 	create_menu_item_with_mnemonic( menu, "Layers Browser", "ToggleLayersBrowser" );

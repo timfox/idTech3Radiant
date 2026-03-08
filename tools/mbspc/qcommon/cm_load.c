@@ -611,7 +611,7 @@ void CM_LoadMap( const char *name, qboolean clientload, int *checksum ) {
 #ifndef BSPC
 	length = FS_ReadFile(name, &buf.v);
 #else
-	length = LoadQuakeFile((quakefile_t *) name, &buf.v);
+	length = LoadQuakeFile((quakefile_t *)(uintptr_t)name, &buf.v);
 #endif
 
 	if (!buf.i) {

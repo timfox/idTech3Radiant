@@ -994,6 +994,7 @@ $(INSTALLDIR)/radiant.$(EXE): \
 	radiant/spreadsheet_workbench.o \
 	radiant/scenegraph.o \
 	radiant/selection.o \
+	radiant/skybrowser.o \
 	radiant/selection_mtor_clip.o \
 	radiant/selection_mtor_drag.o \
 	radiant/selection_mtor_rotate.o \

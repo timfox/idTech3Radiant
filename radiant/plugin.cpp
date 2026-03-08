@@ -72,6 +72,7 @@
 #include "plugintoolbar.h"
 #include "findtexturedialog.h"
 #include "nullmodel.h"
+#include "skybrowser.h"
 #include "grid.h"
 
 #include "modulesystem/modulesmap.h"
@@ -258,6 +259,7 @@ public:
 		XYWindow_Construct();
 		BuildMonitor_Construct();
 		TextureBrowser_Construct();
+		SkyBrowser_Construct();
 		ModelBrowser_Construct();
 		Entity_Construct();
 		Autosave_Construct();
@@ -279,6 +281,7 @@ public:
 		Autosave_Destroy();
 		Entity_Destroy();
 		ModelBrowser_Destroy();
+		SkyBrowser_Destroy();
 		TextureBrowser_Destroy();
 		BuildMonitor_Destroy();
 		XYWindow_Destroy();

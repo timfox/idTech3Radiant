@@ -385,6 +385,7 @@ void TextureBrowser_SetStatus( const char* name ){
 
 void TextureBrowser_Focus( TextureBrowser& textureBrowser, const char* name );
 void TextureBrowser_tagsSetCheckboxesForShader( const char *shader );
+void TextureBrowser_ShowDirectoryOfShader( TextureBrowser& texBro, const char* shader );
 
 void TextureBrowser_SetSelectedShader( TextureBrowser& textureBrowser, const char* shader ){
 	textureBrowser.m_shader = shader;
@@ -401,6 +402,10 @@ void TextureBrowser_SetSelectedShader( TextureBrowser& textureBrowser, const cha
 
 void TextureBrowser_SetSelectedShader( const char* shader ){
 	TextureBrowser_SetSelectedShader( g_TexBro, shader );
+}
+
+void TextureBrowser_ShowDirectoryOfShader( const char* shader ){
+	TextureBrowser_ShowDirectoryOfShader( g_TexBro, shader );
 }
 
 
