@@ -993,6 +993,7 @@ $(INSTALLDIR)/radiant.$(EXE): \
 	radiant/renderstate.o \
 	radiant/spreadsheet_workbench.o \
 	radiant/scenegraph.o \
+	radiant/scenegraphinspector.o \
 	radiant/selection.o \
 	radiant/skybrowser.o \
 	radiant/selection_mtor_clip.o \

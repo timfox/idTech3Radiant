@@ -20,6 +20,7 @@
 #include "video_workbench.h"
 #include "spreadsheet_workbench.h"
 #include "python_script_workbench.h"
+#include "scenegraphinspector.h"
 #include "referencecache.h"
 #include "camwindow.h"
 #include "navmesh_ui.h"
@@ -84,6 +85,7 @@ void MainFrame_registerCommands(){
 	GlobalCommands_insert( "ToggleModelBrowser", makeCallbackF( ModelBrowser_ToggleShow ), QKeySequence( "/" ) );
 	GlobalCommands_insert( "ToggleLayersBrowser", makeCallbackF( LayersBrowser_ToggleShow ), QKeySequence( "L" ) );
 	GlobalCommands_insert( "ToggleEntityList", makeCallbackF( EntityList_toggleShown ), QKeySequence( "Shift+L" ) );
+	GlobalCommands_insert( "ToggleScenegraphInspector", makeCallbackF( ScenegraphInspector_toggleShown ) );
 	GlobalCommands_insert( "ToggleExperimentalProperties", makeCallbackF( Experimental_togglePropertiesDock ) );
 	GlobalCommands_insert( "ToggleExperimentalPreview", makeCallbackF( Experimental_togglePreviewDock ) );
 	GlobalCommands_insert( "ToggleExperimentalAssets", makeCallbackF( Experimental_toggleAssetsDock ) );

@@ -171,6 +171,7 @@
 #include "video_workbench.h"
 #include "spreadsheet_workbench.h"
 #include "python_script_workbench.h"
+#include "scenegraphinspector.h"
 
 #include "colors.h"
 #include "tools.h"
@@ -2598,6 +2599,7 @@ void create_view_menu( QMenuBar *menubar, MainFrame::EViewStyle style ){
 	create_menu_item_with_mnemonic( menu, "Layers Browser", "ToggleLayersBrowser" );
 	create_menu_item_with_mnemonic( menu, "&Surface Inspector", "SurfaceInspector" );
 	create_menu_item_with_mnemonic( menu, "Entity List", "ToggleEntityList" );
+	create_menu_item_with_mnemonic( menu, "Scenegraph Inspector", "ToggleScenegraphInspector" );
 	if ( g_Layout_experimentalFeatures.m_value ) {
 		menu->addSeparator();
 		create_highlighted_view_menu_item( menu, "[Properties]", "ToggleExperimentalProperties" );
@@ -3684,6 +3686,7 @@ void MainFrame::Create(){
 	VideoWorkbench_createDock( window );
 	Spreadsheet_createDock( window );
 	PythonScript_createDock( window );
+	ScenegraphInspector_createDock( window );
 
 	s_qe_every_second_timer.enable();
 
@@ -3746,6 +3749,7 @@ void MainFrame::Shutdown(){
 	VideoWorkbench_stopAndRelease();
 	Spreadsheet_stopAndRelease();
 	PythonScript_stopAndRelease();
+	ScenegraphInspector_destroyDock();
 	g_consoleDock = nullptr;
 	g_page_console = nullptr;
 
