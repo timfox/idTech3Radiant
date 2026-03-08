@@ -1131,9 +1131,9 @@ void UpdateAllWindows(){
 LatchedInt g_Layout_viewStyle( 0, "Window Layout" );
 LatchedBool g_Layout_enableDetachableMenus( true, "Detachable Menus" );
 LatchedBool g_Layout_builtInGroupDialog( false, "Built-In Group Dialog" );
-LatchedBool g_Layout_expiramentalFeatures( false, "Experimental Features" );
-bool Layout_expiramentalFeaturesEnabled(){
-	return g_Layout_expiramentalFeatures.m_value;
+LatchedBool g_Layout_experimentalFeatures( false, "Experimental Features" );
+bool Layout_experimentalFeaturesEnabled(){
+	return g_Layout_experimentalFeatures.m_value;
 }
 
 namespace
@@ -1381,7 +1381,7 @@ void Experimental_toggleUSDDock_impl(){
 }
 
 void Experimental_importUSDStructure_impl(){
-	if ( !g_Layout_expiramentalFeatures.m_value || g_exp_usdTree == nullptr ) {
+	if ( !g_Layout_experimentalFeatures.m_value || g_exp_usdTree == nullptr ) {
 		return;
 	}
 
@@ -1438,7 +1438,7 @@ void Experimental_importUSDStructure_impl(){
 }
 
 void Experimental_createDocks( QMainWindow* window ){
-	if ( !g_Layout_expiramentalFeatures.m_value || window == nullptr ) {
+	if ( !g_Layout_experimentalFeatures.m_value || window == nullptr ) {
 		return;
 	}
 
@@ -2289,7 +2289,7 @@ void create_view_menu( QMenuBar *menubar, MainFrame::EViewStyle style ){
 	create_menu_item_with_mnemonic( menu, "Layers Browser", "ToggleLayersBrowser" );
 	create_menu_item_with_mnemonic( menu, "&Surface Inspector", "SurfaceInspector" );
 	create_menu_item_with_mnemonic( menu, "Entity List", "ToggleEntityList" );
-	if ( g_Layout_expiramentalFeatures.m_value ) {
+	if ( g_Layout_experimentalFeatures.m_value ) {
 		menu->addSeparator();
 		create_highlighted_view_menu_item( menu, "[Properties]", "ToggleExperimentalProperties" );
 		create_highlighted_view_menu_item( menu, "[Preview]", "ToggleExperimentalPreview" );
@@ -2535,7 +2535,7 @@ void create_misc_menu( QMenuBar *menubar ){
 	create_menu_item_with_mnemonic( menu, "Find brush", "FindBrush" );
 	create_menu_item_with_mnemonic( menu, "Map Info", "MapInfo" );
 	create_menu_item_with_mnemonic( menu, "&Refresh models", "RefreshReferences" );
-	if ( g_Layout_expiramentalFeatures.m_value ) {
+	if ( g_Layout_experimentalFeatures.m_value ) {
 		create_menu_item_with_mnemonic( menu, "Import USD structure", "ImportUSDStructure" );
 	}
 	create_menu_item_with_mnemonic( menu, "Set 2D &Background image", makeCallbackF( WXY_SetBackgroundImage ) );
@@ -2640,7 +2640,7 @@ void create_main_menu( QMenuBar *menubar, MainFrame::EViewStyle style ){
 	create_brush_menu( menubar );
 	if ( !string_equal( g_pGameDescription->getKeyValue( "no_patch" ), "1" ) )
 		create_patch_menu( menubar );
-	if ( Layout_expiramentalFeaturesEnabled() )
+	if ( Layout_experimentalFeaturesEnabled() )
 		create_splines_menu( menubar );
 	create_tools_menu( menubar );
 	create_plugins_menu( menubar );
@@ -3565,8 +3565,8 @@ void Layout_constructPreferences( PreferencesPage& page ){
 	);
 	page.appendCheckBox(
 	    "", "Experimental Features",
-	    LatchedImportCaller( g_Layout_expiramentalFeatures ),
-	    BoolExportCaller( g_Layout_expiramentalFeatures.m_latched )
+	    LatchedImportCaller( g_Layout_experimentalFeatures ),
+	    BoolExportCaller( g_Layout_experimentalFeatures.m_latched )
 	);
 	page.appendCheckBox( "", "Industry Standard (Maya-style) navigation", g_bMayaNavigation );
 	{
@@ -3604,8 +3604,8 @@ void MainFrame_Construct(){
 	GlobalPreferenceSystem().registerPreference( "DetachableMenus", makeBoolStringImportCallback( LatchedAssignCaller( g_Layout_enableDetachableMenus ) ), BoolExportStringCaller( g_Layout_enableDetachableMenus.m_latched ) );
 	GlobalPreferenceSystem().registerPreference( "QE4StyleWindows", makeIntStringImportCallback( LatchedAssignCaller( g_Layout_viewStyle ) ), IntExportStringCaller( g_Layout_viewStyle.m_latched ) );
 	GlobalPreferenceSystem().registerPreference( "BuiltInGroupDialog", makeBoolStringImportCallback( LatchedAssignCaller( g_Layout_builtInGroupDialog ) ), BoolExportStringCaller( g_Layout_builtInGroupDialog.m_latched ) );
-	GlobalPreferenceSystem().registerPreference( "ExperimentalFeatures", makeBoolStringImportCallback( LatchedAssignCaller( g_Layout_expiramentalFeatures ) ), BoolExportStringCaller( g_Layout_expiramentalFeatures.m_latched ) );
-	GlobalPreferenceSystem().registerPreference( "ExpiramentalFeatures", makeBoolStringImportCallback( LatchedAssignCaller( g_Layout_expiramentalFeatures ) ), BoolExportStringCaller( g_Layout_expiramentalFeatures.m_latched ) );
+	GlobalPreferenceSystem().registerPreference( "ExperimentalFeatures", makeBoolStringImportCallback( LatchedAssignCaller( g_Layout_experimentalFeatures ) ), BoolExportStringCaller( g_Layout_experimentalFeatures.m_latched ) );
+	GlobalPreferenceSystem().registerPreference( "ExpiramentalFeatures", makeBoolStringImportCallback( LatchedAssignCaller( g_Layout_experimentalFeatures ) ), BoolExportStringCaller( g_Layout_experimentalFeatures.m_latched ) );
 	GlobalPreferenceSystem().registerPreference( "MayaNavigation", BoolImportStringCaller( g_bMayaNavigation ), BoolExportStringCaller( g_bMayaNavigation ) );
 	GlobalPreferenceSystem().registerPreference( "TrayIconEnabled", BoolImportStringCaller( g_trayIconEnabled ), BoolExportStringCaller( g_trayIconEnabled ) );
 	GlobalPreferenceSystem().registerPreference( "MinimizeToTray", BoolImportStringCaller( g_minimizeToTray ), BoolExportStringCaller( g_minimizeToTray ) );

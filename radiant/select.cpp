@@ -2011,7 +2011,7 @@ void Select_registerCommands(){
 	GlobalCommands_insert( "PasteToCamera", makeCallbackF( PasteToCamera ), QKeySequence( "Shift+V" ) );
 	GlobalCommands_insert( "MoveToCamera", makeCallbackF( MoveToCamera ), QKeySequence( "Ctrl+Shift+V" ) );
 	GlobalCommands_insert( "CloneSelection", makeCallbackF( Selection_Clone ), QKeySequence( "Ctrl+D" ) );
-	if( Layout_expiramentalFeaturesEnabled() ){
+	if( Layout_experimentalFeaturesEnabled() ){
 		GlobalCommands_insert( "CloneSelectionModern", makeCallbackF( Selection_Clone ) );
 	}
 	GlobalCommands_insert( "SplineArray", makeCallbackF( SplineArray_Selected ) );

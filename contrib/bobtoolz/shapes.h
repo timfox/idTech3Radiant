@@ -19,8 +19,8 @@
 
 #pragma once
 
-// TODO: implement all this stuff via DBrush class. started with DShape
-// TODO: Auto Face Scaling, no need to pass parms, calculated via brush.
+// NOTE: implement via DBrush class (started with DShape)
+// NOTE: Auto Face Scaling could be calculated from brush, no need to pass parms
 
 // Q3MAP stuff
 #define FACE_DETAIL 0x8000000

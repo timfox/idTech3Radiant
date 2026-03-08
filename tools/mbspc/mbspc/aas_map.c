@@ -815,8 +815,7 @@ void AAS_CreateMapBrushes(mapbrush_t *brush, entity_t *mapent, int addbevels)
 									))
 	{
 		brush->expansionbbox = 0;
-		//NOTE: the first bounding box is the max
-		//FIXME: use max bounding box created from all bboxes
+		//NOTE: the first bounding box is the max; could use union of all bboxes for tighter expansion
 		AAS_ExpandMapBrush(brush, cfg.bboxes[0].mins, cfg.bboxes[0].maxs);
 		AAS_MakeBrushWindings(brush);
 	} //end if
@@ -824,8 +823,7 @@ void AAS_CreateMapBrushes(mapbrush_t *brush, entity_t *mapent, int addbevels)
 	else if (brush->contents & CONTENTS_CLUSTERPORTAL)
 	{
 		brush->expansionbbox = 0;
-		//NOTE: the first bounding box is the max
-		//FIXME: use max bounding box created from all bboxes
+		//NOTE: the first bounding box is the max; could use union of all bboxes for tighter expansion
 		AAS_ExpandMapBrush(brush, cfg.bboxes[0].mins, cfg.bboxes[0].maxs);
 		AAS_MakeBrushWindings(brush);
 	} //end if

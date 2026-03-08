@@ -234,7 +234,7 @@ void ConstructFilters(){
 		add_filter_command( EXCLUDE_LIGHTGRID, "FilterLightgrid" );
 	}
 	add_filter_command( EXCLUDE_CURVES, "FilterPatches",
-	                   Layout_expiramentalFeaturesEnabled() ? QKeySequence( "Alt+P" ) : QKeySequence( "Ctrl+P" ) );
+	                   Layout_experimentalFeaturesEnabled() ? QKeySequence( "Alt+P" ) : QKeySequence( "Ctrl+P" ) );
 	add_filter_command( EXCLUDE_DETAILS, "FilterDetails", QKeySequence( "Ctrl+Alt+D" ) );
 	add_filter_command( EXCLUDE_HINTSSKIPS, "FilterHintsSkips", QKeySequence( "Ctrl+Alt+H" ) );
 	add_filter_command( EXCLUDE_MODELS, "FilterModels", QKeySequence( "Shift+M" ) );

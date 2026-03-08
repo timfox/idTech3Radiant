@@ -203,7 +203,7 @@ _QERFaceData g_CancelFaceData;
 // patches -------------------------------------
 bool g_bPatch = false;
 //++timo we use this one to grab selected patchMesh_t
-// FIXME: update when there's a real interface to read/write patches
+// NOTE: would need update when a proper patch read/write interface exists
 bool g_bSurfaceTableInitDone = false;
 _QERAppSurfaceTable g_SurfaceTable;
 CControlPointsManagerPatch g_ControlPointsPatch;
@@ -220,14 +220,13 @@ CControlPointsManager   *g_pManager = NULL;
 
 // ---------------------------------------------
 // globals flags for user preferences
-//++timo TODO: this should be retrieved from the Editor's .INI prefs in a dedicated interface
-// update camera view during manipulation ?
+// NOTE: should be retrieved from Editor preferences when a dedicated interface exists
+// update camera view during manipulation?
 bool g_bPrefsUpdateCameraView = true;
 
 // misc ----------------------------------------
 bool g_bHelp = false;
-//++timo FIXME: used to close the plugin window if InitTexView fails
-// it's dirty, only use is to prevent infinite loop in DialogProc
+// NOTE: used to close the plugin window if InitTexView fails; prevents infinite loop in DialogProc
 bool g_bClosing = false;
 
 const char *PLUGIN_ABOUT = "Texture Tools for Radiant\n\n"
@@ -328,7 +327,7 @@ void FitView( IWindow* hwndDlg, int TexSize[2] ){
 }
 
 // call this one each time we need to re-init
-//++timo TODO: re-init objects state, g_2DView and g_ControlPointsManager
+// NOTE: full re-init of g_2DView and g_ControlPointsManager state would improve robustness
 void InitTexView( IWindow* hwndDlg ){
 	// size of the texture we are working on
 	int TexSize[2];
@@ -339,7 +338,7 @@ void InitTexView( IWindow* hwndDlg ){
 		int i;
 		// we have something selected
 		// setup: compute BBox for the winding ( in ST space )
-		//++timo FIXME: move this in a C2DView member ? used as well for patches
+		// NOTE: could be moved to C2DView member, used for patches too
 		g_2DView.m_Mins[0] = +9999.0f;
 		g_2DView.m_Mins[1] = +9999.0f;
 		g_2DView.m_Maxs[0] = -9999.0f;

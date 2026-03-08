@@ -85,8 +85,7 @@ bool XmlTagBuilder::OpenXmlDoc( const char* file, const char* savefile ){
 		m_savefilename = file;
 	}
 
-	doc = xmlParseFile( file ); // TODO error checking!
-
+	doc = xmlParseFile( file );
 	if ( !doc ) {
 		return false;
 	}

@@ -75,7 +75,7 @@ void MainFrame_registerCommands(){
 	GlobalCommands_insert( "CameraRecallBookmark5", makeCallbackF( +[](){ CameraBookmark_recall( 4 ); } ), QKeySequence( "Shift+5" ) );
 
 	GlobalCommands_insert( "Shortcuts", makeCallbackF( DoCommandListDlg ),
-	                       g_Layout_expiramentalFeatures.m_value ? QKeySequence( "Ctrl+Alt+P" ) : QKeySequence( "Ctrl+Shift+P" ) );
+	                       g_Layout_experimentalFeatures.m_value ? QKeySequence( "Ctrl+Alt+P" ) : QKeySequence( "Ctrl+Shift+P" ) );
 	GlobalCommands_insert( "Preferences", makeCallbackF( PreferencesDialog_showDialog ), QKeySequence( "Ctrl+," ) );
 	GlobalCommands_insert( "FrameSelection", makeCallbackF( FocusAllViews ), QKeySequence( "F" ) );
 
@@ -97,9 +97,9 @@ void MainFrame_registerCommands(){
 	Tools_registerCommands();
 
 	GlobalCommands_insert( "BuildMenuCustomize", makeCallbackF( DoBuildMenu ),
-	                       g_Layout_expiramentalFeatures.m_value ? QKeySequence( "Ctrl+Shift+P" ) : QKeySequence() );
+	                       g_Layout_experimentalFeatures.m_value ? QKeySequence( "Ctrl+Shift+P" ) : QKeySequence() );
 	GlobalCommands_insert( "Build_runRecentExecutedBuild", makeCallbackF( Build_runRecentExecutedBuild ), QKeySequence( "F5" ) );
-	if( g_Layout_expiramentalFeatures.m_value ){
+	if( g_Layout_experimentalFeatures.m_value ){
 		GlobalCommands_insert( "Build_runRecentExecutedBuildCtrlP", makeCallbackF( Build_runRecentExecutedBuild ), QKeySequence( "Ctrl+P" ) );
 		GlobalCommands_insert( "Build_runRecentExecutedBuildCtrlR", makeCallbackF( Build_runRecentExecutedBuild ), QKeySequence( "Ctrl+R" ) );
 	}

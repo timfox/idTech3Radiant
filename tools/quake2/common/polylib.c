@@ -566,7 +566,7 @@ void CheckWinding( winding_t *w ){
 
 		for ( j = 0 ; j < 3 ; j++ )
 			if ( p1[j] > BOGUS_RANGE || p1[j] < -BOGUS_RANGE ) {
-				Error( "CheckFace: BUGUS_RANGE: %f",p1[j] );
+				Error( "CheckFace: BOGUS_RANGE: %f", p1[j] );
 			}
 
 		j = i + 1 == w->numpoints ? 0 : i + 1;

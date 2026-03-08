@@ -925,7 +925,7 @@ private:
 
 	Winding m_winding;
 	Vector3 m_centroid;
-	Vector3 m_centroid_cached; //this is far not pretty hack! (invariant point for texlock in AP)
+	Vector3 m_centroid_cached; // invariant point for texlock in axial projection
 	bool m_filtered;
 
 	FaceObserver* m_observer;
@@ -2462,7 +2462,9 @@ private:
 	}
 
 	/// \brief Returns true if the brush is a finite volume. A brush without a finite volume extends past the maximum world bounds and is not valid.
-	bool isBounded(){ // fixme: should return false for 0 faces?
+	bool isBounded(){
+		if ( m_faces.empty() )
+			return false;
 		for ( const auto& face : *this )
 		{
 			if ( !face->is_bounded() ) {

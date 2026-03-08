@@ -800,7 +800,7 @@ void Entity_Construct(){
 	if ( game_has_killConnect() )
 		GlobalCommands_insert( "EntitiesKillConnect", makeCallbackF( Entity_killconnectSelected ), QKeySequence( "Shift+K" ) );
 	GlobalCommands_insert( "EntityMovePrimitivesToLast", makeCallbackF( Entity_moveSelectedPrimitivesToLast ), QKeySequence( "P" ) );
-	if( Layout_expiramentalFeaturesEnabled() ){
+	if( Layout_experimentalFeaturesEnabled() ){
 		GlobalCommands_insert( "EntityMovePrimitivesToLastModern", makeCallbackF( Entity_moveSelectedPrimitivesToLast ), QKeySequence( "Ctrl+G" ) );
 	}
 	GlobalCommands_insert( "EntityMovePrimitivesToFirst", makeCallbackF( Entity_moveSelectedPrimitivesToFirst ) );
