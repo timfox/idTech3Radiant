@@ -94,6 +94,12 @@ void QE_InitVFS(){
 		StringOutputStream toolsBase( 256 );
 		toolsBase( AppPath_get(), basegame, '/' );
 		paths_push( toolsBase.c_str() );
+		// Quake3-derived games (OpenArena, etc.) use baseoa etc.; tools live in baseq3
+		if ( !string_equal( basegame, "baseq3" ) ) {
+			StringOutputStream toolsBaseQ3( 256 );
+			toolsBaseQ3( AppPath_get(), "baseq3", '/' );
+			paths_push( toolsBaseQ3.c_str() );
+		}
 	}
 
 	StringOutputStream str( 256 );

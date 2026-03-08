@@ -134,15 +134,23 @@ Format choice:
 6. HDR and EXR Skybox Images
 ================================================================================
 
-id Tech 3 does not natively support HDR (.hdr) or EXR (.exr) textures. To use
-HDR/EXR skyboxes you must convert them to a supported format.
+Engine support varies. Stock id Tech 3 does not natively support HDR (.hdr) or
+EXR (.exr) textures. Many engines (e.g. ioq3 forks, custom engines) do support
+HDR/EXR skyboxes directly—check your engine's documentation.
 
-Workflow for HDR/EXR skyboxes:
+For engines WITH HDR/EXR support:
+  - Use .hdr or .exr directly in the shader; skyParms path and syntax follow
+    your engine's conventions.
+  - Split equirectangular/lat-long panoramas into six cube faces if required.
+  - Name faces with skyParms suffixes: base_ft, base_bk, base_lf, base_rt,
+    base_up, base_dn
+
+For engines WITHOUT HDR/EXR support (convert to LDR):
 
   1) Obtain or create HDR/EXR environment maps (e.g. from polyhaven.com,
      sIBL Archive, or render from Blender).
 
-  2) Convert to LDR (low dynamic range) for standard engines:
+  2) Convert to LDR (low dynamic range):
      - Use Blender, GIMP, ImageMagick, or a script to tone-map and export
        as TGA, PNG, or JPG.
      - For Blender: Render or load HDR, then Image > Save As > PNG/TGA.
@@ -159,12 +167,6 @@ Workflow for HDR/EXR skyboxes:
 
   5) Place in your textures folder (e.g. textures/skies/...) and reference
      the base path in skyParms.
-
-For engines with HDR/EXR support (e.g. some ioq3 forks or custom engines):
-  - Check your engine's documentation for supported formats.
-  - If the engine supports HDR cube maps, you may use .hdr or .exr directly
-    in the shader; the shader syntax and skyParms path would follow the
-    engine's conventions.
 
 ================================================================================
 7. Skybox Layout Conventions
@@ -245,7 +247,7 @@ Set _foghull on worldspawn to the shader name (without "textures/").
     TGA, JPG, PNG
 
   HDR/EXR:
-    Convert to TGA/PNG/JPG before use in id Tech 3.
+    Use directly if engine supports; otherwise convert to TGA/PNG/JPG.
 
   _skybox entity:
     classname _skybox
