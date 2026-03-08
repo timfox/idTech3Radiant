@@ -451,6 +451,7 @@ binaries-radiant-modules: \
 binaries-radiant-plugins: \
 	$(INSTALLDIR)/plugins/bobtoolz.$(DLL) \
 	$(INSTALLDIR)/plugins/brushexport.$(DLL) \
+	$(INSTALLDIR)/plugins/flameplug.$(DLL) \
 	$(INSTALLDIR)/plugins/prtview.$(DLL) \
 	$(INSTALLDIR)/plugins/shaderplug.$(DLL) \
 	$(INSTALLDIR)/plugins/sunplug.$(DLL) \
@@ -1249,6 +1250,11 @@ $(INSTALLDIR)/plugins/sunplug.$(DLL): LIBS_EXTRA := $(LIBS_GLIB) $(LIBS_QTWIDGET
 $(INSTALLDIR)/plugins/sunplug.$(DLL): CPPFLAGS_EXTRA := $(CPPFLAGS_GLIB) $(CPPFLAGS_QTWIDGETS) -Ilibs -Iinclude
 $(INSTALLDIR)/plugins/sunplug.$(DLL): \
 	contrib/sunplug/sunplug.o \
+
+$(INSTALLDIR)/plugins/flameplug.$(DLL): LIBS_EXTRA := $(LIBS_QTWIDGETS)
+$(INSTALLDIR)/plugins/flameplug.$(DLL): CPPFLAGS_EXTRA := $(CPPFLAGS_QTWIDGETS) -Ilibs -Iinclude
+$(INSTALLDIR)/plugins/flameplug.$(DLL): \
+	contrib/flameplug/flameplug.o \
 
 $(INSTALLDIR)/qdata3.$(EXE): LIBS_EXTRA := $(LIBS_XML)
 $(INSTALLDIR)/qdata3.$(EXE): CPPFLAGS_EXTRA := $(CPPFLAGS_XML) -Itools/quake2/common -Ilibs -Iinclude -Wno-format-overflow

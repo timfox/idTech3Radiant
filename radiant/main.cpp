@@ -234,7 +234,7 @@ void paths_init(){
 
 	Q_mkdir( home );
 
-	g_strSettingsPath = StringStream( home, "1." RADIANT_MAJOR_VERSION "." RADIANT_MINOR_VERSION "/" );
+	g_strSettingsPath = StringStream( home, "editor/" );
 
 	Q_mkdir( g_strSettingsPath.c_str() );
 

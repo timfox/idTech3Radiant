@@ -1,0 +1,6 @@
+; flameplug.def : Declares the module parameters for the DLL.
+
+LIBRARY      "FLAMEPLUG"
+
+EXPORTS
+	Radiant_RegisterModules @1
