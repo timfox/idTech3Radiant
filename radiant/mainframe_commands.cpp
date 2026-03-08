@@ -40,6 +40,7 @@ void MainFrame_registerCommands(){
 	GlobalCommands_insert( "AddInfoPlayerStart", makeCallbackF( Add_createInfoPlayerStart ) );
 	GlobalCommands_insert( "AddInfoPlayerDeathmatch", makeCallbackF( Add_createInfoPlayerDeathmatch ) );
 	GlobalCommands_insert( "AddMiscModel", makeCallbackF( Add_createMiscModel ) );
+	GlobalCommands_insert( "AddSpline", makeCallbackF( Add_createSpline ) );
 	GlobalCommands_insert( "LayoutRegular", makeCallbackF( Layout_setRegular ) );
 	GlobalCommands_insert( "LayoutRegularLeft", makeCallbackF( Layout_setRegularLeft ) );
 	GlobalCommands_insert( "LayoutHammerFourPane", makeCallbackF( Layout_setHammerFourPane ) );

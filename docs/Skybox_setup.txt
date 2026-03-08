@@ -6,7 +6,22 @@ This document explains how to change the skybox in id Tech 3 maps, the different
 skybox types, and supported image formats (including HDR/EXR workflows).
 
 ================================================================================
-1. Skybox Types
+1. Default Skybox Material
+================================================================================
+
+The editor ships with a default skybox shader:
+
+  textures/common/toolsskybox
+
+Apply this shader to brush faces that form the sky boundary. It is always
+available when using Quake 3 / baseq3, regardless of game installation.
+
+To use your own sky images, create six files in your mod:
+  textures/common/toolsskybox_ft, _bk, _lf, _rt, _up, _dn
+(TGA, JPG, or PNG). The default shader will then use them.
+
+================================================================================
+2. Skybox Types
 ================================================================================
 
 There are two main skybox approaches in id Tech 3 / Q3Map2:
@@ -22,7 +37,7 @@ There are two main skybox approaches in id Tech 3 / Q3Map2:
      - Supports scale and rotation via entity keys
 
 ================================================================================
-2. Changing the Skybox via Shaders (skyParms)
+3. Changing the Skybox via Shaders (skyParms)
 ================================================================================
 
 To change the skybox, edit or create a shader that uses skyParms:
@@ -67,7 +82,7 @@ Apply this shader to brush faces that form the sky boundary (e.g. a large
 hollow box or dome around the playable area).
 
 ================================================================================
-3. Portal Sky (_skybox Entity)
+4. Portal Sky (_skybox Entity)
 ================================================================================
 
 For games without native portal sky support, Q3Map2 can generate sky surfaces
@@ -89,7 +104,7 @@ through portals will use the sky shader. The skyParms images from the shader
 applied to those faces are used for the skybox.
 
 ================================================================================
-4. Supported Image Formats
+5. Supported Image Formats
 ================================================================================
 
 Q3Map2 (compiler) supports these formats for skybox images:
@@ -116,7 +131,7 @@ Format choice:
   - Use PNG for lossless with alpha (Q3Map2 supports it)
 
 ================================================================================
-5. HDR and EXR Skybox Images
+6. HDR and EXR Skybox Images
 ================================================================================
 
 id Tech 3 does not natively support HDR (.hdr) or EXR (.exr) textures. To use
@@ -152,7 +167,7 @@ For engines with HDR/EXR support (e.g. some ioq3 forks or custom engines):
     engine's conventions.
 
 ================================================================================
-6. Skybox Layout Conventions
+7. Skybox Layout Conventions
 ================================================================================
 
 Cube map orientation (Quake 3 convention):
@@ -186,7 +201,7 @@ sky light color. Set q3map_lightImage to use a different image.
   - 0: use shader color (q3map_lightRGB / q3map_lightImage)
 
 ================================================================================
-7a. HDR Skybox for IBL (MapBake3)
+8a. HDR Skybox for IBL (MapBake3)
 ================================================================================
 
 MapBake3 supports true HDR/EXR equirectangular panoramas for Image-Based
@@ -208,7 +223,7 @@ Command-line override (takes precedence):
   -skylightmode panorama -skylightpanorama <path>
 
 ================================================================================
-8. Foghull Skybox
+9. Foghull Skybox
 ================================================================================
 
 For foghull (distance culling with fog), use a skybox shader whose images
@@ -216,7 +231,7 @@ match the fog color. Typically six small (e.g. 8x8) identical images.
 Set _foghull on worldspawn to the shader name (without "textures/").
 
 ================================================================================
-9. Quick Reference
+10. Quick Reference
 ================================================================================
 
   Shader:

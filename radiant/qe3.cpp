@@ -89,6 +89,13 @@ void QE_InitVFS(){
 	for( const auto& path : ExtraResourcePaths_get() )
 		paths_push( path.c_str() );
 
+	// Tools default content (e.g. textures/common/toolsskybox) - searched first so game content overrides
+	{
+		StringOutputStream toolsBase( 256 );
+		toolsBase( AppPath_get(), basegame, '/' );
+		paths_push( toolsBase.c_str() );
+	}
+
 	StringOutputStream str( 256 );
 	// ~/.<gameprefix>/<fs_game>
 	paths_push( str( userRoot, gamename, '/' ) ); // userGamePath

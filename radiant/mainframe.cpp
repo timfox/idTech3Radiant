@@ -1735,9 +1735,6 @@ void create_edit_menu( QMenuBar *menubar ){
 	menu->addSeparator();
 	create_menu_item_with_mnemonic( menu, "&Duplicate", "CloneSelection" );
 	create_menu_item_with_mnemonic( menu, "Duplicate, make uni&que", "CloneSelectionAndMakeUnique" );
-	if( Layout_expiramentalFeaturesEnabled() ){
-		create_menu_item_with_mnemonic( menu, "Spline &Array", "SplineArray" );
-	}
 	create_menu_item_with_mnemonic( menu, "D&elete", "DeleteSelection" );
 	//create_menu_item_with_mnemonic( menu, "Pa&rent", "ParentSelection" );
 	menu->addSeparator();
@@ -1787,6 +1784,10 @@ void Add_createInfoPlayerStart(){
 
 void Add_createInfoPlayerDeathmatch(){
 	Add_createEntity( "info_player_deathmatch" );
+}
+
+void Add_createSpline(){
+	Add_createEntity( "misc_spline" );
 }
 
 void Add_createMiscModel(){
@@ -2569,6 +2570,16 @@ void create_patch_menu( QMenuBar *menubar ){
 	Patch_constructMenu( menu );
 }
 
+void create_splines_menu( QMenuBar *menubar ){
+	QMenu *menu = menubar->addMenu( "Spli&nes" );
+
+	menu->setTearOffEnabled( g_Layout_enableDetachableMenus.m_value );
+
+	create_menu_item_with_mnemonic( menu, "&Add Spline", "AddSpline" );
+	menu->addSeparator();
+	create_menu_item_with_mnemonic( menu, "Spline &Array", "SplineArray" );
+}
+
 void create_tools_menu( QMenuBar *menubar ){
 	QMenu *menu = menubar->addMenu( "&Tools" );
 
@@ -2629,6 +2640,8 @@ void create_main_menu( QMenuBar *menubar, MainFrame::EViewStyle style ){
 	create_brush_menu( menubar );
 	if ( !string_equal( g_pGameDescription->getKeyValue( "no_patch" ), "1" ) )
 		create_patch_menu( menubar );
+	if ( Layout_expiramentalFeaturesEnabled() )
+		create_splines_menu( menubar );
 	create_tools_menu( menubar );
 	create_plugins_menu( menubar );
 	create_layout_menu( menubar, style );

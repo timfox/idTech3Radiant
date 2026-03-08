@@ -292,6 +292,7 @@ void Add_openEntityDialog();
 void Add_createLight();
 void Add_createInfoPlayerStart();
 void Add_createInfoPlayerDeathmatch();
+void Add_createSpline();
 void Add_createMiscModel();
 void Layout_setRegular();
 void Layout_setRegularLeft();
