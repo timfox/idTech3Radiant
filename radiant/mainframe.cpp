@@ -1735,6 +1735,9 @@ void create_edit_menu( QMenuBar *menubar ){
 	menu->addSeparator();
 	create_menu_item_with_mnemonic( menu, "&Duplicate", "CloneSelection" );
 	create_menu_item_with_mnemonic( menu, "Duplicate, make uni&que", "CloneSelectionAndMakeUnique" );
+	if( Layout_expiramentalFeaturesEnabled() ){
+		create_menu_item_with_mnemonic( menu, "Spline &Array", "SplineArray" );
+	}
 	create_menu_item_with_mnemonic( menu, "D&elete", "DeleteSelection" );
 	//create_menu_item_with_mnemonic( menu, "Pa&rent", "ParentSelection" );
 	menu->addSeparator();

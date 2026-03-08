@@ -82,6 +82,41 @@ inline Vector3 CubicBezier_evaluateMid( const Vector3* firstPoint ){
 	     + vector3_scaled( firstPoint[3], 0.125 );
 }
 
+/// First derivative (tangent) of cubic Bezier at t: B'(t) = 3(1-t)^2(P1-P0) + 6(1-t)t(P2-P1) + 3t^2(P3-P2)
+inline Vector3 CubicBezier_derivative( const Vector3* firstPoint, double t ){
+	const double u = 1.0 - t;
+	const Vector3 d0 = firstPoint[1] - firstPoint[0];
+	const Vector3 d1 = firstPoint[2] - firstPoint[1];
+	const Vector3 d2 = firstPoint[3] - firstPoint[2];
+	return vector3_scaled( d0, 3.0 * u * u )
+	     + vector3_scaled( d1, 6.0 * u * t )
+	     + vector3_scaled( d2, 3.0 * t * t );
+}
+
+/// Bezier chain: points [P0,P1,P2,P3,P4,P5,P6,...] with segments (P0,P1,P2,P3), (P3,P4,P5,P6), ...
+/// t in [0,1] maps to full chain. Requires at least 4 points.
+inline Vector3 BezierChain_evaluate( const ControlPoints& points, double t ){
+	if ( points.size() < 4 ) return points.empty() ? Vector3( 0, 0, 0 ) : points[0];
+	const std::size_t numSegments = ( points.size() - 1 ) / 3;
+	t = std::max( 0.0, std::min( 1.0, t ) ) * numSegments;
+	std::size_t seg = static_cast<std::size_t>( t );
+	double localT = t - seg;
+	if ( seg >= numSegments ) { seg = numSegments - 1; localT = 1.0; }
+	const Vector3* p = &points[seg * 3];
+	return CubicBezier_evaluate( p, localT );
+}
+
+inline Vector3 BezierChain_derivative( const ControlPoints& points, double t ){
+	if ( points.size() < 4 ) return Vector3( 0, 0, 0 );
+	const std::size_t numSegments = ( points.size() - 1 ) / 3;
+	t = std::max( 0.0, std::min( 1.0, t ) ) * numSegments;
+	std::size_t seg = static_cast<std::size_t>( t );
+	double localT = t - seg;
+	if ( seg >= numSegments ) { seg = numSegments - 1; localT = 1.0; }
+	const Vector3* p = &points[seg * 3];
+	return CubicBezier_derivative( p, localT );
+}
+
 inline Vector3 CatmullRom_evaluate( const ControlPoints& controlPoints, double t ){
 	// scale t to be segment-relative
 	t *= double( controlPoints.size() - 1 );
@@ -109,6 +144,29 @@ inline Vector3 CatmullRom_evaluate( const ControlPoints& controlPoints, double t
 	                  : controlPoints[segment + 1] + vector3_scaled( controlPoints[segment] - controlPoints[segment + 1], reciprocal_alpha );
 	bezierPoints[3] = controlPoints[segment + 1];
 	return CubicBezier_evaluate( bezierPoints, t );
+}
+
+inline Vector3 CatmullRom_derivative( const ControlPoints& controlPoints, double t ){
+	if ( controlPoints.size() < 2 ) return Vector3( 0, 0, 0 );
+	const double scale = double( controlPoints.size() - 1 );
+	t *= scale;
+	std::size_t segment = 0;
+	for ( std::size_t i = 0; i < controlPoints.size() - 1; ++i )
+	{
+		if ( t <= double( i + 1 ) ) { segment = i; break; }
+	}
+	t -= segment;
+	const double reciprocal_alpha = 1.0 / 3.0;
+	Vector3 bezierPoints[4];
+	bezierPoints[0] = controlPoints[segment];
+	bezierPoints[1] = ( segment > 0 )
+	                  ? controlPoints[segment] + vector3_scaled( controlPoints[segment + 1] - controlPoints[segment - 1], reciprocal_alpha * 0.5 )
+	                  : controlPoints[segment] + vector3_scaled( controlPoints[segment + 1] - controlPoints[segment], reciprocal_alpha );
+	bezierPoints[2] = ( segment < controlPoints.size() - 2 )
+	                  ? controlPoints[segment + 1] + vector3_scaled( controlPoints[segment] - controlPoints[segment + 2], reciprocal_alpha * 0.5 )
+	                  : controlPoints[segment + 1] + vector3_scaled( controlPoints[segment] - controlPoints[segment + 1], reciprocal_alpha );
+	bezierPoints[3] = controlPoints[segment + 1];
+	return vector3_scaled( CubicBezier_derivative( bezierPoints, t ), scale );
 }
 
 typedef Array<float> Knots;

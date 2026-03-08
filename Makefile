@@ -1001,6 +1001,7 @@ $(INSTALLDIR)/radiant.$(EXE): \
 	radiant/selection_mtor_translate.o \
 	radiant/selection_mtor_uv.o \
 	radiant/select.o \
+	radiant/splinearray.o \
 	radiant/server.o \
 	radiant/sockets.o \
 	radiant/stacktrace.o \
@@ -1112,6 +1113,7 @@ $(INSTALLDIR)/modules/entity.$(DLL): \
 	plugins/entity/rotation.o \
 	plugins/entity/scale.o \
 	plugins/entity/skincache.o \
+	plugins/entity/spline.o \
 	plugins/entity/targetable.o \
 
 $(INSTALLDIR)/modules/image.$(DLL): LIBS_EXTRA := $(LIBS_JPEG) $(LIBS_ZLIB)

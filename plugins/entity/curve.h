@@ -407,3 +407,74 @@ public:
 
 const char* const curve_Nurbs = "curve_Nurbs";
 const char* const curve_CatmullRomSpline = "curve_CatmullRomSpline";
+const char* const curve_Bezier = "curve_Bezier";
+
+/// Bezier chain: [P0,P1,P2,P3,P4,P5,P6,...] segments (P0,P1,P2,P3), (P3,P4,P5,P6), ...
+class BezierChainSpline
+{
+	Signal0 m_curveChanged;
+	Callback<void()> m_boundsChanged;
+public:
+	ControlPoints m_controlPoints;
+	ControlPoints m_controlPointsTransformed;
+	RenderableCurve m_renderCurve;
+	AABB m_bounds;
+
+	BezierChainSpline( const Callback<void()>& boundsChanged ) : m_boundsChanged( boundsChanged ){
+	}
+
+	SignalHandlerId connect( const SignalHandler& curveChanged ){
+		curveChanged();
+		return m_curveChanged.connectLast( curveChanged );
+	}
+	void disconnect( SignalHandlerId id ){
+		m_curveChanged.disconnect( id );
+	}
+	void notify(){
+		m_curveChanged();
+	}
+
+	void tesselate(){
+		if ( m_controlPointsTransformed.size() >= 4 ) {
+			const std::size_t numSegments = ( m_controlPointsTransformed.size() - 1 ) / 3;
+			const std::size_t tess = numSegments * 16;
+			m_renderCurve.m_vertices.resize( tess + 1 );
+			m_renderCurve.m_vertices[0].vertex = vertex3f_for_vector3( m_controlPointsTransformed[0] );
+			for ( std::size_t i = 1; i < tess; ++i )
+			{
+				m_renderCurve.m_vertices[i].vertex = vertex3f_for_vector3( BezierChain_evaluate( m_controlPointsTransformed, ( 1.0 / double( tess ) ) * double( i ) ) );
+			}
+			m_renderCurve.m_vertices[tess].vertex = vertex3f_for_vector3( m_controlPointsTransformed[m_controlPointsTransformed.size() - 1] );
+		}
+		else
+		{
+			m_renderCurve.m_vertices.clear();
+		}
+	}
+
+	bool parseCurve( const char* value ){
+		return ControlPoints_parse( m_controlPoints, value );
+	}
+
+	void curveChanged(){
+		tesselate();
+
+		m_bounds = AABB();
+		for ( const auto& control : m_controlPointsTransformed )
+		{
+			aabb_extend_by_point_safe( m_bounds, control );
+		}
+
+		m_boundsChanged();
+		notify();
+	}
+
+	void curveChanged( const char* value ){
+		if ( string_empty( value ) || !parseCurve( value ) ) {
+			m_controlPoints.resize( 0 );
+		}
+		m_controlPointsTransformed = m_controlPoints;
+		curveChanged();
+	}
+	typedef MemberCaller<BezierChainSpline, void(const char*), &BezierChainSpline::curveChanged> CurveChangedCaller;
+};

@@ -4,6 +4,19 @@
  * These entities support advanced physics, dynamic encounters, and environmental effects.
  */
 
+/*QUAKED misc_spline (0.5 0.8 0.5) (-8 -8 -8) (8 8 8)
+Spline path for array placement, trains, or scripting. Editor-only helper; curves are stored in keys.
+-------- KEYS --------
+"targetname" : name for targeting
+"origin" : position
+"angle" : yaw (degrees)
+"curve_Bezier" : Bezier chain control points - format "N ( x y z ... )" with 4 points per segment (P0,P1,P2,P3),(P3,P4,P5,P6),...
+"curve_CatmullRomSpline" : Catmull-Rom control points - format "N ( x y z ... )" through-points
+-------- NOTES --------
+Use curve_Bezier for explicit handle control. Use curve_CatmullRomSpline for smooth through-points.
+Enter Vertex mode (V) to edit control points. Array placement: select spline + objects, then Spline Array.
+*/
+
 /*QUAKED env_fire_emitter (0.9 0.3 0) (-8 -8 -8) (8 8 8) START_ACTIVE SPREAD_ENABLED
 Dynamic fire system. Fire can spread to nearby objects based on temperature and distance.
 -------- KEYS --------

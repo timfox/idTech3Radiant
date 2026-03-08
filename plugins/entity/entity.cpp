@@ -43,6 +43,7 @@
 #include "eclassmodel.h"
 #include "generic.h"
 #include "doom3group.h"
+#include "spline.h"
 
 #include "namedentity.h"
 
@@ -57,6 +58,9 @@ inline scene::Node& entity_for_eclass( EntityClass* eclass ){
 	else if ( classname_equal( eclass->name(), "light" )
 	       || classname_equal( eclass->name(), "lightJunior" ) ) {
 		return New_Light( eclass );
+	}
+	else if ( classname_equal( eclass->name(), "misc_spline" ) ) {
+		return New_SplineEntity( eclass );
 	}
 	if ( !eclass->fixedsize ) {
 		if ( g_gameType == eGameTypeDoom3 ) {

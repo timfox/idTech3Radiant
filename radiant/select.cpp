@@ -52,6 +52,7 @@
 #include "grid.h"
 #include "map.h"
 #include "csg.h"
+#include "splinearray.h"
 
 
 
@@ -2012,6 +2013,7 @@ void Select_registerCommands(){
 	GlobalCommands_insert( "CloneSelection", makeCallbackF( Selection_Clone ), QKeySequence( "Ctrl+D" ) );
 	if( Layout_expiramentalFeaturesEnabled() ){
 		GlobalCommands_insert( "CloneSelectionModern", makeCallbackF( Selection_Clone ) );
+		GlobalCommands_insert( "SplineArray", makeCallbackF( SplineArray_Selected ) );
 	}
 	GlobalCommands_insert( "CloneSelectionAndMakeUnique", makeCallbackF( Selection_Clone_MakeUnique ), QKeySequence( "Shift+D" ) );
 	GlobalCommands_insert( "DeleteSelection3", makeCallbackF( deleteSelection ), QKeySequence( "Delete" ) );
