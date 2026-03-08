@@ -31,6 +31,7 @@ void TextureBrowser_destroyWindow();
 
 
 const char* TextureBrowser_GetSelectedShader();
+void TextureBrowser_SetSelectedShader( const char* shader );
 
 /// Show the texture browser directory containing the given shader and focus on it.
 void TextureBrowser_ShowDirectoryOfShader( const char* shader );

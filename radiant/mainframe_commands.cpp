@@ -89,7 +89,9 @@ void MainFrame_registerCommands(){
 	GlobalCommands_insert( "ToggleExperimentalAssets", makeCallbackF( Experimental_toggleAssetsDock ) );
 	GlobalCommands_insert( "ToggleExperimentalHistory", makeCallbackF( Experimental_toggleHistoryDock ) );
 	GlobalCommands_insert( "ToggleExperimentalUSD", makeCallbackF( Experimental_toggleUSDDock ) );
+	GlobalCommands_insert( "ToggleExperimentalECS", makeCallbackF( Experimental_toggleECSDock ) );
 	GlobalCommands_insert( "ImportUSDStructure", makeCallbackF( Experimental_importUSDStructure ) );
+	GlobalCommands_insert( "ExportToUSDA", makeCallbackF( Experimental_exportToUSDA ) );
 
 	Select_registerCommands();
 	Layers_registerCommands();

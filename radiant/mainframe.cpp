@@ -96,6 +96,7 @@
 #include <QOpenGLFunctions>
 #include <QList>
 #include <QVector>
+#include <QComboBox>
 
 #include <algorithm>
 #include <limits>
@@ -1136,6 +1137,8 @@ bool Layout_experimentalFeaturesEnabled(){
 	return g_Layout_experimentalFeatures.m_value;
 }
 
+Vector3 Add_entitySpawnOrigin();
+
 namespace
 {
 QDockWidget* g_exp_propertiesDock{};
@@ -1143,10 +1146,18 @@ QDockWidget* g_exp_previewDock{};
 QDockWidget* g_exp_assetsDock{};
 QDockWidget* g_exp_historyDock{};
 QDockWidget* g_exp_usdDock{};
+QDockWidget* g_exp_ecsDock{};
+QComboBox* g_exp_ecsCategoryCombo{};
+QListWidget* g_exp_ecsEntityList{};
 QLabel* g_exp_selectedCountLabel{};
 QLabel* g_exp_selectedComponentsLabel{};
 QLineEdit* g_exp_shaderEdit{};
 QLineEdit* g_exp_skyboxHDREdit{};
+QLineEdit* g_exp_pbrAlbedo{};
+QLineEdit* g_exp_pbrNormal{};
+QDoubleSpinBox* g_exp_pbrRoughness{};
+QDoubleSpinBox* g_exp_pbrMetallic{};
+QLineEdit* g_exp_pbrAO{};
 QDoubleSpinBox* g_exp_locX{};
 QDoubleSpinBox* g_exp_locY{};
 QDoubleSpinBox* g_exp_locZ{};
@@ -1380,6 +1391,73 @@ void Experimental_toggleUSDDock_impl(){
 	Experimental_toggleDock( g_exp_usdDock );
 }
 
+void Experimental_toggleECSDock_impl(){
+	Experimental_toggleDock( g_exp_ecsDock );
+}
+
+static bool ECS_isAdvancedEntity( const char* name ){
+	return string_equal_prefix_nocase( name, "env_" )
+	    || string_equal_prefix_nocase( name, "prop_" )
+	    || string_equal_prefix_nocase( name, "trigger_gravity" )
+	    || string_equal_prefix_nocase( name, "env_spawn" )
+	    || string_equal_prefix_nocase( name, "trigger_level_stream" )
+	    || string_equal_prefix_nocase( name, "info_vehicle" )
+	    || string_equal_prefix_nocase( name, "func_vehicle" )
+	    || string_equal_nocase( name, "misc_spline" );
+}
+
+static const char* ECS_categoryForEntity( const char* name ){
+	if ( string_equal_prefix_nocase( name, "env_fire" ) || string_equal_prefix_nocase( name, "env_water" ) || string_equal_prefix_nocase( name, "env_spill" ) )
+		return "Fire & Environment";
+	if ( string_equal_prefix_nocase( name, "env_fan" ) )
+		return "Wind & Physics";
+	if ( string_equal_prefix_nocase( name, "prop_" ) )
+		return "Props & Physics";
+	if ( string_equal_prefix_nocase( name, "trigger_gravity" ) )
+		return "Gravity & Space";
+	if ( string_equal_prefix_nocase( name, "env_spawn" ) )
+		return "Spawn & Streaming";
+	if ( string_equal_prefix_nocase( name, "trigger_level" ) )
+		return "Level Streaming";
+	if ( string_equal_prefix_nocase( name, "info_vehicle" ) || string_equal_prefix_nocase( name, "func_vehicle" ) )
+		return "Vehicles";
+	if ( string_equal_nocase( name, "misc_spline" ) )
+		return "Splines";
+	return "Other";
+}
+
+static void Experimental_refreshECSList(){
+	if ( g_exp_ecsEntityList == nullptr || g_exp_ecsCategoryCombo == nullptr ) {
+		return;
+	}
+	const QString cat = g_exp_ecsCategoryCombo->currentText();
+	g_exp_ecsEntityList->clear();
+
+	class ECSCollector final : public EntityClassVisitor
+	{
+		QListWidget* m_list;
+		QString m_cat;
+	public:
+		ECSCollector( QListWidget* list, const QString& cat ) : m_list( list ), m_cat( cat ){}
+		void visit( EntityClass* eclass ) override {
+			if ( !ECS_isAdvancedEntity( eclass->name() ) ) {
+				return;
+			}
+			if ( !m_cat.isEmpty() && m_cat != "All" && QString( ECS_categoryForEntity( eclass->name() ) ) != m_cat ) {
+				return;
+			}
+			m_list->addItem( eclass->name() );
+		}
+	} collector( g_exp_ecsEntityList, cat );
+	GlobalEntityClassManager().forEach( collector );
+	g_exp_ecsEntityList->sortItems();
+}
+
+static void Experimental_ecsAddEntity( const char* classname ){
+	Entity_createFromSelection( classname, Add_entitySpawnOrigin() );
+	SceneChangeNotify();
+}
+
 void Experimental_importUSDStructure_impl(){
 	if ( !g_Layout_experimentalFeatures.m_value || g_exp_usdTree == nullptr ) {
 		return;
@@ -1437,6 +1515,98 @@ void Experimental_importUSDStructure_impl(){
 	}
 }
 
+static QString usdSanitizeName( const char* name ){
+	QString s;
+	for ( const char* p = name; *p; ++p ) {
+		if ( ( *p >= 'a' && *p <= 'z' ) || ( *p >= 'A' && *p <= 'Z' ) || ( *p >= '0' && *p <= '9' ) || *p == '_' ) {
+			s += *p;
+		}
+		else if ( *p == ' ' || *p == '-' ) {
+			s += '_';
+		}
+	}
+	return s.isEmpty() ? "unnamed" : s;
+}
+
+void Experimental_exportToUSDA_impl(){
+	if ( !g_Layout_experimentalFeatures.m_value || !Map_Valid( g_map ) ) {
+		return;
+	}
+
+	const auto filename = QFileDialog::getSaveFileName( MainFrame_getWindow(), "Export to USDA", "", "USDA Files (*.usda)" );
+	if ( filename.isEmpty() ) {
+		return;
+	}
+
+	QFile file( filename );
+	if ( !file.open( QIODevice::WriteOnly | QIODevice::Text ) ) {
+		globalErrorStream() << "failed to open USDA file for write: " << filename.toLatin1().constData() << '\n';
+		return;
+	}
+
+	QTextStream out( &file );
+	out << "#usda 1.0\n";
+	out << "(\n";
+	out << "    doc = \"Exported from Radiant map\"\n";
+	out << ")\n\n";
+
+	class USDAExportWalker final : public scene::Traversable::Walker
+	{
+		QTextStream& m_out;
+		mutable QList<QString> m_stack;
+		mutable int m_entityIndex{};
+	public:
+		explicit USDAExportWalker( QTextStream& out ) : m_out( out ){}
+		bool pre( scene::Node& node ) const override {
+			Entity* entity = Node_getEntity( node );
+			if ( entity != nullptr ) {
+				const char* classname = entity->getClassName();
+				const bool isWorld = string_equal( classname, "worldspawn" );
+				QString primName = isWorld ? "World" : ( usdSanitizeName( classname ) + "_" + QString::number( m_entityIndex++ ) );
+				QString indent( m_stack.size() * 4, ' ' );
+				m_out << indent << "def Xform \"" << primName << "\" (\n";
+				m_out << indent << "    custom string classname = \"" << QString( classname ).replace( '"', "\\\"" ) << "\"\n";
+				const char* origin = entity->getKeyValue( "origin" );
+				if ( origin != nullptr && !string_empty( origin ) ) {
+					m_out << indent << "    custom string origin = \"" << QString( origin ).replace( '"', "\\\"" ) << "\"\n";
+				}
+				class KeyValueVisitor final : public Entity::Visitor
+				{
+					QTextStream& m_out;
+					QString m_indent;
+				public:
+					KeyValueVisitor( QTextStream& o, const QString& ind ) : m_out( o ), m_indent( ind ){}
+					void visit( const char* key, const char* value ) override {
+						if ( string_equal( key, "classname" ) || string_equal( key, "origin" ) ) return;
+						if ( string_empty( value ) ) return;
+						m_out << m_indent << "    custom string " << usdSanitizeName( key ).toLatin1().constData() << " = \"" << QString( value ).replace( '"', "\\\"" ) << "\"\n";
+					}
+				} kvVisitor( m_out, indent );
+				entity->forEachKeyValue( kvVisitor );
+				m_out << indent << ")\n";
+				m_out << indent << "{\n";
+				m_stack.push_back( indent );
+				return true;
+			}
+			return true;
+		}
+		void post( scene::Node& node ) const override {
+			Entity* entity = Node_getEntity( node );
+			if ( entity != nullptr && !m_stack.isEmpty() ) {
+				QString indent = m_stack.takeLast();
+				m_out << indent << "}\n";
+			}
+		}
+	} walker( out );
+
+	Map_Traverse( GlobalSceneGraph().root(), walker );
+
+	if ( g_exp_usdDock != nullptr ) {
+		g_exp_usdDock->show();
+	}
+	Sys_Status( "Exported map to USDA" );
+}
+
 void Experimental_createDocks( QMainWindow* window ){
 	if ( !g_Layout_experimentalFeatures.m_value || window == nullptr ) {
 		return;
@@ -1460,6 +1630,80 @@ void Experimental_createDocks( QMainWindow* window ){
 		form->addRow( "", applyButton );
 		QObject::connect( applyButton, &QPushButton::clicked, [](){ Experimental_applySelectedShader(); } );
 		vbox->addLayout( form );
+
+		auto* pbrGroup = new QGroupBox( "PBR Material", root );
+		auto* pbrForm = new QFormLayout( pbrGroup );
+		g_exp_pbrAlbedo = new QLineEdit( root );
+		g_exp_pbrAlbedo->setPlaceholderText( "textures/mymat (albedo/diffuse)" );
+		g_exp_pbrAlbedo->setClearButtonEnabled( true );
+		g_exp_pbrNormal = new QLineEdit( root );
+		g_exp_pbrNormal->setPlaceholderText( "textures/mymat_normals (optional)" );
+		g_exp_pbrNormal->setClearButtonEnabled( true );
+		g_exp_pbrRoughness = new QDoubleSpinBox( root );
+		g_exp_pbrRoughness->setRange( 0, 1 );
+		g_exp_pbrRoughness->setSingleStep( 0.05 );
+		g_exp_pbrRoughness->setValue( 0.5 );
+		g_exp_pbrRoughness->setDecimals( 2 );
+		g_exp_pbrMetallic = new QDoubleSpinBox( root );
+		g_exp_pbrMetallic->setRange( 0, 1 );
+		g_exp_pbrMetallic->setSingleStep( 0.05 );
+		g_exp_pbrMetallic->setValue( 0 );
+		g_exp_pbrMetallic->setDecimals( 2 );
+		g_exp_pbrAO = new QLineEdit( root );
+		g_exp_pbrAO->setPlaceholderText( "textures/mymat_ao (optional)" );
+		g_exp_pbrAO->setClearButtonEnabled( true );
+		pbrForm->addRow( "Albedo", g_exp_pbrAlbedo );
+		pbrForm->addRow( "Normal map", g_exp_pbrNormal );
+		pbrForm->addRow( "Roughness", g_exp_pbrRoughness );
+		pbrForm->addRow( "Metallic", g_exp_pbrMetallic );
+		pbrForm->addRow( "AO", g_exp_pbrAO );
+		auto* pbrApplyBtn = new QPushButton( "Apply PBR", root );
+		auto* pbrCopyBtn = new QPushButton( "Copy PBR Shader", root );
+		auto* pbrFromShaderBtn = new QPushButton( "Albedo from Shader", root );
+		pbrForm->addRow( "", pbrApplyBtn );
+		pbrForm->addRow( "", pbrCopyBtn );
+		pbrForm->addRow( "", pbrFromShaderBtn );
+		QObject::connect( pbrFromShaderBtn, &QPushButton::clicked, [](){
+			if ( g_exp_shaderEdit != nullptr && g_exp_pbrAlbedo != nullptr && !g_exp_shaderEdit->text().trimmed().isEmpty() ) {
+				g_exp_pbrAlbedo->setText( g_exp_shaderEdit->text().trimmed() );
+			}
+		} );
+		QObject::connect( pbrApplyBtn, &QPushButton::clicked, [](){
+			if ( g_exp_pbrAlbedo == nullptr || g_exp_pbrAlbedo->text().trimmed().isEmpty() ) return;
+			QString shader = g_exp_pbrAlbedo->text().trimmed();
+			if ( shader.contains( '.' ) ) {
+				shader = shader.left( shader.lastIndexOf( '.' ) );
+			}
+			if ( g_exp_shaderEdit != nullptr ) {
+				g_exp_shaderEdit->setText( shader );
+			}
+			Experimental_applySelectedShader();
+		} );
+		QObject::connect( pbrCopyBtn, &QPushButton::clicked, [](){
+			if ( g_exp_pbrAlbedo == nullptr || g_exp_pbrAlbedo->text().trimmed().isEmpty() ) return;
+			QString albedo = g_exp_pbrAlbedo->text().trimmed();
+			if ( albedo.contains( '.' ) ) {
+				albedo = albedo.left( albedo.lastIndexOf( '.' ) );
+			}
+			QString normal = g_exp_pbrNormal != nullptr ? g_exp_pbrNormal->text().trimmed() : QString();
+			double roughness = g_exp_pbrRoughness != nullptr ? g_exp_pbrRoughness->value() : 0.5;
+			double metallic = g_exp_pbrMetallic != nullptr ? g_exp_pbrMetallic->value() : 0;
+			QString ao = g_exp_pbrAO != nullptr ? g_exp_pbrAO->text().trimmed() : QString();
+			QString snippet;
+			QTextStream out( &snippet );
+			out << albedo << "\n{\n\tqer_editorImage " << albedo << "\n\tmap " << albedo << "\n";
+			if ( !normal.isEmpty() ) {
+				out << "\t// Normal map (Doom3: bumpmap " << normal << "; Q3: engine-dependent)\n";
+			}
+			out << "\t// PBR: roughness=" << roughness << " metallic=" << metallic << "\n";
+			if ( !ao.isEmpty() ) {
+				out << "\t// AO: " << ao << "\n";
+			}
+			out << "}\n";
+			QGuiApplication::clipboard()->setText( snippet );
+			Sys_Status( "PBR shader snippet copied to clipboard" );
+		} );
+		vbox->addWidget( pbrGroup );
 
 		auto* envGroup = new QGroupBox( "Environment", root );
 		auto* envForm = new QFormLayout( envGroup );
@@ -1634,19 +1878,68 @@ void Experimental_createDocks( QMainWindow* window ){
 	{
 		auto* root = new QWidget( g_exp_usdDock );
 		auto* vbox = new QVBoxLayout( root );
-		auto* importButton = new QPushButton( "Import USD Structure", root );
+		auto* btnRow = new QWidget( root );
+		auto* btnLayout = new QHBoxLayout( btnRow );
+		btnLayout->setContentsMargins( 0, 0, 0, 0 );
+		auto* importButton = new QPushButton( "Import", root );
+		auto* exportButton = new QPushButton( "Export to USDA", root );
+		btnLayout->addWidget( importButton );
+		btnLayout->addWidget( exportButton );
 		g_exp_usdTree = new QTreeWidget( root );
 		g_exp_usdTree->setHeaderLabels( QStringList( "Prim" ) );
-		vbox->addWidget( importButton );
+		vbox->addWidget( btnRow );
 		vbox->addWidget( g_exp_usdTree );
 		QObject::connect( importButton, &QPushButton::clicked, [](){ Experimental_importUSDStructure(); } );
+		QObject::connect( exportButton, &QPushButton::clicked, [](){ Experimental_exportToUSDA(); } );
 		g_exp_usdDock->setWidget( root );
 	}
 	window->addDockWidget( Qt::LeftDockWidgetArea, g_exp_usdDock );
 
+	g_exp_ecsDock = new QDockWidget( "ECS Authoring", window );
+	g_exp_ecsDock->setObjectName( "dock_experimental_ecs_authoring" );
+	{
+		auto* root = new QWidget( g_exp_ecsDock );
+		auto* vbox = new QVBoxLayout( root );
+		g_exp_ecsCategoryCombo = new QComboBox( root );
+		g_exp_ecsCategoryCombo->addItems( QStringList()
+			<< "All"
+			<< "Fire & Environment"
+			<< "Wind & Physics"
+			<< "Props & Physics"
+			<< "Gravity & Space"
+			<< "Spawn & Streaming"
+			<< "Level Streaming"
+			<< "Vehicles"
+			<< "Splines"
+			<< "Other" );
+		QObject::connect( g_exp_ecsCategoryCombo, QOverload<int>::of( &QComboBox::currentIndexChanged ), []( int ){ Experimental_refreshECSList(); } );
+		g_exp_ecsEntityList = new QListWidget( root );
+		auto* addButton = new QPushButton( "Add Entity at Camera", root );
+		vbox->addWidget( new QLabel( "Category", root ) );
+		vbox->addWidget( g_exp_ecsCategoryCombo );
+		vbox->addWidget( new QLabel( "Entities", root ) );
+		vbox->addWidget( g_exp_ecsEntityList );
+		vbox->addWidget( addButton );
+		QObject::connect( addButton, &QPushButton::clicked, [](){
+			QListWidgetItem* item = g_exp_ecsEntityList != nullptr ? g_exp_ecsEntityList->currentItem() : nullptr;
+			if ( item != nullptr ) {
+				Experimental_ecsAddEntity( item->text().toLatin1().constData() );
+			}
+		} );
+		QObject::connect( g_exp_ecsEntityList, &QListWidget::itemDoubleClicked, []( QListWidgetItem* item ){
+			if ( item != nullptr ) {
+				Experimental_ecsAddEntity( item->text().toLatin1().constData() );
+			}
+		} );
+		g_exp_ecsDock->setWidget( root );
+	}
+	window->addDockWidget( Qt::LeftDockWidgetArea, g_exp_ecsDock );
+	Experimental_refreshECSList();
+
 	window->tabifyDockWidget( g_exp_propertiesDock, g_exp_previewDock );
 	window->tabifyDockWidget( g_exp_assetsDock, g_exp_historyDock );
 	window->tabifyDockWidget( g_exp_historyDock, g_exp_usdDock );
+	window->tabifyDockWidget( g_exp_usdDock, g_exp_ecsDock );
 
 	Experimental_refreshSelection();
 	Experimental_refreshAssetLibrary();
@@ -1659,9 +1952,17 @@ void Experimental_destroyDocks(){
 	g_exp_assetsDock = nullptr;
 	g_exp_historyDock = nullptr;
 	g_exp_usdDock = nullptr;
+	g_exp_ecsDock = nullptr;
+	g_exp_ecsCategoryCombo = nullptr;
+	g_exp_ecsEntityList = nullptr;
 	g_exp_selectedCountLabel = nullptr;
 	g_exp_selectedComponentsLabel = nullptr;
 	g_exp_shaderEdit = nullptr;
+	g_exp_pbrAlbedo = nullptr;
+	g_exp_pbrNormal = nullptr;
+	g_exp_pbrRoughness = nullptr;
+	g_exp_pbrMetallic = nullptr;
+	g_exp_pbrAO = nullptr;
 	g_exp_locX = nullptr;
 	g_exp_locY = nullptr;
 	g_exp_locZ = nullptr;
@@ -2051,8 +2352,14 @@ void Experimental_toggleHistoryDock(){
 void Experimental_toggleUSDDock(){
 	Experimental_toggleUSDDock_impl();
 }
+void Experimental_toggleECSDock(){
+	Experimental_toggleECSDock_impl();
+}
 void Experimental_importUSDStructure(){
 	Experimental_importUSDStructure_impl();
+}
+void Experimental_exportToUSDA(){
+	Experimental_exportToUSDA_impl();
 }
 void Lua_editMain(){
 	Lua_openScript( g_luaScriptMain, "Lua Main", false );
@@ -2285,6 +2592,7 @@ void create_view_menu( QMenuBar *menubar, MainFrame::EViewStyle style ){
 		create_menu_item_with_mnemonic( menu, "Texture Browser", "ToggleTextures" );
 	}
 	create_menu_item_with_mnemonic( menu, "Sky Browser", "SkyBrowser" );
+	create_menu_item_with_mnemonic( menu, "Time of Day", "TimeOfDay" );
 	create_menu_item_with_mnemonic( menu, "Model Browser", "ToggleModelBrowser" );
 	create_menu_item_with_mnemonic( menu, "Entity Inspector", "ToggleEntityInspector" );
 	create_menu_item_with_mnemonic( menu, "Layers Browser", "ToggleLayersBrowser" );
@@ -2297,6 +2605,7 @@ void create_view_menu( QMenuBar *menubar, MainFrame::EViewStyle style ){
 		create_highlighted_view_menu_item( menu, "[Asset Library]", "ToggleExperimentalAssets" );
 		create_highlighted_view_menu_item( menu, "[History]", "ToggleExperimentalHistory" );
 		create_highlighted_view_menu_item( menu, "[USD Structure]", "ToggleExperimentalUSD" );
+		create_highlighted_view_menu_item( menu, "[ECS Authoring]", "ToggleExperimentalECS" );
 	}
 
 	menu->addSeparator();
@@ -2538,6 +2847,7 @@ void create_misc_menu( QMenuBar *menubar ){
 	create_menu_item_with_mnemonic( menu, "&Refresh models", "RefreshReferences" );
 	if ( g_Layout_experimentalFeatures.m_value ) {
 		create_menu_item_with_mnemonic( menu, "Import USD structure", "ImportUSDStructure" );
+		create_menu_item_with_mnemonic( menu, "Export to USDA", "ExportToUSDA" );
 	}
 	create_menu_item_with_mnemonic( menu, "Set 2D &Background image", makeCallbackF( WXY_SetBackgroundImage ) );
 	create_menu_item_with_mnemonic( menu, "Fullscreen", "Fullscreen" );

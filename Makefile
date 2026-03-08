@@ -1011,6 +1011,7 @@ $(INSTALLDIR)/radiant.$(EXE): \
 	radiant/texmanip.o \
 	radiant/textures.o \
 	radiant/trayicon.o \
+	radiant/timeofday.o \
 	radiant/texwindow.o \
 	radiant/theme.o \
 	radiant/tools.o \

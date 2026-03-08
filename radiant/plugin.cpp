@@ -73,6 +73,7 @@
 #include "findtexturedialog.h"
 #include "nullmodel.h"
 #include "skybrowser.h"
+#include "timeofday.h"
 #include "grid.h"
 
 #include "modulesystem/modulesmap.h"
@@ -260,6 +261,7 @@ public:
 		BuildMonitor_Construct();
 		TextureBrowser_Construct();
 		SkyBrowser_Construct();
+		TimeOfDay_Construct();
 		ModelBrowser_Construct();
 		Entity_Construct();
 		Autosave_Construct();
@@ -282,6 +284,7 @@ public:
 		Entity_Destroy();
 		ModelBrowser_Destroy();
 		SkyBrowser_Destroy();
+		TimeOfDay_Destroy();
 		TextureBrowser_Destroy();
 		BuildMonitor_Destroy();
 		XYWindow_Destroy();

@@ -9,12 +9,9 @@ any prior sources.
 
 #pragma once
 
-namespace scene
-{
-class Node;
-}
-class EntityClass;
+class QWidget;
 
-void SplineEntity_construct();
-void SplineEntity_destroy();
-scene::Node& New_SplineEntity( EntityClass* eclass );
+void TimeOfDay_constructWindow( QWidget* main_window );
+void TimeOfDay_destroyWindow();
+void TimeOfDay_Construct();
+void TimeOfDay_Destroy();

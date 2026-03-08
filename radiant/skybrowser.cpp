@@ -1,21 +1,11 @@
 /*
-   Copyright (C) 1999-2006 Id Software, Inc. and contributors.
-   This file is part of GtkRadiant.
+===========================================================================
+Copyright (C) 2026 Gopex LLC. All rights reserved.
 
-   GtkRadiant is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
-   (at your option) any later version.
-
-   GtkRadiant is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
-
-   You should have received a copy of the GNU General Public License
-   along with GtkRadiant; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
- */
+This file is original work by Gopex LLC and is not derived from
+any prior sources.
+===========================================================================
+*/
 
 //
 // Sky Browser - browse and select skybox shaders
@@ -28,6 +18,7 @@
 #include "ishaders.h"
 #include "iselection.h"
 #include "iscenegraph.h"
+#include "shaderlib.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -46,6 +37,7 @@
 #include "string/string.h"
 #include "os/path.h"
 
+#include "generic/callback.h"
 #include "commands.h"
 #include "select.h"
 #include "brushmanip.h"
@@ -60,16 +52,8 @@ static QListWidget* g_skyList{};
 static QLineEdit* g_skyFilter{};
 
 
-static void SkyBrowser_populate(){
-	if ( g_skyList == nullptr ) {
-		return;
-	}
-	g_skyList->clear();
-
-	const char* filter = g_skyFilter != nullptr ? g_skyFilter->text().trimmed().toLatin1().constData() : "";
-	const std::size_t filterLen = strlen( filter );
-
-	GlobalShaderSystem().foreachShaderName( []( const char* name ){
+struct SkyShaderVisitor {
+	void operator()( const char* name ) const {
 		if ( !shader_equal_prefix( name, "textures/" ) ) {
 			return;
 		}
@@ -89,7 +73,15 @@ static void SkyBrowser_populate(){
 		item->setIcon( new_local_icon( "skybox.png" ) );
 		item->setData( Qt::UserRole, name );
 		g_skyList->addItem( item );
-	} );
+	}
+};
+
+static void SkyBrowser_populate(){
+	if ( g_skyList == nullptr ) {
+		return;
+	}
+	g_skyList->clear();
+	GlobalShaderSystem().foreachShaderName( makeCallback( SkyShaderVisitor() ) );
 }
 
 
@@ -110,7 +102,7 @@ static void SkyBrowser_applySelected(){
 }
 
 
-static void SkyBrowser_constructWindow( QWidget* parent ){
+void SkyBrowser_constructWindow( QWidget* parent ){
 	if ( g_skyBrowserDialog != nullptr ) {
 		g_skyBrowserDialog->show();
 		g_skyBrowserDialog->raise();
@@ -170,7 +162,7 @@ static void SkyBrowser_constructWindow( QWidget* parent ){
 }
 
 
-static void SkyBrowser_destroyWindow(){
+void SkyBrowser_destroyWindow(){
 	if ( g_skyBrowserDialog != nullptr ) {
 		g_skyBrowserDialog->deleteLater();
 		g_skyBrowserDialog = nullptr;

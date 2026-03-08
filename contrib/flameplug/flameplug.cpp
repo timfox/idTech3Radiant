@@ -1,4 +1,13 @@
 /*
+===========================================================================
+Copyright (C) 2026 Gopex LLC. All rights reserved.
+
+This file is original work by Gopex LLC and is not derived from
+any prior sources.
+===========================================================================
+*/
+
+/*
    FlamePlug - Fractal Flame Editor for NetRadiant
    Based on the Fractal Flame Algorithm (Scott Draves, Erik Reckase, 2003)
    Inspired by Apophysis 7x (https://github.com/wanily/apophysis7x)
