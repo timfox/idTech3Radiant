@@ -91,13 +91,13 @@ void xml_SendNode( xmlNodePtr node ){
 		// l_net library defines an upper limit of MAX_NETMESSAGE
 		// there are some size check errors, so we use MAX_NETMESSAGE-10 to be safe
 		// if the size of the buffer exceeds MAX_NETMESSAGE-10 we'll send in several network messages
-		for ( int pos = 0; pos < (int)xml_buf->use; )
+		for ( int pos = 0; pos < xmlBufferLength( xml_buf ); )
 		{
 			// what size are we gonna send now?
-			const int size = std::min( (int)xml_buf->use - pos, MAX_NETMESSAGE - 10 );
+			const int size = std::min( xmlBufferLength( xml_buf ) - pos, MAX_NETMESSAGE - 10 );
 			netmessage_t msg;
 			NMSG_Clear( &msg );
-			NMSG_WriteString_n( &msg, reinterpret_cast<const char*>( xml_buf->content + pos ), size );
+			NMSG_WriteString_n( &msg, reinterpret_cast<const char*>( xmlBufferContent( xml_buf ) + pos ), size );
 			Net_Send( brdcst_socket, &msg );
 			// now that the thing is sent prepare to loop again
 			pos += size;
@@ -408,7 +408,7 @@ void Error( const char *error, ... ){
 	vsprintf( tmp, error, argptr );
 	va_end( argptr );
 
-	sprintf( out_buffer, "************ ERROR ************\n%s\n", tmp );
+	snprintf( out_buffer, sizeof( out_buffer ), "************ ERROR ************\n%s\n", tmp );
 
 	FPrintf( SYS_ERR, out_buffer );
 	xml_message_flush();

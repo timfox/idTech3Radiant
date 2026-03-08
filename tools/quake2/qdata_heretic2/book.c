@@ -55,7 +55,7 @@ miptex_t *CreateBook8( byte *buffer, int w, int h, byte *palette, int *FinalSize
 	return( mp );
 }
 
-miptex32_t *CreateBook32( long *buffer, int w, int h, int *FinalSize ){
+miptex32_t *CreateBook32( unsigned long *buffer, int w, int h, int *FinalSize ){
 	miptex32_t  *mp;
 	byte        *pos;
 	int size;

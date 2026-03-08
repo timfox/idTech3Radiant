@@ -19,6 +19,7 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+#include <stddef.h>
 #include "qd_fmodel.h"
 #include "animcomp.h"
 #include "qd_skeletons.h"
@@ -242,7 +243,7 @@ static void WriteModelFile( FILE *modelouthandle ){
 	byte data2[DATA_SIZE];
 
 	fmheader.num_glcmds = numcommands;
-	fmheader.framesize = (int)&( (fmaliasframe_t *)0 )->verts[fmheader.num_xyz];
+	fmheader.framesize = (int)( offsetof( fmaliasframe_t, verts ) + fmheader.num_xyz * sizeof( fmtrivertx_t ) );
 
 	WriteHeader( modelouthandle, FM_HEADER_NAME, FM_HEADER_VER, sizeof( fmheader ), &fmheader );
 
@@ -633,7 +634,7 @@ static void CompressFrames(){
 		g->cbase = (char *) SafeMalloc( fmheader.num_xyz * 3 * sizeof( unsigned char ), "CompressFrames" );
 		g->cscale = (float *) SafeMalloc( g->degrees * sizeof( float ), "CompressFrames" );
 		g->coffset = (float *) SafeMalloc( g->degrees * sizeof( float ), "CompressFrames" );
-		AnimCompressToBytes( g->trans,g->scale,g->mat,g->ccomp,g->cbase,g->cscale,g->coffset,g->bmin,g->bmax );
+		AnimCompressToBytes( g->trans,g->scale,g->mat,g->ccomp,(unsigned char *)g->cbase,g->cscale,g->coffset,g->bmin,g->bmax );
 		AnimCompressEnd();
 	}
 }

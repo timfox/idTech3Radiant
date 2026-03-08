@@ -128,15 +128,15 @@ int ConvertTrueColorToPal( unsigned r, unsigned g, unsigned b ){
 
 	for ( i = 0; i < 256; i++ )
 	{
-		dr = abs( palette_r[i] - r );
+		dr = labs( palette_r[i] - r );
 		if ( dr > biggest_delta ) {
 			continue;
 		}
-		dg = abs( palette_g[i] - g );
+		dg = labs( palette_g[i] - g );
 		if ( dg > biggest_delta ) {
 			continue;
 		}
-		db = abs( palette_b[i] - b );
+		db = labs( palette_b[i] - b );
 		if ( db > biggest_delta ) {
 			continue;
 		}
@@ -1135,6 +1135,9 @@ void Cmd_Mip( void ){
 
 				case pt_nomip:
 					flags2 |= MIP32_NOMIP_FLAG2;
+					break;
+
+				case pt_gl:
 					break;
 
 				case pt_detail:

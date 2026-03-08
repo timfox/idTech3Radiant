@@ -22,6 +22,7 @@
 
 #include "qdata.h"
 #include <assert.h>
+#include <stddef.h>
 #include "jointed.h"
 #include "fmodel.h"
 
@@ -172,7 +173,7 @@ void WriteCommonModelFile( FILE *modelouthandle, PartialAliasFrame_t *outFrames 
 	float v;
 
 	model.version = ALIAS_VERSION;
-	model.framesize = (int)&( (daliasframe_t *)0 )->verts[model.num_xyz];
+	model.framesize = (int)( offsetof( daliasframe_t, verts ) + model.num_xyz * sizeof( dtrivertx_t ) );
 	model.num_glcmds = numcommands;
 	model.ofs_skins = sizeof( dmdl_t );
 	model.ofs_st = model.ofs_skins + model.num_skins * MAX_SKINNAME;
@@ -408,7 +409,7 @@ static void WriteModelFile( FILE *modelouthandle ){
 
 	model.ident = IDALIASHEADER;
 	model.version = ALIAS_VERSION;
-	model.framesize = (int)&( (daliasframe_t *)0 )->verts[model.num_xyz];
+	model.framesize = (int)( offsetof( daliasframe_t, verts ) + model.num_xyz * sizeof( dtrivertx_t ) );
 	model.num_glcmds = numcommands;
 	model.ofs_skins = sizeof( dmdl_t );
 	model.ofs_st = model.ofs_skins + model.num_skins * MAX_SKINNAME;
@@ -1796,7 +1797,7 @@ void MODELCMD_Modelname( int modeltype ){
 	if ( g_forcemodel ) {
 		modeltype = g_forcemodel;
 	}
-
+	(void)modeltype;
 	Cmd_Modelname();
 /*
     switch(modeltype)
@@ -1831,7 +1832,7 @@ void MODELCMD_Origin( int modeltype ){
 	if ( g_forcemodel ) {
 		modeltype = g_forcemodel;
 	}
-
+	(void)modeltype;
 	Cmd_Origin();
 /*	switch(modeltype)
     {
@@ -1897,7 +1898,7 @@ void MODELCMD_ScaleUp( int modeltype ){
 	if ( g_forcemodel ) {
 		modeltype = g_forcemodel;
 	}
-
+	(void)modeltype;
 	Cmd_ScaleUp();
 /*	switch(modeltype)
     {
@@ -1947,7 +1948,7 @@ void MODELCMD_Skinsize( int modeltype ){
 	if ( g_forcemodel ) {
 		modeltype = g_forcemodel;
 	}
-
+	(void)modeltype;
 	Cmd_Skinsize();
 /*
     switch(modeltype)
