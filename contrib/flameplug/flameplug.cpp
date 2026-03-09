@@ -293,7 +293,7 @@ const char* getName(){
 }
 
 const char* getCommandList(){
-	strcpy( MenuList, "Fractal Flame Editor..." );
+	strcpy( MenuList, "Fractal Flame Editor" );
 	return MenuList;
 }
 
@@ -402,7 +402,7 @@ void openFlameEditor(){
 }
 
 void dispatch( const char* command, float* vMin, float* vMax, bool bSingleBrush ){
-	if ( string_equal( command, "Fractal Flame Editor..." ) )
+	if ( string_equal( command, "Fractal Flame Editor" ) )
 		openFlameEditor();
 }
 
