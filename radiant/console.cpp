@@ -47,6 +47,7 @@
 #include <QRegularExpression>
 #include <QSocketNotifier>
 #include <QKeyEvent>
+#include <QKeySequence>
 
 #ifndef WIN32
 #include <cerrno>
@@ -150,12 +151,12 @@ protected:
 		if( event->type() == QEvent::ShortcutOverride ){
 			auto *keyEvent = static_cast<QKeyEvent *>( event );
 			// Ensure text-copy shortcuts work in the read-only console widget.
-			if( keyEvent == QKeySequence::StandardKey::Copy && !keyEvent->isAutoRepeat() ){
+			if( keyEvent->matches( QKeySequence::StandardKey::Copy ) && !keyEvent->isAutoRepeat() ){
 				this->copy();
 				event->accept();
 				return true;
 			}
-			if( keyEvent == QKeySequence::StandardKey::SelectAll && !keyEvent->isAutoRepeat() ){
+			if( keyEvent->matches( QKeySequence::StandardKey::SelectAll ) && !keyEvent->isAutoRepeat() ){
 				this->selectAll();
 				event->accept();
 				return true;
