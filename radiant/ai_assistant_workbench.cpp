@@ -14,7 +14,9 @@
 #include "eclasslib.h"
 #include "iundo.h"
 #include "ishaders.h"
+#include "preferences.h"
 #include "stream/stringstream.h"
+#include "stringio.h"
 #include "scenelib.h"
 #include "generic/callback.h"
 #include "nullmodel.h"
@@ -43,12 +45,15 @@
 #include <QMessageBox>
 #include <QApplication>
 #include <QElapsedTimer>
+#include <QInputDialog>
+#include <QScrollArea>
 
 #define RAPIDJSON_PARSE_DEFAULT_FLAGS ( kParseCommentsFlag | kParseTrailingCommasFlag | kParseNanAndInfFlag )
 #include "rapidjson/document.h"
 #include "rapidjson/prettywriter.h"
 #include "rapidjson/stringbuffer.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <vector>
@@ -63,6 +68,20 @@ QNetworkAccessManager* g_aiNetworkManager{};
 
 const char* const c_aiAssistantSettingsPrefix = "AIAssistant/";
 
+bool g_aiAssistantEnabled = true;
+std::vector<struct AIAssistantAgentConfig> g_aiAssistantAgents;
+CopiedString g_aiAssistantActiveAgent = "OpenAI";
+
+struct AIAssistantAgentConfig {
+	CopiedString name;
+	CopiedString provider;   // OpenAI, Gemini, Mock
+	CopiedString endpoint;
+	CopiedString model;
+	bool useEnvVar = true;   // true = use keyEnvVar, false = use apiKey
+	CopiedString keyEnvVar;
+	CopiedString apiKey;     // when useEnvVar=false
+};
+
 QSettings& AIAssistant_settings(){
 	static QSettings settings;
 	return settings;
@@ -74,6 +93,80 @@ QString AIAssistant_setting( const char* key, const QString& fallback = {} ){
 
 void AIAssistant_setSetting( const char* key, const QVariant& value ){
 	AIAssistant_settings().setValue( StringStream( c_aiAssistantSettingsPrefix, key ).c_str(), value );
+}
+
+static std::string agentsToJson(){
+	rapidjson::Document doc( rapidjson::kArrayType );
+	auto& alloc = doc.GetAllocator();
+	for ( const auto& a : g_aiAssistantAgents ) {
+		rapidjson::Value obj( rapidjson::kObjectType );
+		obj.AddMember( "name", rapidjson::Value( a.name.c_str(), alloc ), alloc );
+		obj.AddMember( "provider", rapidjson::Value( a.provider.c_str(), alloc ), alloc );
+		obj.AddMember( "endpoint", rapidjson::Value( a.endpoint.c_str(), alloc ), alloc );
+		obj.AddMember( "model", rapidjson::Value( a.model.c_str(), alloc ), alloc );
+		obj.AddMember( "useEnvVar", a.useEnvVar, alloc );
+		obj.AddMember( "keyEnvVar", rapidjson::Value( a.keyEnvVar.c_str(), alloc ), alloc );
+		obj.AddMember( "apiKey", rapidjson::Value( a.apiKey.c_str(), alloc ), alloc );
+		doc.PushBack( obj, alloc );
+	}
+	rapidjson::StringBuffer buf;
+	rapidjson::Writer<rapidjson::StringBuffer> w( buf );
+	doc.Accept( w );
+	return std::string( buf.GetString() );
+}
+
+static void agentsFromJson( const char* json ){
+	g_aiAssistantAgents.clear();
+	if ( !json || !*json ) return;
+	rapidjson::Document doc;
+	doc.Parse( json );
+	if ( doc.HasParseError() || !doc.IsArray() ) return;
+	for ( rapidjson::SizeType i = 0; i < doc.Size(); ++i ) {
+		const auto& o = doc[i];
+		if ( !o.IsObject() ) continue;
+		AIAssistantAgentConfig a;
+		a.name = o.HasMember( "name" ) ? o["name"].GetString() : "";
+		a.provider = o.HasMember( "provider" ) ? o["provider"].GetString() : "OpenAI";
+		a.endpoint = o.HasMember( "endpoint" ) ? o["endpoint"].GetString() : "https://api.openai.com/v1/chat/completions";
+		a.model = o.HasMember( "model" ) ? o["model"].GetString() : "gpt-4o-mini";
+		a.useEnvVar = o.HasMember( "useEnvVar" ) ? o["useEnvVar"].GetBool() : true;
+		a.keyEnvVar = o.HasMember( "keyEnvVar" ) ? o["keyEnvVar"].GetString() : "OPENAI_API_KEY";
+		a.apiKey = o.HasMember( "apiKey" ) ? o["apiKey"].GetString() : "";
+		if ( !a.name.empty() ) g_aiAssistantAgents.push_back( a );
+	}
+}
+
+static void ensureDefaultAgents(){
+	if ( g_aiAssistantAgents.empty() ) {
+		AIAssistantAgentConfig a;
+		a.name = "OpenAI";
+		a.provider = "OpenAI";
+		a.endpoint = "https://api.openai.com/v1/chat/completions";
+		a.model = "gpt-4o-mini";
+		a.useEnvVar = true;
+		a.keyEnvVar = "OPENAI_API_KEY";
+		g_aiAssistantAgents.push_back( a );
+		a.name = "Mock";
+		a.provider = "Mock";
+		g_aiAssistantAgents.push_back( a );
+		g_aiAssistantActiveAgent = "OpenAI";
+	}
+}
+
+static const AIAssistantAgentConfig* getActiveAgent(){
+	ensureDefaultAgents();
+	for ( const auto& a : g_aiAssistantAgents ) {
+		if ( a.name == g_aiAssistantActiveAgent.c_str() ) return &a;
+	}
+	return g_aiAssistantAgents.empty() ? nullptr : &g_aiAssistantAgents[0];
+}
+
+static const char* getApiKeyForAgent( const AIAssistantAgentConfig* agent ){
+	if ( !agent ) return nullptr;
+	if ( agent->useEnvVar ) {
+		return getenv( agent->keyEnvVar.c_str() );
+	}
+	return agent->apiKey.empty() ? nullptr : agent->apiKey.c_str();
 }
 
 // --- JSON schema types (EditorContext, PlacementPlan, PlacementAction) ---
@@ -510,7 +603,7 @@ bool executePlacementAction( const PlacementActionJson& act ){
 
 // --- Provider: build request body for OpenAI/Gemini style ---
 
-static std::string buildOpenAIMessages( const std::string& systemPrompt, const std::string& userPrompt, const std::string& contextJson ){
+static std::string buildOpenAIMessages( const std::string& systemPrompt, const std::string& userPrompt, const std::string& contextJson, const std::string& model = "gpt-4o-mini" ){
 	rapidjson::Document doc( rapidjson::kObjectType );
 	auto& alloc = doc.GetAllocator();
 
@@ -531,7 +624,7 @@ static std::string buildOpenAIMessages( const std::string& systemPrompt, const s
 		messagesArr.PushBack( userMsg, alloc );
 	}
 	doc.AddMember( "messages", messagesArr, alloc );
-	doc.AddMember( "model", "gpt-4o-mini", alloc );
+	doc.AddMember( "model", rapidjson::Value( model.c_str(), alloc ), alloc );
 	doc.AddMember( "temperature", 0.3, alloc );
 
 	rapidjson::StringBuffer buffer;
@@ -576,10 +669,14 @@ QPlainTextEdit* g_aiPromptEdit{};
 QPlainTextEdit* g_aiResponseEdit{};
 QPlainTextEdit* g_aiLogEdit{};
 QLabel* g_aiStatusLabel{};
-QComboBox* g_aiProviderCombo{};
+QComboBox* g_aiAgentCombo{};
 QLineEdit* g_aiEndpointEdit{};
 QLineEdit* g_aiModelEdit{};
 QLineEdit* g_aiKeyEnvEdit{};
+QLineEdit* g_aiApiKeyEdit{};
+QCheckBox* g_aiUseEnvVarCheck{};
+QPushButton* g_aiAddAgentBtn{};
+QPushButton* g_aiRemoveAgentBtn{};
 QCheckBox* g_aiIncludeSelection{};
 QCheckBox* g_aiIncludeNearby{};
 QCheckBox* g_aiDryRunCheck{};
@@ -634,17 +731,69 @@ void AIAssistant_handleMockResponse( const EditorContextJson& ctx ){
 	AIAssistant_appendLog( "[INFO] Mock provider returned " + QString::number( plan.actions.size() ) + " actions" );
 }
 
+void AIAssistant_refreshAgentCombo(){
+	if ( !g_aiAgentCombo ) return;
+	g_aiAgentCombo->clear();
+	for ( const auto& a : g_aiAssistantAgents )
+		g_aiAgentCombo->addItem( a.name.c_str() );
+	int idx = g_aiAgentCombo->findText( g_aiAssistantActiveAgent.c_str() );
+	g_aiAgentCombo->setCurrentIndex( idx >= 0 ? idx : 0 );
+}
+
+void AIAssistant_onAgentChanged(){
+	QString name = g_aiAgentCombo ? g_aiAgentCombo->currentText() : "";
+	g_aiAssistantActiveAgent = name.toLatin1().constData();
+	for ( const auto& a : g_aiAssistantAgents ) {
+		if ( a.name == g_aiAssistantActiveAgent.c_str() ) {
+			if ( g_aiEndpointEdit ) g_aiEndpointEdit->setText( a.endpoint.c_str() );
+			if ( g_aiModelEdit ) g_aiModelEdit->setText( a.model.c_str() );
+			if ( g_aiKeyEnvEdit ) g_aiKeyEnvEdit->setText( a.keyEnvVar.c_str() );
+			if ( g_aiApiKeyEdit ) g_aiApiKeyEdit->setText( a.apiKey.c_str() );
+			if ( g_aiUseEnvVarCheck ) g_aiUseEnvVarCheck->setChecked( a.useEnvVar );
+			if ( g_aiKeyEnvEdit ) g_aiKeyEnvEdit->setEnabled( a.useEnvVar );
+			if ( g_aiApiKeyEdit ) {
+				g_aiApiKeyEdit->setEnabled( !a.useEnvVar );
+				g_aiApiKeyEdit->setEchoMode( QLineEdit::Password );
+			}
+			return;
+		}
+	}
+}
+
+void AIAssistant_saveCurrentAgent(){
+	QString name = g_aiAgentCombo ? g_aiAgentCombo->currentText() : "";
+	for ( auto& a : g_aiAssistantAgents ) {
+		if ( a.name == name.toLatin1().constData() ) {
+			if ( g_aiEndpointEdit ) a.endpoint = g_aiEndpointEdit->text().trimmed().toLatin1().constData();
+			if ( g_aiModelEdit ) a.model = g_aiModelEdit->text().trimmed().toLatin1().constData();
+			if ( g_aiKeyEnvEdit ) a.keyEnvVar = g_aiKeyEnvEdit->text().trimmed().toLatin1().constData();
+			if ( g_aiApiKeyEdit ) a.apiKey = g_aiApiKeyEdit->text().trimmed().toLatin1().constData();
+			if ( g_aiUseEnvVarCheck ) a.useEnvVar = g_aiUseEnvVarCheck->isChecked();
+			return;
+		}
+	}
+}
+
 void AIAssistant_sendRequest(){
 	if ( !Map_Valid( g_map ) ) {
 		AIAssistant_setStatus( "No map loaded" );
 		return;
 	}
+	if ( !g_aiAssistantEnabled ) {
+		AIAssistant_setStatus( "AI Assistant is disabled in Preferences" );
+		return;
+	}
 
+	AIAssistant_saveCurrentAgent();
 	EditorContextJson ctx;
 	AIAssistant_extractContext( ctx );
 
-	QString provider = g_aiProviderCombo ? g_aiProviderCombo->currentText() : "OpenAI";
-	if ( provider == "Mock" ) {
+	const AIAssistantAgentConfig* agent = getActiveAgent();
+	if ( !agent ) {
+		AIAssistant_setStatus( "No agent configured" );
+		return;
+	}
+	if ( agent->provider == "Mock" ) {
 		AIAssistant_setStatus( "Mock provider" );
 		AIAssistant_handleMockResponse( ctx );
 		return;
@@ -652,14 +801,13 @@ void AIAssistant_sendRequest(){
 
 	if ( !g_aiNetworkManager ) g_aiNetworkManager = new QNetworkAccessManager();
 
-	QString endpoint = g_aiEndpointEdit ? g_aiEndpointEdit->text().trimmed() : "https://api.openai.com/v1/chat/completions";
-	QString model = g_aiModelEdit ? g_aiModelEdit->text().trimmed() : "gpt-4o-mini";
-	QString keyEnv = g_aiKeyEnvEdit ? g_aiKeyEnvEdit->text().trimmed() : "OPENAI_API_KEY";
-
-	const char* apiKey = getenv( keyEnv.toLatin1().constData() );
+	const char* apiKey = getApiKeyForAgent( agent );
 	if ( !apiKey || !*apiKey ) {
-		AIAssistant_setStatus( "API key not set. Set env var: " + keyEnv );
-		AIAssistant_appendLog( "[ERROR] API key not found in " + keyEnv );
+		QString msg = agent->useEnvVar
+			? QString( "API key not set. Set env var: " ) + agent->keyEnvVar.c_str()
+			: "API key not set. Enter key in Preferences or dock.";
+		AIAssistant_setStatus( msg );
+		AIAssistant_appendLog( "[ERROR] " + msg );
 		return;
 	}
 
@@ -668,7 +816,9 @@ void AIAssistant_sendRequest(){
 	QString userPrompt = g_aiPromptEdit ? g_aiPromptEdit->toPlainText().trimmed() : "Suggest placement for the current selection.";
 	if ( userPrompt.isEmpty() ) userPrompt = "Suggest 2-3 props to place near the camera or selection. Use only allowed entities.";
 
-	std::string body = buildOpenAIMessages( systemPromptPlacement, userPrompt.toUtf8().constData(), contextJson );
+	QString endpoint = agent->endpoint.c_str();
+	std::string model = agent->model.c_str();
+	std::string body = buildOpenAIMessages( systemPromptPlacement, userPrompt.toUtf8().constData(), contextJson, model );
 
 	QNetworkRequest req( QUrl( endpoint ) );
 	req.setHeader( QNetworkRequest::ContentTypeHeader, "application/json" );
@@ -787,24 +937,76 @@ void AIAssistant_createDock( QMainWindow* window ){
 	auto* root = new QWidget( g_aiAssistantDock );
 	auto* vbox = new QVBoxLayout( root );
 
-	// Provider
-	auto* providerGroup = new QGroupBox( "Provider", root );
+	// Agent
+	ensureDefaultAgents();
+	auto* providerGroup = new QGroupBox( "Agent", root );
 	auto* providerForm = new QFormLayout( providerGroup );
-	g_aiProviderCombo = new QComboBox( root );
-	g_aiProviderCombo->addItems( { "OpenAI", "Gemini", "Mock" } );
+	auto* agentRow = new QHBoxLayout();
+	g_aiAgentCombo = new QComboBox( root );
+	AIAssistant_refreshAgentCombo();
+	agentRow->addWidget( g_aiAgentCombo );
+	g_aiAddAgentBtn = new QPushButton( "+", root );
+	g_aiAddAgentBtn->setMaximumWidth( 28 );
+	g_aiRemoveAgentBtn = new QPushButton( "-", root );
+	g_aiRemoveAgentBtn->setMaximumWidth( 28 );
+	agentRow->addWidget( g_aiAddAgentBtn );
+	agentRow->addWidget( g_aiRemoveAgentBtn );
+	providerForm->addRow( "Agent", agentRow );
 	g_aiEndpointEdit = new QLineEdit( root );
 	g_aiEndpointEdit->setPlaceholderText( "https://api.openai.com/v1/chat/completions" );
-	g_aiEndpointEdit->setText( AIAssistant_setting( "Endpoint", "https://api.openai.com/v1/chat/completions" ) );
 	g_aiModelEdit = new QLineEdit( root );
 	g_aiModelEdit->setPlaceholderText( "gpt-4o-mini" );
-	g_aiModelEdit->setText( AIAssistant_setting( "Model", "gpt-4o-mini" ) );
+	g_aiUseEnvVarCheck = new QCheckBox( "Use environment variable for API key", root );
+	g_aiUseEnvVarCheck->setChecked( true );
 	g_aiKeyEnvEdit = new QLineEdit( root );
 	g_aiKeyEnvEdit->setPlaceholderText( "OPENAI_API_KEY" );
-	g_aiKeyEnvEdit->setText( AIAssistant_setting( "KeyEnvVar", "OPENAI_API_KEY" ) );
-	providerForm->addRow( "Provider", g_aiProviderCombo );
+	g_aiApiKeyEdit = new QLineEdit( root );
+	g_aiApiKeyEdit->setPlaceholderText( "API key (stored in preferences)" );
+	g_aiApiKeyEdit->setEchoMode( QLineEdit::Password );
+	g_aiApiKeyEdit->setEnabled( false );
 	providerForm->addRow( "Endpoint", g_aiEndpointEdit );
 	providerForm->addRow( "Model", g_aiModelEdit );
-	providerForm->addRow( "API key env var", g_aiKeyEnvEdit );
+	providerForm->addRow( "", g_aiUseEnvVarCheck );
+	providerForm->addRow( "Env var name", g_aiKeyEnvEdit );
+	providerForm->addRow( "API key (direct)", g_aiApiKeyEdit );
+	QObject::connect( g_aiAgentCombo, QOverload<int>::of( &QComboBox::currentIndexChanged ), []( int ){
+		AIAssistant_saveCurrentAgent();
+		AIAssistant_onAgentChanged();
+		Preferences_Save();
+	} );
+	QObject::connect( g_aiUseEnvVarCheck, &QCheckBox::toggled, []( bool useEnv ){
+		if ( g_aiKeyEnvEdit ) g_aiKeyEnvEdit->setEnabled( useEnv );
+		if ( g_aiApiKeyEdit ) g_aiApiKeyEdit->setEnabled( !useEnv );
+	} );
+	QObject::connect( g_aiAddAgentBtn, &QPushButton::clicked, [](){
+		AIAssistant_saveCurrentAgent();
+		QString name = QInputDialog::getText( g_aiAssistantDock, "Add Agent", "Agent name:", QLineEdit::Normal, "New Agent" );
+		if ( name.isEmpty() ) return;
+		AIAssistantAgentConfig a;
+		a.name = name.trimmed().toLatin1().constData();
+		a.provider = "OpenAI";
+		a.endpoint = "https://api.openai.com/v1/chat/completions";
+		a.model = "gpt-4o-mini";
+		a.useEnvVar = true;
+		a.keyEnvVar = "OPENAI_API_KEY";
+		g_aiAssistantAgents.push_back( a );
+		AIAssistant_refreshAgentCombo();
+		g_aiAgentCombo->setCurrentText( a.name.c_str() );
+		AIAssistant_onAgentChanged();
+		Preferences_Save();
+	} );
+	QObject::connect( g_aiRemoveAgentBtn, &QPushButton::clicked, [](){
+		QString name = g_aiAgentCombo ? g_aiAgentCombo->currentText() : "";
+		if ( name.isEmpty() ) return;
+		auto it = std::remove_if( g_aiAssistantAgents.begin(), g_aiAssistantAgents.end(),
+			[&name]( const AIAssistantAgentConfig& a ){ return a.name == name.toLatin1().constData(); } );
+		if ( it != g_aiAssistantAgents.end() ) {
+			g_aiAssistantAgents.erase( it, g_aiAssistantAgents.end() );
+			AIAssistant_refreshAgentCombo();
+			Preferences_Save();
+		}
+	} );
+	AIAssistant_onAgentChanged();
 	vbox->addWidget( providerGroup );
 
 	// Prompt
@@ -893,10 +1095,14 @@ void AIAssistant_destroy(){
 	g_aiResponseEdit = nullptr;
 	g_aiLogEdit = nullptr;
 	g_aiStatusLabel = nullptr;
-	g_aiProviderCombo = nullptr;
+	g_aiAgentCombo = nullptr;
 	g_aiEndpointEdit = nullptr;
 	g_aiModelEdit = nullptr;
 	g_aiKeyEnvEdit = nullptr;
+	g_aiApiKeyEdit = nullptr;
+	g_aiUseEnvVarCheck = nullptr;
+	g_aiAddAgentBtn = nullptr;
+	g_aiRemoveAgentBtn = nullptr;
 	g_aiIncludeSelection = nullptr;
 	g_aiIncludeNearby = nullptr;
 	g_aiDryRunCheck = nullptr;
@@ -907,4 +1113,36 @@ void AIAssistant_destroy(){
 		delete g_aiNetworkManager;
 		g_aiNetworkManager = nullptr;
 	}
+}
+
+bool AIAssistant_enabled(){
+	return g_aiAssistantEnabled;
+}
+
+// --- Preferences ---
+
+void AIAssistantAgents_import( const char* value ){
+	agentsFromJson( value );
+}
+typedef FreeCaller<void(const char*), AIAssistantAgents_import> AIAssistantAgentsImportCaller;
+void AIAssistantAgents_export( const StringImportCallback& importer ){
+	importer( agentsToJson().c_str() );
+}
+typedef FreeCaller<void(const StringImportCallback&), AIAssistantAgents_export> AIAssistantAgentsExportCaller;
+
+void AIAssistant_constructPreferences( PreferencesPage& page ){
+	page.appendCheckBox( "", "Enable AI Assistant", g_aiAssistantEnabled );
+	page.appendEntry( "Active agent", g_aiAssistantActiveAgent );
+}
+
+void AIAssistant_constructPage( PreferenceGroup& group ){
+	PreferencesPage page( group.createPage( "AI Assistant", "AI Assistant Settings" ) );
+	AIAssistant_constructPreferences( page );
+}
+
+void AIAssistant_registerPreferencesPage(){
+	GlobalPreferenceSystem().registerPreference( "AIAssistantEnabled", BoolImportStringCaller( g_aiAssistantEnabled ), BoolExportStringCaller( g_aiAssistantEnabled ) );
+	GlobalPreferenceSystem().registerPreference( "AIAssistantAgents", AIAssistantAgentsImportCaller(), AIAssistantAgentsExportCaller() );
+	GlobalPreferenceSystem().registerPreference( "AIAssistantActiveAgent", CopiedStringImportStringCaller( g_aiAssistantActiveAgent ), CopiedStringExportStringCaller( g_aiAssistantActiveAgent ) );
+	PreferencesDialog_addSettingsPage( makeCallbackF( AIAssistant_constructPage ) );
 }

@@ -55,13 +55,21 @@ The AI Assistant is an editor-side module that:
 
 ## Usage
 
-1. **Tools → AI Assistant** to open the dock
-2. Set `OPENAI_API_KEY` (or env var name in "API key env var")
-3. Load a map, select an area or entity
-4. Enter a prompt, e.g. "Place 3 props near this wall"
-5. Click **Send Request**
-6. Review the placement plan list
-7. **Apply Selected** or **Apply All** to execute
+1. **Preferences → Settings → AI Assistant**: Enable the feature and set the active agent
+2. **Tools → AI Assistant** to open the dock
+3. Select an agent from the dropdown (or add one with **+**)
+4. For API keys: either set the env var (e.g. `OPENAI_API_KEY`) or uncheck "Use environment variable" and enter the key directly (stored in preferences)
+5. Load a map, select an area or entity
+6. Enter a prompt, e.g. "Place 3 props near this wall"
+7. Click **Send Request**
+8. Review the placement plan list
+9. **Apply Selected** or **Apply All** to execute
+
+## Preferences
+
+- **Enable AI Assistant** – Master switch (Settings → AI Assistant)
+- **Active agent** – Default agent name
+- **Agents** – Stored as JSON; add/remove via dock **+** / **-** buttons. Each agent has: name, provider (OpenAI/Gemini/Mock), endpoint, model, API key source (env var or direct)
 
 ## Example Request/Response JSON
 

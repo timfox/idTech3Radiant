@@ -11,3 +11,6 @@ void AIAssistant_createDock( QMainWindow* window );
 void AIAssistant_open();
 void AIAssistant_toggleShown();
 void AIAssistant_destroy();
+void AIAssistant_registerPreferencesPage();
+
+bool AIAssistant_enabled();

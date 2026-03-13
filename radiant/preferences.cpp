@@ -40,6 +40,7 @@
 #include "commandlib.h"
 
 #include "error.h"
+#include "ai_assistant.h"
 #include "xywindow.h"
 #include "mainframe.h"
 #include "qtdlgs.h"
@@ -884,4 +885,5 @@ void RegisterPreferences( PreferenceSystem& preferences ){
 
 void Preferences_Init(){
 	RegisterPreferences( GetPreferenceSystem() );
+	AIAssistant_registerPreferencesPage();
 }
