@@ -19,9 +19,12 @@
 #include "preferences.h"
 #include "stream/stringstream.h"
 #include "stringio.h"
+#include "string/string.h"
 #include "scenelib.h"
 #include "generic/callback.h"
 #include "nullmodel.h"
+#include "qe3.h"
+#include "os/path.h"
 
 #include <QMainWindow>
 #include <QDockWidget>
@@ -49,6 +52,15 @@
 #include <QElapsedTimer>
 #include <QInputDialog>
 #include <QScrollArea>
+#include <QTabWidget>
+#include <QProcess>
+#include <QFileDialog>
+#include <QImage>
+#include <QPixmap>
+#include <QLabel>
+#include <QTemporaryFile>
+#include <QDir>
+#include <QFileInfo>
 
 #define RAPIDJSON_PARSE_DEFAULT_FLAGS ( kParseCommentsFlag | kParseTrailingCommasFlag | kParseNanAndInfFlag )
 #include "rapidjson/document.h"
@@ -69,6 +81,23 @@ QDockWidget* g_aiAssistantDock{};
 QNetworkAccessManager* g_aiNetworkManager{};
 
 const char* const c_aiAssistantSettingsPrefix = "AIAssistant/";
+
+// Image generation
+CopiedString g_aiImageIrisPath;
+CopiedString g_aiImageIrisModel;
+CopiedString g_aiImageDalleApiKey;
+QProcess* g_aiImageProcess{};
+QPixmap g_aiImageLastGenerated;
+QString g_aiImageLastPath;
+QPlainTextEdit* g_aiImagePromptEdit{};
+QComboBox* g_aiImageProviderCombo{};
+QLineEdit* g_aiImageIrisPathEdit{};
+QLineEdit* g_aiImageIrisModelEdit{};
+QLabel* g_aiImagePreviewLabel{};
+QLabel* g_aiImageStatusLabel{};
+QPushButton* g_aiImageGenerateBtn{};
+QPushButton* g_aiImageSaveBtn{};
+QPushButton* g_aiImageApplyBtn{};
 
 bool g_aiAssistantEnabled = true;
 std::vector<struct AIAssistantAgentConfig> g_aiAssistantAgents;
@@ -1040,39 +1069,308 @@ void AIAssistant_applyAll(){
 	AIAssistant_appendLog( "[INFO] Applied " + QString::number( applied ) + " actions" );
 }
 
+// --- Image Generation ---
+
+static void AIImage_setStatus( const QString& s ){
+	if ( g_aiImageStatusLabel ) g_aiImageStatusLabel->setText( s );
+}
+
+static QString slugFromPrompt( const QString& prompt ){
+	QString s = prompt.trimmed().left( 32 ).toLower();
+	for ( int i = 0; i < s.size(); ++i )
+		if ( !s[i].isLetterOrNumber() ) s[i] = '_';
+	return s.isEmpty() ? "ai_gen" : s;
+}
+
+static void AIImage_onIrisFinished( int exitCode, QProcess::ExitStatus status ){
+	if ( g_aiImageProcess ) g_aiImageProcess->deleteLater();
+	g_aiImageProcess = nullptr;
+	if ( g_aiImageGenerateBtn ) g_aiImageGenerateBtn->setEnabled( true );
+
+	QString outPath = g_aiImageLastPath;
+	if ( status != QProcess::NormalExit || exitCode != 0 ) {
+		AIImage_setStatus( "iris failed (exit " + QString::number( exitCode ) + ")" );
+		return;
+	}
+	QImage img( outPath );
+	if ( img.isNull() ) {
+		AIImage_setStatus( "Failed to load generated image" );
+		return;
+	}
+	g_aiImageLastGenerated = QPixmap::fromImage( img );
+	if ( g_aiImagePreviewLabel ) {
+		g_aiImagePreviewLabel->setPixmap( g_aiImageLastGenerated.scaled( 256, 256, Qt::KeepAspectRatio, Qt::SmoothTransformation ) );
+		g_aiImagePreviewLabel->setToolTip( outPath );
+	}
+	if ( g_aiImageSaveBtn ) g_aiImageSaveBtn->setEnabled( true );
+	if ( g_aiImageApplyBtn ) g_aiImageApplyBtn->setEnabled( true );
+	AIImage_setStatus( "Generated " + QString::number( img.width() ) + "x" + QString::number( img.height() ) );
+}
+
+static void AIImage_generateIris( const QString& prompt, const QString& outPath ){
+	QString irisExe = g_aiImageIrisPathEdit ? g_aiImageIrisPathEdit->text().trimmed() : QString::fromUtf8( g_aiImageIrisPath.c_str() );
+	QString model = g_aiImageIrisModelEdit ? g_aiImageIrisModelEdit->text().trimmed() : QString::fromUtf8( g_aiImageIrisModel.c_str() );
+	if ( irisExe.isEmpty() ) {
+		AIImage_setStatus( "Set iris executable path (e.g. /path/to/iris)" );
+		QMessageBox::warning( g_aiAssistantDock, "Image Generation", "Configure the iris executable path in the Image Generation tab.\n\nBuild iris from https://github.com/antirez/iris.c" );
+		return;
+	}
+	if ( model.isEmpty() ) model = "flux-klein-4b";
+
+	g_aiImageLastPath = outPath;
+	g_aiImageProcess = new QProcess( g_aiAssistantDock );
+	QObject::connect( g_aiImageProcess, QOverload<int, QProcess::ExitStatus>::of( &QProcess::finished ), []( int code, QProcess::ExitStatus status ){
+		AIImage_onIrisFinished( code, status );
+	} );
+	QStringList args;
+	args << "-d" << model << "-p" << prompt << "-o" << outPath;
+	g_aiImageProcess->start( irisExe, args );
+	if ( !g_aiImageProcess->waitForStarted( 3000 ) ) {
+		AIImage_setStatus( "Failed to start iris" );
+		g_aiImageProcess->deleteLater();
+		g_aiImageProcess = nullptr;
+		if ( g_aiImageGenerateBtn ) g_aiImageGenerateBtn->setEnabled( true );
+		return;
+	}
+	AIImage_setStatus( "Generating (iris may take 10–60s)..." );
+}
+
+static void AIImage_generateDalle( const QString& prompt ){
+	const char* key = getenv( "OPENAI_API_KEY" );
+	if ( !g_aiImageDalleApiKey.empty() ) key = g_aiImageDalleApiKey.c_str();
+	if ( !key || !*key ) {
+		AIImage_setStatus( "Set OPENAI_API_KEY or DALL-E API key in preferences" );
+		return;
+	}
+	if ( g_aiNetworkManager == nullptr )
+		g_aiNetworkManager = new QNetworkAccessManager();
+
+	QJsonObject body;
+	body["model"] = "dall-e-3";
+	body["prompt"] = prompt;
+	body["n"] = 1;
+	body["size"] = "1024x1024";
+	body["response_format"] = "b64_json";
+	QNetworkRequest req( QUrl( "https://api.openai.com/v1/images/generations" ) );
+	req.setHeader( QNetworkRequest::ContentTypeHeader, "application/json" );
+	req.setRawHeader( "Authorization", QByteArray( "Bearer " ) + key );
+	QNetworkReply* reply = g_aiNetworkManager->post( req, QJsonDocument( body ).toJson() );
+	QObject::connect( reply, &QNetworkReply::finished, [reply, prompt](){
+		reply->deleteLater();
+		if ( reply->error() != QNetworkReply::NoError ) {
+			AIImage_setStatus( "DALL-E request failed" );
+			if ( g_aiImageGenerateBtn ) g_aiImageGenerateBtn->setEnabled( true );
+			return;
+		}
+		QByteArray data = reply->readAll();
+		QJsonDocument doc = QJsonDocument::fromJson( data );
+		QJsonObject obj = doc.object();
+		QJsonArray dataArr = obj["data"].toArray();
+		if ( dataArr.isEmpty() ) {
+			AIImage_setStatus( "No image in DALL-E response" );
+			if ( g_aiImageGenerateBtn ) g_aiImageGenerateBtn->setEnabled( true );
+			return;
+		}
+		QString b64 = dataArr[0].toObject()["b64_json"].toString();
+		if ( b64.isEmpty() ) b64 = dataArr[0].toObject()["url"].toString();
+		if ( b64.isEmpty() ) {
+			AIImage_setStatus( "No image data in DALL-E response" );
+			if ( g_aiImageGenerateBtn ) g_aiImageGenerateBtn->setEnabled( true );
+			return;
+		}
+		QImage img;
+		if ( b64.startsWith( "http" ) ) {
+			// URL - would need another fetch; for now require b64
+			AIImage_setStatus( "DALL-E returned URL; b64_json preferred" );
+			if ( g_aiImageGenerateBtn ) g_aiImageGenerateBtn->setEnabled( true );
+			return;
+		}
+		img.loadFromData( QByteArray::fromBase64( b64.toLatin1() ) );
+		if ( img.isNull() ) {
+			AIImage_setStatus( "Failed to decode DALL-E image" );
+			if ( g_aiImageGenerateBtn ) g_aiImageGenerateBtn->setEnabled( true );
+			return;
+		}
+		QTemporaryFile tmp;
+		tmp.setSuffix( ".png" );
+		tmp.setAutoRemove( false );
+		if ( !tmp.open() ) {
+			AIImage_setStatus( "Failed to create temp file" );
+			if ( g_aiImageGenerateBtn ) g_aiImageGenerateBtn->setEnabled( true );
+			return;
+		}
+		QString path = tmp.fileName();
+		tmp.close();
+		if ( !img.save( path ) ) {
+			AIImage_setStatus( "Failed to save temp image" );
+			if ( g_aiImageGenerateBtn ) g_aiImageGenerateBtn->setEnabled( true );
+			return;
+		}
+		g_aiImageLastPath = path;
+		g_aiImageLastGenerated = QPixmap::fromImage( img );
+		if ( g_aiImagePreviewLabel ) {
+			g_aiImagePreviewLabel->setPixmap( g_aiImageLastGenerated.scaled( 256, 256, Qt::KeepAspectRatio, Qt::SmoothTransformation ) );
+			g_aiImagePreviewLabel->setToolTip( path );
+		}
+		if ( g_aiImageSaveBtn ) g_aiImageSaveBtn->setEnabled( true );
+		if ( g_aiImageApplyBtn ) g_aiImageApplyBtn->setEnabled( true );
+		AIImage_setStatus( "Generated " + QString::number( img.width() ) + "x" + QString::number( img.height() ) );
+		if ( g_aiImageGenerateBtn ) g_aiImageGenerateBtn->setEnabled( true );
+	} );
+	AIImage_setStatus( "Generating (DALL-E)..." );
+}
+
+static void AIImage_generate(){
+	QString prompt = g_aiImagePromptEdit ? g_aiImagePromptEdit->toPlainText().trimmed() : "";
+	if ( prompt.isEmpty() ) {
+		AIImage_setStatus( "Enter a prompt" );
+		return;
+	}
+	QString provider = g_aiImageProviderCombo ? g_aiImageProviderCombo->currentText() : "iris";
+	if ( g_aiImageGenerateBtn ) g_aiImageGenerateBtn->setEnabled( false );
+	if ( g_aiImageSaveBtn ) g_aiImageSaveBtn->setEnabled( false );
+	if ( g_aiImageApplyBtn ) g_aiImageApplyBtn->setEnabled( false );
+
+	if ( provider == "iris" ) {
+		QTemporaryFile tmp;
+		tmp.setSuffix( ".png" );
+		tmp.setAutoRemove( false );
+		if ( !tmp.open() ) {
+			AIImage_setStatus( "Failed to create temp file" );
+			if ( g_aiImageGenerateBtn ) g_aiImageGenerateBtn->setEnabled( true );
+			return;
+		}
+		QString path = tmp.fileName();
+		tmp.close();
+		AIImage_generateIris( prompt, path );
+	} else if ( provider == "DALL-E" ) {
+		AIImage_generateDalle( prompt );
+	} else {
+		// Mock: create a placeholder
+		QImage img( 512, 512, QImage::Format_RGB32 );
+		img.fill( QColor( 80, 80, 120 ) );
+		QTemporaryFile tmp;
+		tmp.setSuffix( ".png" );
+		tmp.setAutoRemove( false );
+		if ( tmp.open() ) {
+			QString path = tmp.fileName();
+			tmp.close();
+			img.save( path );
+			g_aiImageLastPath = path;
+			g_aiImageLastGenerated = QPixmap::fromImage( img );
+			if ( g_aiImagePreviewLabel ) {
+				g_aiImagePreviewLabel->setPixmap( g_aiImageLastGenerated.scaled( 256, 256, Qt::KeepAspectRatio, Qt::SmoothTransformation ) );
+			}
+			if ( g_aiImageSaveBtn ) g_aiImageSaveBtn->setEnabled( true );
+			if ( g_aiImageApplyBtn ) g_aiImageApplyBtn->setEnabled( true );
+		}
+		AIImage_setStatus( "Mock placeholder" );
+		if ( g_aiImageGenerateBtn ) g_aiImageGenerateBtn->setEnabled( true );
+	}
+}
+
+static void AIImage_save(){
+	if ( g_aiImageLastGenerated.isNull() ) return;
+	QString base = g_qeglobals.m_userGamePath.empty()
+		? QDir::homePath()
+		: QString::fromUtf8( g_qeglobals.m_userGamePath.c_str() );
+	QString texturesDir = base + "/textures/ai_gen";
+	QDir().mkpath( texturesDir );
+	QString slug = slugFromPrompt( g_aiImagePromptEdit ? g_aiImagePromptEdit->toPlainText() : "" );
+	QString defPath = texturesDir + "/" + slug + ".tga";
+	QString path = QFileDialog::getSaveFileName( g_aiAssistantDock, "Save Generated Image", defPath, "TGA (*.tga);;PNG (*.png);;JPEG (*.jpg)" );
+	if ( path.isEmpty() ) return;
+	QImage img = g_aiImageLastGenerated.toImage();
+	if ( !img.save( path ) ) {
+		AIImage_setStatus( "Save failed" );
+		return;
+	}
+	g_aiImageLastPath = path;
+	// Create minimal shader for Q3 textures when saving to game directory
+	QString baseName = QFileInfo( path ).completeBaseName();
+	QString relPath = "textures/ai_gen/" + baseName;
+	if ( path.startsWith( base ) ) {
+		QString mid = path.mid( base.length() ).replace( '\\', '/' );
+		if ( mid.startsWith( '/' ) ) mid = mid.mid( 1 );
+		relPath = QString::fromUtf8( CopiedString( PathExtensionless( mid.toLatin1().constData() ) ).c_str() );
+	}
+	QString scriptsDir = base + "/scripts";
+	QDir().mkpath( scriptsDir );
+	QString shaderPath = scriptsDir + "/ai_gen.shader";
+	QFile shaderFile( shaderPath );
+	QString shaderName = relPath;
+	QString shaderEntry = "\n" + shaderName + "\n{\n\tqer_editorImage " + relPath + "\n\tmap " + relPath + "\n}\n";
+	bool append = true;
+	if ( shaderFile.exists() ) {
+		QString content = QString::fromUtf8( shaderFile.readAll() );
+		if ( content.contains( shaderName ) ) append = false;
+	}
+	if ( append && shaderFile.open( QIODevice::Append | QIODevice::Text ) ) {
+		shaderFile.write( shaderEntry.toUtf8() );
+		shaderFile.close();
+		GlobalShaderSystem().refresh();
+	}
+	AIImage_setStatus( "Saved to " + path );
+}
+
+static void AIImage_apply(){
+	if ( g_aiImageLastPath.isEmpty() ) return;
+	if ( g_qeglobals.m_userGamePath.empty() ) {
+		AIImage_setStatus( "No game path configured" );
+		return;
+	}
+	QString base = QString::fromUtf8( g_qeglobals.m_userGamePath.c_str() );
+	QString relPath = g_aiImageLastPath;
+	if ( relPath.startsWith( base ) )
+		relPath = relPath.mid( base.length() ).replace( '\\', '/' );
+	if ( relPath.startsWith( '/' ) ) relPath = relPath.mid( 1 );
+	CopiedString shaderNameStr( PathExtensionless( relPath.toLatin1().constData() ) );
+	QString shaderName = QString::fromUtf8( shaderNameStr.c_str() );
+	if ( !string_equal_prefix_nocase( shaderNameStr.c_str(), "textures/" ) )
+		shaderName = "textures/" + shaderName;
+	if ( GlobalSelectionSystem().countSelected() == 0 ) {
+		AIImage_setStatus( "Select faces to apply texture" );
+		return;
+	}
+	UndoableCommand undo( "textureSet" );
+	Select_SetShader_Undo( shaderName.toLatin1().constData() );
+	AIImage_setStatus( "Applied " + shaderName );
+}
+
 void AIAssistant_createDock( QMainWindow* window ){
 	if ( window == nullptr || g_aiAssistantDock != nullptr ) return;
 
 	g_aiAssistantDock = new QDockWidget( "AI Assistant", window );
 	g_aiAssistantDock->setObjectName( "dock_ai_assistant" );
 
-	auto* root = new QWidget( g_aiAssistantDock );
-	auto* vbox = new QVBoxLayout( root );
+	auto* tabs = new QTabWidget( g_aiAssistantDock );
+	auto* placementTab = new QWidget( tabs );
+	auto* vbox = new QVBoxLayout( placementTab );
 
 	// Agent
 	ensureDefaultAgents();
-	auto* providerGroup = new QGroupBox( "Agent", root );
+	auto* providerGroup = new QGroupBox( "Agent", placementTab );
 	auto* providerForm = new QFormLayout( providerGroup );
 	auto* agentRow = new QHBoxLayout();
-	g_aiAgentCombo = new QComboBox( root );
+	g_aiAgentCombo = new QComboBox( placementTab );
 	AIAssistant_refreshAgentCombo();
 	agentRow->addWidget( g_aiAgentCombo );
-	g_aiAddAgentBtn = new QPushButton( "+", root );
+	g_aiAddAgentBtn = new QPushButton( "+", placementTab );
 	g_aiAddAgentBtn->setMaximumWidth( 28 );
-	g_aiRemoveAgentBtn = new QPushButton( "-", root );
+	g_aiRemoveAgentBtn = new QPushButton( "-", placementTab );
 	g_aiRemoveAgentBtn->setMaximumWidth( 28 );
 	agentRow->addWidget( g_aiAddAgentBtn );
 	agentRow->addWidget( g_aiRemoveAgentBtn );
 	providerForm->addRow( "Agent", agentRow );
-	g_aiEndpointEdit = new QLineEdit( root );
+	g_aiEndpointEdit = new QLineEdit( placementTab );
 	g_aiEndpointEdit->setPlaceholderText( "https://api.openai.com/v1/chat/completions" );
-	g_aiModelEdit = new QLineEdit( root );
+	g_aiModelEdit = new QLineEdit( placementTab );
 	g_aiModelEdit->setPlaceholderText( "gpt-4o-mini" );
-	g_aiUseEnvVarCheck = new QCheckBox( "Use environment variable for API key", root );
+	g_aiUseEnvVarCheck = new QCheckBox( "Use environment variable for API key", placementTab );
 	g_aiUseEnvVarCheck->setChecked( true );
-	g_aiKeyEnvEdit = new QLineEdit( root );
+	g_aiKeyEnvEdit = new QLineEdit( placementTab );
 	g_aiKeyEnvEdit->setPlaceholderText( "OPENAI_API_KEY" );
-	g_aiApiKeyEdit = new QLineEdit( root );
+	g_aiApiKeyEdit = new QLineEdit( placementTab );
 	g_aiApiKeyEdit->setPlaceholderText( "API key (stored in preferences)" );
 	g_aiApiKeyEdit->setEchoMode( QLineEdit::Password );
 	g_aiApiKeyEdit->setEnabled( false );
@@ -1136,14 +1434,14 @@ void AIAssistant_createDock( QMainWindow* window ){
 	// Prompt
 	auto* promptGroup = new QGroupBox( "Prompt", root );
 	auto* promptLayout = new QVBoxLayout( promptGroup );
-	g_aiPromptEdit = new QPlainTextEdit( root );
+	g_aiPromptEdit = new QPlainTextEdit( placementTab );
 	g_aiPromptEdit->setPlaceholderText( "e.g. Place 3 props near this wall. Suggest cover objects." );
 	g_aiPromptEdit->setMaximumHeight( 80 );
-	g_aiIncludeSelection = new QCheckBox( "Include selection in context", root );
+	g_aiIncludeSelection = new QCheckBox( "Include selection in context", placementTab );
 	g_aiIncludeSelection->setChecked( true );
-	g_aiIncludeNearby = new QCheckBox( "Include nearby entities", root );
+	g_aiIncludeNearby = new QCheckBox( "Include nearby entities", placementTab );
 	g_aiIncludeNearby->setChecked( true );
-	g_aiDryRunCheck = new QCheckBox( "Dry run (preview only)", root );
+	g_aiDryRunCheck = new QCheckBox( "Dry run (preview only)", placementTab );
 	g_aiDryRunCheck->setChecked( true );
 	promptLayout->addWidget( g_aiPromptEdit );
 	promptLayout->addWidget( g_aiIncludeSelection );
@@ -1153,9 +1451,9 @@ void AIAssistant_createDock( QMainWindow* window ){
 
 	// Buttons
 	auto* btnRow = new QHBoxLayout();
-	auto* sendBtn = new QPushButton( "Send Request", root );
-	auto* applySelectedBtn = new QPushButton( "Apply Selected", root );
-	auto* applyAllBtn = new QPushButton( "Apply All", root );
+	auto* sendBtn = new QPushButton( "Send Request", placementTab );
+	auto* applySelectedBtn = new QPushButton( "Apply Selected", placementTab );
+	auto* applyAllBtn = new QPushButton( "Apply All", placementTab );
 	QObject::connect( sendBtn, &QPushButton::clicked, [](){ AIAssistant_sendRequest(); } );
 	QObject::connect( applySelectedBtn, &QPushButton::clicked, [](){ AIAssistant_applySelected(); } );
 	QObject::connect( applyAllBtn, &QPushButton::clicked, [](){ AIAssistant_applyAll(); } );
@@ -1167,30 +1465,93 @@ void AIAssistant_createDock( QMainWindow* window ){
 	vbox->addLayout( btnRow );
 
 	// Plan list
-	g_aiPlanList = new QListWidget( root );
+	g_aiPlanList = new QListWidget( placementTab );
 	g_aiPlanList->setSelectionMode( QAbstractItemView::ExtendedSelection );
 	g_aiPlanList->setMaximumHeight( 80 );
-	vbox->addWidget( new QLabel( "Placement plan:", root ) );
+	vbox->addWidget( new QLabel( "Placement plan:", placementTab ) );
 	vbox->addWidget( g_aiPlanList );
 
 	// Response
-	g_aiResponseEdit = new QPlainTextEdit( root );
+	g_aiResponseEdit = new QPlainTextEdit( placementTab );
 	g_aiResponseEdit->setReadOnly( true );
 	g_aiResponseEdit->setMaximumHeight( 120 );
-	vbox->addWidget( new QLabel( "Response:", root ) );
+	vbox->addWidget( new QLabel( "Response:", placementTab ) );
 	vbox->addWidget( g_aiResponseEdit );
 
 	// Log
-	g_aiLogEdit = new QPlainTextEdit( root );
+	g_aiLogEdit = new QPlainTextEdit( placementTab );
 	g_aiLogEdit->setReadOnly( true );
 	g_aiLogEdit->setMaximumHeight( 80 );
-	vbox->addWidget( new QLabel( "Log:", root ) );
+	vbox->addWidget( new QLabel( "Log:", placementTab ) );
 	vbox->addWidget( g_aiLogEdit );
 
-	g_aiStatusLabel = new QLabel( "Ready", root );
+	g_aiStatusLabel = new QLabel( "Ready", placementTab );
 	vbox->addWidget( g_aiStatusLabel );
 
-	g_aiAssistantDock->setWidget( root );
+	tabs->addTab( placementTab, "Placement" );
+
+	// Image Generation tab
+	auto* imgTab = new QWidget( tabs );
+	auto* imgVbox = new QVBoxLayout( imgTab );
+	auto* imgPromptGroup = new QGroupBox( "Prompt", imgTab );
+	auto* imgPromptLayout = new QVBoxLayout( imgPromptGroup );
+	g_aiImagePromptEdit = new QPlainTextEdit( imgTab );
+	g_aiImagePromptEdit->setPlaceholderText( "e.g. A stone wall texture, weathered and mossy" );
+	g_aiImagePromptEdit->setMaximumHeight( 60 );
+	imgPromptLayout->addWidget( g_aiImagePromptEdit );
+	imgVbox->addWidget( imgPromptGroup );
+
+	auto* imgProviderGroup = new QGroupBox( "Provider", imgTab );
+	auto* imgProviderForm = new QFormLayout( imgProviderGroup );
+	g_aiImageProviderCombo = new QComboBox( imgTab );
+	g_aiImageProviderCombo->addItems( { "iris", "DALL-E", "Mock" } );
+	g_aiImageIrisPathEdit = new QLineEdit( imgTab );
+	g_aiImageIrisPathEdit->setPlaceholderText( "e.g. /path/to/iris or iris.exe" );
+	g_aiImageIrisPathEdit->setText( QString::fromUtf8( g_aiImageIrisPath.c_str() ) );
+	g_aiImageIrisModelEdit = new QLineEdit( imgTab );
+	g_aiImageIrisModelEdit->setPlaceholderText( "flux-klein-4b" );
+	g_aiImageIrisModelEdit->setText( QString::fromUtf8( g_aiImageIrisModel.c_str() ) );
+	imgProviderForm->addRow( "Provider", g_aiImageProviderCombo );
+	imgProviderForm->addRow( "iris executable", g_aiImageIrisPathEdit );
+	imgProviderForm->addRow( "Model dir", g_aiImageIrisModelEdit );
+	imgVbox->addWidget( imgProviderGroup );
+
+	auto* imgBtnRow = new QHBoxLayout();
+	g_aiImageGenerateBtn = new QPushButton( "Generate", imgTab );
+	g_aiImageSaveBtn = new QPushButton( "Save to textures", imgTab );
+	g_aiImageApplyBtn = new QPushButton( "Apply to selection", imgTab );
+	g_aiImageSaveBtn->setEnabled( false );
+	g_aiImageApplyBtn->setEnabled( false );
+	QObject::connect( g_aiImageGenerateBtn, &QPushButton::clicked, [](){ AIImage_generate(); } );
+	QObject::connect( g_aiImageSaveBtn, &QPushButton::clicked, [](){ AIImage_save(); } );
+	QObject::connect( g_aiImageApplyBtn, &QPushButton::clicked, [](){ AIImage_apply(); } );
+	imgBtnRow->addWidget( g_aiImageGenerateBtn );
+	imgBtnRow->addWidget( g_aiImageSaveBtn );
+	imgBtnRow->addWidget( g_aiImageApplyBtn );
+	imgVbox->addLayout( imgBtnRow );
+
+	g_aiImagePreviewLabel = new QLabel( imgTab );
+	g_aiImagePreviewLabel->setMinimumSize( 128, 128 );
+	g_aiImagePreviewLabel->setAlignment( Qt::AlignCenter );
+	g_aiImagePreviewLabel->setStyleSheet( "QLabel { background: #2a2a2a; border: 1px solid #444; }" );
+	g_aiImagePreviewLabel->setText( "No image" );
+	imgVbox->addWidget( g_aiImagePreviewLabel );
+
+	g_aiImageStatusLabel = new QLabel( "Ready", imgTab );
+	imgVbox->addWidget( g_aiImageStatusLabel );
+
+	QObject::connect( g_aiImageIrisPathEdit, &QLineEdit::editingFinished, [](){
+		g_aiImageIrisPath = g_aiImageIrisPathEdit->text().trimmed().toLatin1().constData();
+		Preferences_Save();
+	} );
+	QObject::connect( g_aiImageIrisModelEdit, &QLineEdit::editingFinished, [](){
+		g_aiImageIrisModel = g_aiImageIrisModelEdit->text().trimmed().toLatin1().constData();
+		Preferences_Save();
+	} );
+
+	tabs->addTab( imgTab, "Image Generation" );
+
+	g_aiAssistantDock->setWidget( tabs );
 	window->addDockWidget( Qt::RightDockWidgetArea, g_aiAssistantDock );
 	g_aiAssistantDock->hide();
 }
@@ -1233,6 +1594,20 @@ void AIAssistant_destroy(){
 	g_aiPlanList = nullptr;
 	g_aiApplySelectedBtn = nullptr;
 	g_aiApplyAllBtn = nullptr;
+	g_aiImagePromptEdit = nullptr;
+	g_aiImageProviderCombo = nullptr;
+	g_aiImageIrisPathEdit = nullptr;
+	g_aiImageIrisModelEdit = nullptr;
+	g_aiImagePreviewLabel = nullptr;
+	g_aiImageStatusLabel = nullptr;
+	g_aiImageGenerateBtn = nullptr;
+	g_aiImageSaveBtn = nullptr;
+	g_aiImageApplyBtn = nullptr;
+	if ( g_aiImageProcess ) {
+		g_aiImageProcess->kill();
+		g_aiImageProcess->deleteLater();
+		g_aiImageProcess = nullptr;
+	}
 	if ( g_aiNetworkManager != nullptr ) {
 		delete g_aiNetworkManager;
 		g_aiNetworkManager = nullptr;
@@ -1257,6 +1632,8 @@ typedef FreeCaller<void(const StringImportCallback&), AIAssistantAgents_export> 
 void AIAssistant_constructPreferences( PreferencesPage& page ){
 	page.appendCheckBox( "", "Enable AI Assistant", g_aiAssistantEnabled );
 	page.appendEntry( "Active agent", g_aiAssistantActiveAgent );
+	page.appendEntry( "Image: iris path", g_aiImageIrisPath );
+	page.appendEntry( "Image: iris model", g_aiImageIrisModel );
 }
 
 void AIAssistant_constructPage( PreferenceGroup& group ){
@@ -1268,5 +1645,7 @@ void AIAssistant_registerPreferencesPage(){
 	GlobalPreferenceSystem().registerPreference( "AIAssistantEnabled", BoolImportStringCaller( g_aiAssistantEnabled ), BoolExportStringCaller( g_aiAssistantEnabled ) );
 	GlobalPreferenceSystem().registerPreference( "AIAssistantAgents", AIAssistantAgentsImportCaller(), AIAssistantAgentsExportCaller() );
 	GlobalPreferenceSystem().registerPreference( "AIAssistantActiveAgent", CopiedStringImportStringCaller( g_aiAssistantActiveAgent ), CopiedStringExportStringCaller( g_aiAssistantActiveAgent ) );
+	GlobalPreferenceSystem().registerPreference( "AIAssistantImageIrisPath", CopiedStringImportStringCaller( g_aiImageIrisPath ), CopiedStringExportStringCaller( g_aiImageIrisPath ) );
+	GlobalPreferenceSystem().registerPreference( "AIAssistantImageIrisModel", CopiedStringImportStringCaller( g_aiImageIrisModel ), CopiedStringExportStringCaller( g_aiImageIrisModel ) );
 	PreferencesDialog_addSettingsPage( makeCallbackF( AIAssistant_constructPage ) );
 }

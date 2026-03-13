@@ -48,16 +48,24 @@ The AI Assistant is an editor-side module that:
 - [x] Snap placement positions to grid on execution
 - [ ] Preview/ghost placement rendering
 
+### Image Generation (Implemented)
+
+- [x] **iris.c** – Local FLUX.2 image generation via subprocess (https://github.com/antirez/iris.c)
+- [x] **DALL-E** – OpenAI images API (requires `OPENAI_API_KEY`)
+- [x] **Mock** – Placeholder for testing
+- [x] Save to game textures with auto-generated Q3 shader
+- [x] Apply generated texture to selected faces
+
 ### Milestone 3 (Future)
 
 - [ ] WebSocket streaming
-- [ ] Local model support
+- [ ] Local model support (placement)
 - [ ] Semantic asset tagging
 - [ ] Multi-step agent workflows
 
 ## Usage
 
-1. **Preferences → Settings → AI Assistant**: Enable the feature and set the active agent
+1. **Preferences → Settings → AI Assistant**: Enable the feature, set the active agent, and optionally configure Image Generation (iris path, model)
 2. **Tools → AI Assistant** to open the dock
 3. Select an agent from the dropdown (or add one with **+**)
 4. For API keys: either set the env var (e.g. `OPENAI_API_KEY` for OpenAI, `GEMINI_API_KEY` for Gemini) or uncheck "Use environment variable" and enter the key directly (stored in preferences)
@@ -67,11 +75,23 @@ The AI Assistant is an editor-side module that:
 8. Review the placement plan list
 9. **Apply Selected** or **Apply All** to execute
 
+### Image Generation
+
+1. Open the **Image Generation** tab in the AI Assistant dock
+2. Enter a prompt (e.g. "A stone wall texture, weathered and mossy")
+3. Choose provider: **iris** (local), **DALL-E** (cloud), or **Mock**
+4. For **iris**: Set the path to the iris executable (build from https://github.com/antirez/iris.c) and model dir (e.g. `flux-klein-4b`)
+5. Click **Generate**
+6. **Save to textures** – Saves to `textures/ai_gen/` and creates a Q3 shader in `scripts/ai_gen.shader`
+7. **Apply to selection** – Applies the generated texture to selected brush faces
+
 ## Preferences
 
 - **Enable AI Assistant** – Master switch (Settings → AI Assistant)
 - **Active agent** – Default agent name
 - **Agents** – Stored as JSON; add/remove via dock **+** / **-** buttons. Each agent has: name, provider (OpenAI/Gemini/Mock), endpoint, model, API key source (env var or direct)
+- **Image: iris path** – Path to iris executable (from iris.c)
+- **Image: iris model** – Model directory (e.g. flux-klein-4b)
 
 ## Example Request/Response JSON
 
