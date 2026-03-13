@@ -39,11 +39,13 @@ The AI Assistant is an editor-side module that:
 - [x] Dry-run: parse plan, list actions, Apply Selected / Apply All
 - [x] Validation and UndoableCommand execution
 
-### Milestone 2 (Future)
+### Milestone 2 (Implemented)
 
-- [ ] Mock provider for offline testing
-- [ ] Gemini provider (different request format)
-- [ ] Asset catalog population (models, shaders from VFS)
+- [x] Mock provider for offline testing
+- [x] Gemini provider (generateContent API, x-goog-api-key auth)
+- [x] Asset catalog population (shaders from GlobalShaderSystem, models from VFS models/)
+- [x] Grid size in context (GetGridSize)
+- [x] Snap placement positions to grid on execution
 - [ ] Preview/ghost placement rendering
 
 ### Milestone 3 (Future)
@@ -58,7 +60,7 @@ The AI Assistant is an editor-side module that:
 1. **Preferences → Settings → AI Assistant**: Enable the feature and set the active agent
 2. **Tools → AI Assistant** to open the dock
 3. Select an agent from the dropdown (or add one with **+**)
-4. For API keys: either set the env var (e.g. `OPENAI_API_KEY`) or uncheck "Use environment variable" and enter the key directly (stored in preferences)
+4. For API keys: either set the env var (e.g. `OPENAI_API_KEY` for OpenAI, `GEMINI_API_KEY` for Gemini) or uncheck "Use environment variable" and enter the key directly (stored in preferences)
 5. Load a map, select an area or entity
 6. Enter a prompt, e.g. "Place 3 props near this wall"
 7. Click **Send Request**
@@ -145,10 +147,17 @@ Requires Qt5Network. Add to pkg-config path if needed.
 make radiant
 ```
 
+## Providers
+
+- **OpenAI** – Chat completions API, Bearer token auth
+- **Gemini** – Google AI generateContent API, x-goog-api-key header. Default endpoint: `generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`
+- **Mock** – Returns a static light placement for offline testing
+
 ## Testing
 
-1. Set `export OPENAI_API_KEY=sk-...`
+1. Set `export OPENAI_API_KEY=sk-...` or `export GEMINI_API_KEY=...`
 2. Run Radiant, load a map
 3. Tools → AI Assistant
-4. Send a simple prompt; verify response appears
-5. Apply one action; verify entity is created and Undo works
+4. Select agent (OpenAI, Gemini, or Mock)
+5. Send a simple prompt; verify response appears
+6. Apply one action; verify entity is created, snapped to grid, and Undo works

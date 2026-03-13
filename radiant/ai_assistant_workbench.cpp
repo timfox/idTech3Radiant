@@ -12,8 +12,10 @@
 #include "entity.h"
 #include "select.h"
 #include "eclasslib.h"
+#include "grid.h"
 #include "iundo.h"
 #include "ishaders.h"
+#include "ifilesystem.h"
 #include "preferences.h"
 #include "stream/stringstream.h"
 #include "stringio.h"
@@ -146,8 +148,15 @@ static void ensureDefaultAgents(){
 		a.useEnvVar = true;
 		a.keyEnvVar = "OPENAI_API_KEY";
 		g_aiAssistantAgents.push_back( a );
+		a.name = "Gemini";
+		a.provider = "Gemini";
+		a.endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+		a.model = "gemini-1.5-flash";
+		a.keyEnvVar = "GEMINI_API_KEY";
+		g_aiAssistantAgents.push_back( a );
 		a.name = "Mock";
 		a.provider = "Mock";
+		a.endpoint = "";
 		g_aiAssistantAgents.push_back( a );
 		g_aiAssistantActiveAgent = "OpenAI";
 	}
@@ -355,7 +364,7 @@ void AIAssistant_extractContext( EditorContextJson& ctx ){
 	                              GlobalSelectionSystem().countSelected() > 0 ? &selAabb : nullptr );
 	GlobalSceneGraph().traverse( collector );
 
-	ctx.gridSize = 8.0; // TODO: GridStatus_getGridSize();
+	ctx.gridSize = GetGridSize() > 0 ? static_cast<double>( GetGridSize() ) : 8.0;
 
 	// Collect allowed entities
 	class EntityCollector : public EntityClassVisitor
@@ -375,7 +384,36 @@ void AIAssistant_extractContext( EditorContextJson& ctx ){
 
 	ctx.allowedModels.clear();
 	ctx.allowedShaders.clear();
-	// TODO: populate asset catalog from VFS or shader list
+	// Populate shaders from GlobalShaderSystem
+	class ShaderNameCollector
+	{
+		std::vector<std::string>& m_shaders;
+		std::size_t m_limit;
+	public:
+		ShaderNameCollector( std::vector<std::string>& out, std::size_t limit = 500 ) : m_shaders( out ), m_limit( limit ){}
+		void operator()( const char* name ){
+			if ( m_shaders.size() < m_limit && name && *name )
+				m_shaders.push_back( name );
+		}
+	};
+	ShaderNameCollector shaderCollect( ctx.allowedShaders, 500 );
+	GlobalShaderSystem().foreachShaderName( makeCallback( shaderCollect ) );
+	// Populate models from VFS (models/ with common extensions)
+	class ModelPathCollector
+	{
+		std::vector<std::string>& m_models;
+		std::size_t m_limit;
+	public:
+		ModelPathCollector( std::vector<std::string>& out, std::size_t limit = 300 ) : m_models( out ), m_limit( limit ){}
+		void operator()( const char* path ){
+			if ( m_models.size() < m_limit && path && *path )
+				m_models.push_back( path );
+		}
+	};
+	ModelPathCollector modelCollect( ctx.allowedModels, 300 );
+	GlobalFileSystem().forEachFile( "models/", "ase", makeCallback( modelCollect ), 3 );
+	GlobalFileSystem().forEachFile( "models/", "md3", makeCallback( modelCollect ), 3 );
+	GlobalFileSystem().forEachFile( "models/", "obj", makeCallback( modelCollect ), 3 );
 }
 
 // --- Serialize EditorContext to JSON ---
@@ -548,13 +586,23 @@ ValidationResult validatePlacementAction( const PlacementActionJson& act, const 
 
 // --- Execution ---
 
+static double snapToGrid( double v, double grid ){
+	if ( grid <= 0 ) return v;
+	return std::floor( v / grid + 0.5 ) * grid;
+}
+
 bool executePlacementAction( const PlacementActionJson& act ){
 	if ( act.action == "reject" ) return true;
 
 	EntityClass* eclass = GlobalEntityClassManager().findOrInsert( act.classname.c_str(), false );
 	if ( eclass->unknown ) return false;
 
-	Vector3 origin( act.position.x, act.position.y, act.position.z );
+	double grid = GetGridSize() > 0 ? static_cast<double>( GetGridSize() ) : 8.0;
+	Vector3 origin(
+		snapToGrid( act.position.x, grid ),
+		snapToGrid( act.position.y, grid ),
+		snapToGrid( act.position.z, grid )
+	);
 
 	UndoableCommand undo( "aiPlacement" );
 
@@ -603,7 +651,7 @@ bool executePlacementAction( const PlacementActionJson& act ){
 
 // --- Provider: build request body for OpenAI/Gemini style ---
 
-static std::string buildOpenAIMessages( const std::string& systemPrompt, const std::string& userPrompt, const std::string& contextJson, const std::string& model = "gpt-4o-mini" ){
+static std::string buildOpenAIRequest( const std::string& systemPrompt, const std::string& userPrompt, const std::string& contextJson, const std::string& model ){
 	rapidjson::Document doc( rapidjson::kObjectType );
 	auto& alloc = doc.GetAllocator();
 
@@ -626,6 +674,48 @@ static std::string buildOpenAIMessages( const std::string& systemPrompt, const s
 	doc.AddMember( "messages", messagesArr, alloc );
 	doc.AddMember( "model", rapidjson::Value( model.c_str(), alloc ), alloc );
 	doc.AddMember( "temperature", 0.3, alloc );
+
+	rapidjson::StringBuffer buffer;
+	rapidjson::Writer<rapidjson::StringBuffer> writer( buffer );
+	doc.Accept( writer );
+	return std::string( buffer.GetString() );
+}
+
+static std::string buildGeminiRequest( const std::string& systemPrompt, const std::string& userPrompt, const std::string& contextJson ){
+	rapidjson::Document doc( rapidjson::kObjectType );
+	auto& alloc = doc.GetAllocator();
+
+	std::string userContent = userPrompt;
+	userContent += "\n\nEditor context (JSON):\n";
+	userContent += contextJson;
+
+	rapidjson::Value contentsArr( rapidjson::kArrayType );
+	{
+		rapidjson::Value contentObj( rapidjson::kObjectType );
+		rapidjson::Value partsArr( rapidjson::kArrayType );
+		{
+			rapidjson::Value partObj( rapidjson::kObjectType );
+			partObj.AddMember( "text", rapidjson::Value( userContent.c_str(), alloc ), alloc );
+			partsArr.PushBack( partObj, alloc );
+		}
+		contentObj.AddMember( "parts", partsArr, alloc );
+		contentsArr.PushBack( contentObj, alloc );
+	}
+	doc.AddMember( "contents", contentsArr, alloc );
+
+	rapidjson::Value sysInstr( rapidjson::kObjectType );
+	rapidjson::Value sysParts( rapidjson::kArrayType );
+	{
+		rapidjson::Value partObj( rapidjson::kObjectType );
+		partObj.AddMember( "text", rapidjson::Value( systemPrompt.c_str(), alloc ), alloc );
+		sysParts.PushBack( partObj, alloc );
+	}
+	sysInstr.AddMember( "parts", sysParts, alloc );
+	doc.AddMember( "systemInstruction", sysInstr, alloc );
+
+	rapidjson::Value genConfig( rapidjson::kObjectType );
+	genConfig.AddMember( "temperature", 0.3, alloc );
+	doc.AddMember( "generationConfig", genConfig, alloc );
 
 	rapidjson::StringBuffer buffer;
 	rapidjson::Writer<rapidjson::StringBuffer> writer( buffer );
@@ -816,13 +906,22 @@ void AIAssistant_sendRequest(){
 	QString userPrompt = g_aiPromptEdit ? g_aiPromptEdit->toPlainText().trimmed() : "Suggest placement for the current selection.";
 	if ( userPrompt.isEmpty() ) userPrompt = "Suggest 2-3 props to place near the camera or selection. Use only allowed entities.";
 
+	const bool isGemini = ( agent->provider == "Gemini" );
 	QString endpoint = agent->endpoint.c_str();
-	std::string model = agent->model.c_str();
-	std::string body = buildOpenAIMessages( systemPromptPlacement, userPrompt.toUtf8().constData(), contextJson, model );
+	if ( isGemini && endpoint.isEmpty() )
+		endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+	std::string body;
+	if ( isGemini )
+		body = buildGeminiRequest( systemPromptPlacement, userPrompt.toUtf8().constData(), contextJson );
+	else
+		body = buildOpenAIRequest( systemPromptPlacement, userPrompt.toUtf8().constData(), contextJson, agent->model.c_str() );
 
 	QNetworkRequest req( QUrl( endpoint ) );
 	req.setHeader( QNetworkRequest::ContentTypeHeader, "application/json" );
-	req.setRawHeader( "Authorization", ( "Bearer " + QByteArray( apiKey ) ) );
+	if ( isGemini )
+		req.setRawHeader( "x-goog-api-key", apiKey );
+	else
+		req.setRawHeader( "Authorization", ( "Bearer " + QByteArray( apiKey ) ) );
 
 	AIAssistant_setStatus( "Sending request..." );
 	AIAssistant_appendLog( "[INFO] " + QDateTime::currentDateTime().toString( Qt::ISODate ) + " Request to " + endpoint );
@@ -831,7 +930,7 @@ void AIAssistant_sendRequest(){
 	timer.start();
 
 	QNetworkReply* reply = g_aiNetworkManager->post( req, body.c_str() );
-	QObject::connect( reply, &QNetworkReply::finished, [reply, timer](){
+	QObject::connect( reply, &QNetworkReply::finished, [reply, timer, isGemini](){
 		if ( reply->error() != QNetworkReply::NoError ) {
 			AIAssistant_setStatus( "Error: " + reply->errorString() );
 			AIAssistant_appendLog( "[ERROR] " + reply->errorString() );
@@ -844,12 +943,25 @@ void AIAssistant_sendRequest(){
 		const qint64 ms = timer.elapsed();
 		AIAssistant_appendLog( "[INFO] Response received in " + QString::number( ms ) + " ms" );
 
-		// Parse content from OpenAI response
+		// Parse content from OpenAI or Gemini response
 		QJsonDocument jdoc = QJsonDocument::fromJson( data );
 		QString content;
 		if ( jdoc.isObject() ) {
 			QJsonObject obj = jdoc.object();
-			if ( obj.contains( "choices" ) && obj["choices"].isArray() ) {
+			if ( isGemini && obj.contains( "candidates" ) && obj["candidates"].isArray() ) {
+				QJsonArray candidates = obj["candidates"].toArray();
+				if ( !candidates.isEmpty() ) {
+					QJsonObject cand = candidates[0].toObject();
+					if ( cand.contains( "content" ) ) {
+						QJsonObject c = cand["content"].toObject();
+						if ( c.contains( "parts" ) && c["parts"].isArray() ) {
+							QJsonArray parts = c["parts"].toArray();
+							if ( !parts.isEmpty() && parts[0].isObject() && parts[0].toObject().contains( "text" ) )
+								content = parts[0].toObject()["text"].toString();
+						}
+					}
+				}
+			} else if ( !isGemini && obj.contains( "choices" ) && obj["choices"].isArray() ) {
 				QJsonArray choices = obj["choices"].toArray();
 				if ( !choices.isEmpty() ) {
 					QJsonObject choice = choices[0].toObject();
@@ -982,13 +1094,25 @@ void AIAssistant_createDock( QMainWindow* window ){
 		AIAssistant_saveCurrentAgent();
 		QString name = QInputDialog::getText( g_aiAssistantDock, "Add Agent", "Agent name:", QLineEdit::Normal, "New Agent" );
 		if ( name.isEmpty() ) return;
+		QStringList providers = { "OpenAI", "Gemini", "Mock" };
+		QString prov = QInputDialog::getItem( g_aiAssistantDock, "Add Agent", "Provider:", providers, 0, false );
+		if ( prov.isEmpty() ) return;
 		AIAssistantAgentConfig a;
 		a.name = name.trimmed().toLatin1().constData();
-		a.provider = "OpenAI";
-		a.endpoint = "https://api.openai.com/v1/chat/completions";
-		a.model = "gpt-4o-mini";
+		a.provider = prov.toLatin1().constData();
+		if ( prov == "Gemini" ) {
+			a.endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+			a.model = "gemini-1.5-flash";
+			a.keyEnvVar = "GEMINI_API_KEY";
+		} else if ( prov == "Mock" ) {
+			a.endpoint = "";
+			a.model = "";
+		} else {
+			a.endpoint = "https://api.openai.com/v1/chat/completions";
+			a.model = "gpt-4o-mini";
+			a.keyEnvVar = "OPENAI_API_KEY";
+		}
 		a.useEnvVar = true;
-		a.keyEnvVar = "OPENAI_API_KEY";
 		g_aiAssistantAgents.push_back( a );
 		AIAssistant_refreshAgentCombo();
 		g_aiAgentCombo->setCurrentText( a.name.c_str() );
