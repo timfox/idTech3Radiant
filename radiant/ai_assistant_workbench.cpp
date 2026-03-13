@@ -1122,6 +1122,14 @@ static void AIImage_generateIris( const QString& prompt, const QString& outPath 
 	QObject::connect( g_aiImageProcess, QOverload<int, QProcess::ExitStatus>::of( &QProcess::finished ), []( int code, QProcess::ExitStatus status ){
 		AIImage_onIrisFinished( code, status );
 	} );
+	QObject::connect( g_aiImageProcess, &QProcess::errorOccurred, []( QProcess::ProcessError err ){
+		if ( g_aiImageProcess ) {
+			g_aiImageProcess->deleteLater();
+			g_aiImageProcess = nullptr;
+		}
+		if ( g_aiImageGenerateBtn ) g_aiImageGenerateBtn->setEnabled( true );
+		AIImage_setStatus( "iris process error" );
+	} );
 	QStringList args;
 	args << "-d" << model << "-p" << prompt << "-o" << outPath;
 	g_aiImageProcess->start( irisExe, args );
@@ -1164,7 +1172,18 @@ static void AIImage_generateDalle( const QString& prompt ){
 		}
 		QByteArray data = reply->readAll();
 		QJsonDocument doc = QJsonDocument::fromJson( data );
+		if ( !doc.isObject() ) {
+			AIImage_setStatus( "Invalid DALL-E response" );
+			if ( g_aiImageGenerateBtn ) g_aiImageGenerateBtn->setEnabled( true );
+			return;
+		}
 		QJsonObject obj = doc.object();
+		if ( obj.contains( "error" ) ) {
+			QString errMsg = obj["error"].toObject()["message"].toString();
+			AIImage_setStatus( "DALL-E: " + ( errMsg.isEmpty() ? "API error" : errMsg ) );
+			if ( g_aiImageGenerateBtn ) g_aiImageGenerateBtn->setEnabled( true );
+			return;
+		}
 		QJsonArray dataArr = obj["data"].toArray();
 		if ( dataArr.isEmpty() ) {
 			AIImage_setStatus( "No image in DALL-E response" );
@@ -1286,29 +1305,32 @@ static void AIImage_save(){
 		return;
 	}
 	g_aiImageLastPath = path;
-	// Create minimal shader for Q3 textures when saving to game directory
-	QString baseName = QFileInfo( path ).completeBaseName();
-	QString relPath = "textures/ai_gen/" + baseName;
-	if ( path.startsWith( base ) ) {
-		QString mid = path.mid( base.length() ).replace( '\\', '/' );
-		if ( mid.startsWith( '/' ) ) mid = mid.mid( 1 );
-		relPath = QString::fromUtf8( CopiedString( PathExtensionless( mid.toLatin1().constData() ) ).c_str() );
-	}
-	QString scriptsDir = base + "/scripts";
-	QDir().mkpath( scriptsDir );
-	QString shaderPath = scriptsDir + "/ai_gen.shader";
-	QFile shaderFile( shaderPath );
-	QString shaderName = relPath;
-	QString shaderEntry = "\n" + shaderName + "\n{\n\tqer_editorImage " + relPath + "\n\tmap " + relPath + "\n}\n";
-	bool append = true;
-	if ( shaderFile.exists() ) {
-		QString content = QString::fromUtf8( shaderFile.readAll() );
-		if ( content.contains( shaderName ) ) append = false;
-	}
-	if ( append && shaderFile.open( QIODevice::Append | QIODevice::Text ) ) {
-		shaderFile.write( shaderEntry.toUtf8() );
-		shaderFile.close();
-		GlobalShaderSystem().refresh();
+	// Create minimal shader for Q3 textures only when saving to game directory
+	if ( !g_qeglobals.m_userGamePath.empty() ) {
+		QString baseNorm = QString::fromUtf8( g_qeglobals.m_userGamePath.c_str() ).replace( '\\', '/' );
+		if ( !baseNorm.endsWith( '/' ) ) baseNorm += '/';
+		if ( path.replace( '\\', '/' ).startsWith( baseNorm ) ) {
+			QString mid = path.mid( baseNorm.length() );
+			if ( mid.startsWith( '/' ) ) mid = mid.mid( 1 );
+			QString relPath = QString::fromUtf8( CopiedString( PathExtensionless( mid.toLatin1().constData() ) ).c_str() );
+			QString scriptsDir = baseNorm + "scripts";
+			QDir().mkpath( scriptsDir );
+			QString shaderPath = scriptsDir + "/ai_gen.shader";
+			QFile shaderFile( shaderPath );
+			QString shaderName = relPath;
+			QString shaderEntry = "\n" + shaderName + "\n{\n\tqer_editorImage " + relPath + "\n\tmap " + relPath + "\n}\n";
+			bool append = true;
+			if ( shaderFile.exists() && shaderFile.open( QIODevice::ReadOnly | QIODevice::Text ) ) {
+				QString content = QString::fromUtf8( shaderFile.readAll() );
+				shaderFile.close();
+				if ( content.contains( shaderName ) ) append = false;
+			}
+			if ( append && shaderFile.open( QIODevice::Append | QIODevice::Text ) ) {
+				shaderFile.write( shaderEntry.toUtf8() );
+				shaderFile.close();
+				GlobalShaderSystem().refresh();
+			}
+		}
 	}
 	AIImage_setStatus( "Saved to " + path );
 }
@@ -1319,10 +1341,14 @@ static void AIImage_apply(){
 		AIImage_setStatus( "No game path configured" );
 		return;
 	}
-	QString base = QString::fromUtf8( g_qeglobals.m_userGamePath.c_str() );
-	QString relPath = g_aiImageLastPath;
-	if ( relPath.startsWith( base ) )
-		relPath = relPath.mid( base.length() ).replace( '\\', '/' );
+	QString base = QString::fromUtf8( g_qeglobals.m_userGamePath.c_str() ).replace( '\\', '/' );
+	if ( !base.endsWith( '/' ) ) base += '/';
+	QString pathNorm = QString( g_aiImageLastPath ).replace( '\\', '/' );
+	if ( !pathNorm.startsWith( base ) ) {
+		AIImage_setStatus( "Save to textures first, then apply" );
+		return;
+	}
+	QString relPath = pathNorm.mid( base.length() );
 	if ( relPath.startsWith( '/' ) ) relPath = relPath.mid( 1 );
 	CopiedString shaderNameStr( PathExtensionless( relPath.toLatin1().constData() ) );
 	QString shaderName = QString::fromUtf8( shaderNameStr.c_str() );
