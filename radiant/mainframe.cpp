@@ -172,6 +172,7 @@
 #include "spreadsheet_workbench.h"
 #include "python_script_workbench.h"
 #include "scenegraphinspector.h"
+#include "ai_assistant.h"
 
 #include "colors.h"
 #include "tools.h"
@@ -2903,6 +2904,7 @@ void create_tools_menu( QMenuBar *menubar ){
 	create_menu_item_with_mnemonic( menu, "Video Player", "OpenCinematicPlayer" );
 	create_menu_item_with_mnemonic( menu, "Spreadsheet Editor", "OpenSpreadsheetWorkbench" );
 	create_menu_item_with_mnemonic( menu, "Python Script Editor", "OpenPythonScript" );
+	create_menu_item_with_mnemonic( menu, "AI Assistant", "OpenAIAssistant" );
 	menu->addSeparator();
 	create_menu_item_with_mnemonic( menu, "Q3Map2++ Help", "ToolQ3Map2Help" );
 	create_menu_item_with_mnemonic( menu, "QData3++ Help", "ToolQData3Help" );
@@ -3687,6 +3689,7 @@ void MainFrame::Create(){
 	Spreadsheet_createDock( window );
 	PythonScript_createDock( window );
 	ScenegraphInspector_createDock( window );
+	AIAssistant_createDock( window );
 
 	s_qe_every_second_timer.enable();
 
@@ -3750,6 +3753,7 @@ void MainFrame::Shutdown(){
 	Spreadsheet_stopAndRelease();
 	PythonScript_stopAndRelease();
 	ScenegraphInspector_destroyDock();
+	AIAssistant_destroy();
 	g_consoleDock = nullptr;
 	g_page_console = nullptr;
 
