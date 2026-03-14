@@ -354,11 +354,8 @@ void DoAbout(){
 			}
 
 			{
-				auto *label = new QLabel( "Radiant " RADIANT_VERSION "\n"
-				                         __DATE__ "\n\n"
-				                         RADIANT_ABOUTMSG "\n\n"
-				                         "This program is free software\n"
-				                         "licensed under the GNU GPL.\n"
+				auto *label = new QLabel( "Radiant\n" RADIANT_VERSION "\n"
+				                         __DATE__
 				                       );
 				hbox->addWidget( label );
 			}
@@ -368,20 +365,11 @@ void DoAbout(){
 				QObject::connect( buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept );
 				hbox->addWidget( buttons );
 				{
-					auto *button = buttons->addButton( "Credits", QDialogButtonBox::ButtonRole::NoRole );
-					QObject::connect( button, &QPushButton::clicked, [](){ OpenURL( StringStream( AppPath_get(), "credits.html" ) ); } );
-					button->setEnabled( false );
-				}
-				{
-					auto *button = buttons->addButton( "Changelog", QDialogButtonBox::ButtonRole::NoRole );
-					QObject::connect( button, &QPushButton::clicked, [](){ OpenURL( StringStream( AppPath_get(), "docs/changelog-custom.txt" ) ); } );
-				}
-				{
 					auto *button = buttons->addButton( "About Qt", QDialogButtonBox::ButtonRole::NoRole );
 					QObject::connect( button, &QPushButton::clicked, &QApplication::aboutQt );
 				}
 			}
-		}
+		}/*
 		{
 			{
 				auto *frame = new QGroupBox( "OpenGL Properties" );
@@ -403,7 +391,7 @@ void DoAbout(){
 					box->addWidget( textView );
 				}
 			}
-		}
+		}*/
 	}
 	dialog.exec();
 }

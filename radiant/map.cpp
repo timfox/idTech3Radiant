@@ -2423,8 +2423,13 @@ public:
 	}
 	void realise() override{
 		if ( --m_unrealised == 0 ) {
-			ASSERT_MESSAGE( !g_qeglobals.m_userGamePath.empty(), "maps_directory: user-game-path is empty" );
-			g_mapsPath = StringStream( g_qeglobals.m_userGamePath, "maps/" );
+			if ( !string_empty( GameToolsPath_get() ) ) {
+				g_mapsPath = StringStream( GameToolsPath_get(), "content/mapsrc/" );
+			}
+			else{
+				ASSERT_MESSAGE( !g_qeglobals.m_userGamePath.empty(), "maps_directory: user-game-path is empty" );
+				g_mapsPath = StringStream( g_qeglobals.m_userGamePath, "maps/" );
+			}
 			Q_mkdir( g_mapsPath.c_str() );
 		}
 	}

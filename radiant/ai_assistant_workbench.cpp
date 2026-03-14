@@ -10,6 +10,7 @@
 #include "map.h"
 #include "camwindow.h"
 #include "entity.h"
+#include "ientity.h"
 #include "select.h"
 #include "eclasslib.h"
 #include "grid.h"
@@ -17,6 +18,7 @@
 #include "ishaders.h"
 #include "ifilesystem.h"
 #include "preferences.h"
+#include "preferencesystem.h"
 #include "stream/stringstream.h"
 #include "stringio.h"
 #include "string/string.h"
@@ -58,7 +60,9 @@
 #include <QImage>
 #include <QPixmap>
 #include <QLabel>
+#include <QScrollBar>
 #include <QTemporaryFile>
+#include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
 
@@ -87,7 +91,7 @@ CopiedString g_aiImageIrisPath;
 CopiedString g_aiImageIrisModel;
 CopiedString g_aiImageDalleApiKey;
 QProcess* g_aiImageProcess{};
-QPixmap g_aiImageLastGenerated;
+QImage g_aiImageLastGenerated;
 QString g_aiImageLastPath;
 QPlainTextEdit* g_aiImagePromptEdit{};
 QComboBox* g_aiImageProviderCombo{};
@@ -260,6 +264,21 @@ struct PlacementPlanJson {
 	std::string summary;
 };
 
+class SelectionItemKeyValueCollector final : public Entity::Visitor
+{
+	SelectionItemJson& m_item;
+public:
+	SelectionItemKeyValueCollector( SelectionItemJson& item )
+		: m_item( item ){
+	}
+
+	void visit( const char* key, const char* value ) override {
+		if ( !string_empty( key ) && !string_empty( value ) ) {
+			m_item.keyvalues.emplace_back( key, value );
+		}
+	}
+};
+
 // --- Context extraction ---
 
 class AIContextCollector : public scene::Graph::Walker
@@ -307,10 +326,8 @@ public:
 				if ( !string_empty( val ) ) item.modelPath = val;
 			}
 		}
-		entity->forEachKeyValue( [&item]( const char* k, const char* v ){
-			if ( !string_empty( k ) && !string_empty( v ) )
-				item.keyvalues.emplace_back( k, v );
-		} );
+		SelectionItemKeyValueCollector keyValueCollector( item );
+		entity->forEachKeyValue( keyValueCollector );
 
 		// Angles
 		const char* angleVal = entity->getKeyValue( "angle" );
@@ -329,7 +346,7 @@ public:
 				item.scale = { s, s, s };
 		}
 
-		const double dist = ( instance.worldAABB().origin - m_cameraOrigin ).length();
+		const double dist = vector3_length( instance.worldAABB().origin - m_cameraOrigin );
 		const bool inRadius = dist <= m_nearbyRadius;
 		const bool inSelectionBox = m_hasSelectionBounds && m_selectionBounds;
 		// TODO: proper AABB overlap with selectionBounds
@@ -945,7 +962,7 @@ void AIAssistant_sendRequest(){
 	else
 		body = buildOpenAIRequest( systemPromptPlacement, userPrompt.toUtf8().constData(), contextJson, agent->model.c_str() );
 
-	QNetworkRequest req( QUrl( endpoint ) );
+	QNetworkRequest req{ QUrl( endpoint ) };
 	req.setHeader( QNetworkRequest::ContentTypeHeader, "application/json" );
 	if ( isGemini )
 		req.setRawHeader( "x-goog-api-key", apiKey );
@@ -958,7 +975,8 @@ void AIAssistant_sendRequest(){
 	QElapsedTimer timer;
 	timer.start();
 
-	QNetworkReply* reply = g_aiNetworkManager->post( req, body.c_str() );
+	const QByteArray requestBody = QByteArray::fromStdString( body );
+	QNetworkReply* reply = g_aiNetworkManager->post( req, requestBody );
 	QObject::connect( reply, &QNetworkReply::finished, [reply, timer, isGemini](){
 		if ( reply->error() != QNetworkReply::NoError ) {
 			AIAssistant_setStatus( "Error: " + reply->errorString() );
@@ -1097,9 +1115,9 @@ static void AIImage_onIrisFinished( int exitCode, QProcess::ExitStatus status ){
 		AIImage_setStatus( "Failed to load generated image" );
 		return;
 	}
-	g_aiImageLastGenerated = QPixmap::fromImage( img );
+	g_aiImageLastGenerated = img;
 	if ( g_aiImagePreviewLabel ) {
-		g_aiImagePreviewLabel->setPixmap( g_aiImageLastGenerated.scaled( 256, 256, Qt::KeepAspectRatio, Qt::SmoothTransformation ) );
+		g_aiImagePreviewLabel->setPixmap( QPixmap::fromImage( g_aiImageLastGenerated ).scaled( 256, 256, Qt::KeepAspectRatio, Qt::SmoothTransformation ) );
 		g_aiImagePreviewLabel->setToolTip( outPath );
 	}
 	if ( g_aiImageSaveBtn ) g_aiImageSaveBtn->setEnabled( true );
@@ -1159,7 +1177,7 @@ static void AIImage_generateDalle( const QString& prompt ){
 	body["n"] = 1;
 	body["size"] = "1024x1024";
 	body["response_format"] = "b64_json";
-	QNetworkRequest req( QUrl( "https://api.openai.com/v1/images/generations" ) );
+	QNetworkRequest req{ QUrl( "https://api.openai.com/v1/images/generations" ) };
 	req.setHeader( QNetworkRequest::ContentTypeHeader, "application/json" );
 	req.setRawHeader( "Authorization", QByteArray( "Bearer " ) + key );
 	QNetworkReply* reply = g_aiNetworkManager->post( req, QJsonDocument( body ).toJson() );
@@ -1210,8 +1228,7 @@ static void AIImage_generateDalle( const QString& prompt ){
 			if ( g_aiImageGenerateBtn ) g_aiImageGenerateBtn->setEnabled( true );
 			return;
 		}
-		QTemporaryFile tmp;
-		tmp.setSuffix( ".png" );
+		QTemporaryFile tmp( QDir::temp().filePath( "idtech3radiant-ai-XXXXXX.png" ) );
 		tmp.setAutoRemove( false );
 		if ( !tmp.open() ) {
 			AIImage_setStatus( "Failed to create temp file" );
@@ -1226,9 +1243,9 @@ static void AIImage_generateDalle( const QString& prompt ){
 			return;
 		}
 		g_aiImageLastPath = path;
-		g_aiImageLastGenerated = QPixmap::fromImage( img );
+		g_aiImageLastGenerated = img;
 		if ( g_aiImagePreviewLabel ) {
-			g_aiImagePreviewLabel->setPixmap( g_aiImageLastGenerated.scaled( 256, 256, Qt::KeepAspectRatio, Qt::SmoothTransformation ) );
+			g_aiImagePreviewLabel->setPixmap( QPixmap::fromImage( g_aiImageLastGenerated ).scaled( 256, 256, Qt::KeepAspectRatio, Qt::SmoothTransformation ) );
 			g_aiImagePreviewLabel->setToolTip( path );
 		}
 		if ( g_aiImageSaveBtn ) g_aiImageSaveBtn->setEnabled( true );
@@ -1251,8 +1268,7 @@ static void AIImage_generate(){
 	if ( g_aiImageApplyBtn ) g_aiImageApplyBtn->setEnabled( false );
 
 	if ( provider == "iris" ) {
-		QTemporaryFile tmp;
-		tmp.setSuffix( ".png" );
+		QTemporaryFile tmp( QDir::temp().filePath( "idtech3radiant-ai-XXXXXX.png" ) );
 		tmp.setAutoRemove( false );
 		if ( !tmp.open() ) {
 			AIImage_setStatus( "Failed to create temp file" );
@@ -1268,17 +1284,16 @@ static void AIImage_generate(){
 		// Mock: create a placeholder
 		QImage img( 512, 512, QImage::Format_RGB32 );
 		img.fill( QColor( 80, 80, 120 ) );
-		QTemporaryFile tmp;
-		tmp.setSuffix( ".png" );
+		QTemporaryFile tmp( QDir::temp().filePath( "idtech3radiant-ai-XXXXXX.png" ) );
 		tmp.setAutoRemove( false );
 		if ( tmp.open() ) {
 			QString path = tmp.fileName();
 			tmp.close();
 			img.save( path );
 			g_aiImageLastPath = path;
-			g_aiImageLastGenerated = QPixmap::fromImage( img );
+			g_aiImageLastGenerated = img;
 			if ( g_aiImagePreviewLabel ) {
-				g_aiImagePreviewLabel->setPixmap( g_aiImageLastGenerated.scaled( 256, 256, Qt::KeepAspectRatio, Qt::SmoothTransformation ) );
+				g_aiImagePreviewLabel->setPixmap( QPixmap::fromImage( g_aiImageLastGenerated ).scaled( 256, 256, Qt::KeepAspectRatio, Qt::SmoothTransformation ) );
 			}
 			if ( g_aiImageSaveBtn ) g_aiImageSaveBtn->setEnabled( true );
 			if ( g_aiImageApplyBtn ) g_aiImageApplyBtn->setEnabled( true );
@@ -1299,7 +1314,7 @@ static void AIImage_save(){
 	QString defPath = texturesDir + "/" + slug + ".tga";
 	QString path = QFileDialog::getSaveFileName( g_aiAssistantDock, "Save Generated Image", defPath, "TGA (*.tga);;PNG (*.png);;JPEG (*.jpg)" );
 	if ( path.isEmpty() ) return;
-	QImage img = g_aiImageLastGenerated.toImage();
+	QImage img = g_aiImageLastGenerated;
 	if ( !img.save( path ) ) {
 		AIImage_setStatus( "Save failed" );
 		return;
@@ -1362,6 +1377,8 @@ static void AIImage_apply(){
 	Select_SetShader_Undo( shaderName.toLatin1().constData() );
 	AIImage_setStatus( "Applied " + shaderName );
 }
+
+} // namespace
 
 void AIAssistant_createDock( QMainWindow* window ){
 	if ( window == nullptr || g_aiAssistantDock != nullptr ) return;
@@ -1458,7 +1475,7 @@ void AIAssistant_createDock( QMainWindow* window ){
 	vbox->addWidget( providerGroup );
 
 	// Prompt
-	auto* promptGroup = new QGroupBox( "Prompt", root );
+	auto* promptGroup = new QGroupBox( "Prompt", placementTab );
 	auto* promptLayout = new QVBoxLayout( promptGroup );
 	g_aiPromptEdit = new QPlainTextEdit( placementTab );
 	g_aiPromptEdit->setPlaceholderText( "e.g. Place 3 props near this wall. Suggest cover objects." );
@@ -1592,8 +1609,6 @@ void AIAssistant_open(){
 	g_aiAssistantDock->raise();
 	g_aiAssistantDock->activateWindow();
 }
-
-} // namespace
 
 void AIAssistant_toggleShown(){
 	if ( g_aiAssistantDock != nullptr )

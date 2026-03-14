@@ -127,6 +127,15 @@ enum class AudioCategory
 
 QHash<QString, AudioCategory> g_audioCategories;
 
+QUrl AudioWorkbench_mediaUrl( const QMediaContent& media ){
+	return media.request().url();
+}
+
+QString AudioWorkbench_mediaPath( const QMediaContent& media ){
+	const QUrl url = AudioWorkbench_mediaUrl( media );
+	return url.isLocalFile() ? url.toLocalFile() : url.toString();
+}
+
 AudioCategory AudioWorkbench_detectCategory( const QString& path ){
 	const QString normalized = QFileInfo( path ).fileName().toLower();
 	const QString lowerPath = path.toLower();
@@ -297,7 +306,7 @@ void AudioWorkbench_updateNowPlayingLabel(){
 	}
 
 	const auto media = g_audioPlaylist->media( index );
-	const auto filePath = media.canonicalUrl().isLocalFile() ? media.canonicalUrl().toLocalFile() : media.canonicalUrl().toString();
+	const auto filePath = AudioWorkbench_mediaPath( media );
 	const auto title = QFileInfo( filePath ).fileName();
 	g_audioNowPlayingLabel->setText( StringStream( "Now playing: ", title.toUtf8().constData() ).c_str() );
 }
@@ -346,7 +355,7 @@ void AudioWorkbench_saveAutosavePlaylist(){
 	out << "#EXTM3U\n";
 	for ( int i = 0; i < g_audioPlaylist->mediaCount(); ++i )
 	{
-		const auto url = g_audioPlaylist->media( i ).canonicalUrl();
+		const auto url = AudioWorkbench_mediaUrl( g_audioPlaylist->media( i ) );
 		out << ( url.isLocalFile() ? url.toLocalFile() : url.toString() ) << '\n';
 	}
 	AudioWorkbench_setSetting( "CurrentIndex", g_audioPlaylist->currentIndex() );
@@ -374,7 +383,7 @@ void AudioWorkbench_syncPlaylistView(){
 	for ( int i = 0; i < g_audioPlaylist->mediaCount(); ++i )
 	{
 		const auto media = g_audioPlaylist->media( i );
-		const auto url = media.canonicalUrl();
+		const auto url = AudioWorkbench_mediaUrl( media );
 		const auto path = url.isLocalFile() ? url.toLocalFile() : url.toString();
 		const QString absolute = QFileInfo( path ).absoluteFilePath();
 		const AudioCategory category = AudioWorkbench_categoryForPath( absolute );
@@ -448,7 +457,7 @@ QStringList AudioWorkbench_collectPlaylistPaths(){
 	}
 	for ( int i = 0; i < g_audioPlaylist->mediaCount(); ++i )
 	{
-		const auto url = g_audioPlaylist->media( i ).canonicalUrl();
+		const auto url = AudioWorkbench_mediaUrl( g_audioPlaylist->media( i ) );
 		if ( url.isLocalFile() ) {
 			paths.push_back( QFileInfo( url.toLocalFile() ).absoluteFilePath() );
 		}
@@ -873,7 +882,7 @@ void AudioWorkbench_createDock( QMainWindow* window ){
 		out << "#EXTM3U\n";
 		for ( int i = 0; i < g_audioPlaylist->mediaCount(); ++i )
 		{
-			const auto url = g_audioPlaylist->media( i ).canonicalUrl();
+			const auto url = AudioWorkbench_mediaUrl( g_audioPlaylist->media( i ) );
 			out << ( url.isLocalFile() ? url.toLocalFile() : url.toString() ) << '\n';
 		}
 		AudioWorkbench_setSetting( "LastPlaylist", path );
@@ -897,7 +906,7 @@ void AudioWorkbench_createDock( QMainWindow* window ){
 		out << "#EXTM3U\n";
 		for ( int i = 0; i < g_audioPlaylist->mediaCount(); ++i )
 		{
-			const auto url = g_audioPlaylist->media( i ).canonicalUrl();
+			const auto url = AudioWorkbench_mediaUrl( g_audioPlaylist->media( i ) );
 			if ( url.isLocalFile() ) {
 				out << base.relativeFilePath( url.toLocalFile() ) << '\n';
 			}
