@@ -36,6 +36,8 @@ enum class EBrushPrefab
 	Icosahedron,
 };
 
+class Brush;
+class AABB;
 class TextureProjection;
 class ContentsFlagsValue;
 class texdef_t;
@@ -44,8 +46,9 @@ namespace scene
 class Graph;
 class Node;
 }
+void Brush_ConstructCuboid( Brush& brush, const AABB& bounds, const char* shader, const TextureProjection& projection );
+const TextureProjection& TextureTransform_getDefault();
 void Scene_BrushConstructPrefab( scene::Graph& graph, EBrushPrefab type, std::size_t sides, bool option, const char* shader );
-class AABB;
 void Scene_BrushResize_Cuboid( scene::Node*& node, const AABB& bounds );
 void Brush_ConstructPlacehoderCuboid( scene::Node& node, const AABB& bounds );
 void Scene_BrushSetTexdef_Selected( scene::Graph& graph, const TextureProjection& projection, bool setBasis, bool resetBasis );

@@ -119,7 +119,7 @@ int ParseVertexL( FILE *input ){
 		Error( "Error: unexpected end of file" );
 	}
 
-	fread( &tshort, sizeof( tshort ), 1, input );
+	SafeRead( input, &tshort, sizeof( tshort ) );
 	bytesread += sizeof( tshort );
 	numverts = (int)tshort;
 
@@ -135,7 +135,7 @@ int ParseVertexL( FILE *input ){
 				Error( "Error: unexpected end of file" );
 			}
 
-			fread( &fverts[i][j], sizeof( float ), 1, input );
+			SafeRead( input, &fverts[i][j], sizeof( float ) );
 			bytesread += sizeof( float );
 		}
 	}
@@ -164,7 +164,7 @@ int ParseFaceL1( FILE *input ){
 		Error( "Error: unexpected end of file" );
 	}
 
-	fread( &tshort, sizeof( tshort ), 1, input );
+	SafeRead( input, &tshort, sizeof( tshort ) );
 	bytesread += sizeof( tshort );
 	numtris = (int)tshort;
 
@@ -180,7 +180,7 @@ int ParseFaceL1( FILE *input ){
 				Error( "Error: unexpected end of file" );
 			}
 
-			fread( &tshort, sizeof( tshort ), 1, input );
+			SafeRead( input, &tshort, sizeof( tshort ) );
 			bytesread += sizeof( tshort );
 			tris[i].v[j] = (int)tshort;
 		}
@@ -208,7 +208,7 @@ int ParseChunk( FILE *input ){
 		Error( "Error: unexpected end of file" );
 	}
 
-	fread( &type, sizeof( type ), 1, input );
+	SafeRead( input, &type, sizeof( type ) );
 	bytesread += sizeof( type );
 
 // chunk length
@@ -216,7 +216,7 @@ int ParseChunk( FILE *input ){
 		Error( "Error: unexpected end of file" );
 	}
 
-	fread( &length, sizeof( length ), 1, input );
+	SafeRead( input, &length, sizeof( length ) );
 	bytesread += sizeof( length );
 	w = length - 6;
 
@@ -241,7 +241,7 @@ int ParseChunk( FILE *input ){
 				Error( "Error: unexpected end of file" );
 			}
 
-			fread( &temp[i], 1, 1, input );
+			SafeRead( input, &temp[i], 1 );
 			i++;
 			w--;
 			bytesread++;
@@ -274,7 +274,7 @@ ParseSubchunk:
 				Error( "Error: unexpected end of file" );
 			}
 
-			fread( &temp, t, 1, input );
+			SafeRead( input, &temp, t );
 			bytesread += t;
 
 			w -= t;
@@ -311,7 +311,7 @@ void Load3DSTriangleList( char *filename, triangle_t **pptri, int *numtriangles,
 		exit( 0 );
 	}
 
-	fread( &tshort, sizeof( tshort ), 1, input );
+	SafeRead( input, &tshort, sizeof( tshort ) );
 
 // should only be MAIN3DS, but some files seem to start with EDIT3DS, with
 // no MAIN3DS

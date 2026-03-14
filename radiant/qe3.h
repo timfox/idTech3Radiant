@@ -33,6 +33,7 @@ void RunBSP( size_t buildIdx );
 void RunBatch( const std::vector<CopiedString>& commands );
 
 void QE_InitVFS();
+CopiedString QE_GetExtraResourceArgs();
 
 void QE_brushCountChanged();
 

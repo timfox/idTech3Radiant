@@ -1593,7 +1593,9 @@ tryDecompile:
 		    << " -v -game " << ( ( type && *type ) ? type : "quake3" )
 		    << " -fs_basepath " << Quoted( EnginePath_get() )
 		    << " -fs_homepath " << Quoted( g_qeglobals.m_userEnginePath )
-		    << " -fs_game " << gamename_get()
+		    << " -fs_game " << gamename_get();
+		const auto extraResourceArgs = QE_GetExtraResourceArgs();
+		str << extraResourceArgs
 		    << " -convert -format " << ( BrushType_getTexdefType( GlobalBrushCreator().getFormat() ) == TEXDEFTYPEID_QUAKE ? "map" : "map_bp" );
 		if ( path_extension_is( filename, "map" ) ) {
 			str << " -readmap ";
@@ -2275,7 +2277,9 @@ void map_autocaulk_selected(){
 		    << " -game quake3"
 		    << " -fs_basepath " << Quoted( EnginePath_get() )
 		    << " -fs_homepath " << Quoted( g_qeglobals.m_userEnginePath )
-		    << " -fs_game " << gamename_get()
+		    << " -fs_game " << gamename_get();
+		const auto extraResourceArgs = QE_GetExtraResourceArgs();
+		str << extraResourceArgs
 		    << " -autocaulk -fulldetail "
 		    << Quoted( filename );
 		// run

@@ -105,7 +105,7 @@ void LoadTRI( char *filename, triangle_t **pptri, int *numtriangles, mesh_node_t
 
 	iLevel = 0;
 
-	fread( &magic, sizeof( int ), 1, input );
+	SafeRead( input, &magic, sizeof( int ) );
 	if ( BigLong( magic ) != MAGIC ) {
 		Error( "%s is not a Alias object separated triangle file, magic number is wrong.", filename );
 	}
@@ -128,12 +128,12 @@ void LoadTRI( char *filename, triangle_t **pptri, int *numtriangles, mesh_node_t
 					/* a file, but this does allow you to do error checking */
 					/* (which I'm not doing) on a per character basis.      */
 					++i;
-					fread( &( name[i] ), sizeof( char ), 1, input );
+					SafeRead( input, &( name[i] ), sizeof( char ) );
 				} while ( name[i] != '\0' );
 
 //				indent();
 //				fprintf(stdout,"OBJECT START: %s\n",name);
-				fread( &count, sizeof( int ), 1, input );
+				SafeRead( input, &count, sizeof( int ) );
 				count = BigLong( count );
 				++iLevel;
 				if ( count != 0 ) {
@@ -143,7 +143,7 @@ void LoadTRI( char *filename, triangle_t **pptri, int *numtriangles, mesh_node_t
 					i = -1;
 					do {
 						++i;
-						fread( &( tex[i] ), sizeof( char ), 1, input );
+						SafeRead( input, &( tex[i] ), sizeof( char ) );
 					} while ( tex[i] != '\0' );
 
 //					indent();
@@ -163,7 +163,7 @@ void LoadTRI( char *filename, triangle_t **pptri, int *numtriangles, mesh_node_t
 				i = -1;
 				do {
 					++i;
-					fread( &( name[i] ), sizeof( char ), 1, input );
+					SafeRead( input, &( name[i] ), sizeof( char ) );
 				} while ( name[i] != '\0' );
 
 //				indent();
@@ -178,7 +178,7 @@ void LoadTRI( char *filename, triangle_t **pptri, int *numtriangles, mesh_node_t
 		for ( i = 0; i < count; ++i ) {
 			int j;
 
-			fread( &tri, sizeof( tf_triangle ), 1, input );
+			SafeRead( input, &tri, sizeof( tf_triangle ) );
 			ByteSwapTri( &tri );
 			for ( j = 0 ; j < 3 ; j++ )
 			{
@@ -240,7 +240,7 @@ void HandleHRCModel( triangle_t **triList, int *triangleCount, mesh_node_t **nod
 	float orig_translation[3];
 	int start_tri;
 	int pos,bit;
-	int vertIndexBase;
+	int vertIndexBase = 0;
 
 	// Update Node Info
 	if ( nodesList ) {

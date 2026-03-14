@@ -33,7 +33,9 @@
 #include "version.h"
 
 #include "ifilesystem.h"
+#include "ibrush.h"
 #include "ientity.h"
+#include "ipatch.h"
 #include "iselection.h"
 #include "ishaders.h"
 #include "ieclass.h"
@@ -87,18 +89,35 @@
 #include <QProcess>
 #include <QUrl>
 #include <QClipboard>
+#include <QCryptographicHash>
 #include <QTextStream>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QHash>
+#include <QHostAddress>
+#include <QPointer>
 #include <QRegularExpression>
+#include <QSet>
 #include <QOpenGLWidget>
 #include <QOpenGLFunctions>
 #include <QList>
+#include <QSpinBox>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QVector>
 #include <QComboBox>
+#include <QWindow>
+
+#if QT_CONFIG(vulkan)
+#include <QVulkanInstance>
+#include <QVulkanFunctions>
+#include <QVulkanWindow>
+#endif
 
 #include <algorithm>
+#include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <set>
 
@@ -125,6 +144,7 @@
 #include "autosave.h"
 #include "build.h"
 #include "brushmanip.h"
+#include "brushnode.h"
 #include "camwindow.h"
 #include "csg.h"
 #include "commands.h"
@@ -141,8 +161,10 @@
 #include "qtdlgs.h"
 #include "qtmisc.h"
 #include "help.h"
+#include "layers.h"
 #include "map.h"
 #include "mru.h"
+#include "patch.h"
 #include "patchmanip.h"
 #include "plugin.h"
 #include "pluginmanager.h"
@@ -1140,6 +1162,9 @@ bool Layout_experimentalFeaturesEnabled(){
 }
 
 Vector3 Add_entitySpawnOrigin();
+extern Vector3 g_cameraBookmarks_origin[5];
+extern Vector3 g_cameraBookmarks_angles[5];
+extern bool g_cameraBookmarks_valid[5];
 
 namespace
 {
@@ -1149,6 +1174,7 @@ QDockWidget* g_exp_assetsDock{};
 QDockWidget* g_exp_historyDock{};
 QDockWidget* g_exp_usdDock{};
 QDockWidget* g_exp_ecsDock{};
+QDockWidget* g_exp_syncDock{};
 QComboBox* g_exp_ecsCategoryCombo{};
 QListWidget* g_exp_ecsEntityList{};
 QLabel* g_exp_selectedCountLabel{};
@@ -1173,8 +1199,28 @@ QCheckBox* g_exp_uniformScale{};
 QListWidget* g_exp_assetsList{};
 QListWidget* g_exp_historyList{};
 QTreeWidget* g_exp_usdTree{};
+QLabel* g_exp_syncStateLabel{};
+QLabel* g_exp_syncClientsLabel{};
+QLabel* g_exp_syncRuntimeLabel{};
+QSpinBox* g_exp_syncPort{};
+QCheckBox* g_exp_syncAutoStart{};
+QCheckBox* g_exp_syncAutoSync{};
+QListWidget* g_exp_syncLog{};
 std::size_t g_exp_historyCounter{};
 bool g_exp_undoTrackerAttached{};
+QString g_exp_activePreviewBackend = "OpenGL";
+QString g_exp_lastRuntimeEvent = "No runtime messages yet";
+
+class ExperimentalPreviewHostWidget;
+class ExperimentalLiveSyncService;
+ExperimentalPreviewHostWidget* g_exp_previewHost{};
+ExperimentalLiveSyncService* g_exp_liveSyncService{};
+
+static void Experimental_refreshLiveSyncUi();
+static void Experimental_appendLiveSyncLog( const QString& message );
+static void Experimental_liveSyncPreviewBackendChanged();
+static QJsonArray Experimental_buildCameraBookmarksArray();
+static void Experimental_restoreCameraBookmarks( const QJsonValue& value );
 
 class ExperimentalPreviewWidget final : public QOpenGLWidget, protected QOpenGLFunctions
 {
@@ -1186,6 +1232,1038 @@ class ExperimentalPreviewWidget final : public QOpenGLWidget, protected QOpenGLF
 		glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 	}
 };
+
+static QString Experimental_normalisePreviewBackend( QString backend ){
+	backend = backend.trimmed();
+	return backend.compare( "Vulkan", Qt::CaseInsensitive ) == 0 ? "Vulkan" : "OpenGL";
+}
+
+static QString Experimental_requestedPreviewBackend(){
+	return Experimental_normalisePreviewBackend( QSettings().value( "Properties/Experimental/PreviewBackend", "OpenGL" ).toString() );
+}
+
+static void Experimental_storeRequestedPreviewBackend( const QString& backend ){
+	QSettings().setValue( "Properties/Experimental/PreviewBackend", Experimental_normalisePreviewBackend( backend ) );
+}
+
+#if QT_CONFIG(vulkan)
+class ExperimentalVulkanClearRenderer final : public QVulkanWindowRenderer
+{
+	QPointer<QVulkanWindow> m_window;
+	QVulkanDeviceFunctions* m_deviceFunctions = nullptr;
+public:
+	explicit ExperimentalVulkanClearRenderer( QVulkanWindow* window ) : m_window( window ){
+	}
+
+	void initResources() override {
+		if ( m_window == nullptr || m_window->vulkanInstance() == nullptr ) {
+			return;
+		}
+		m_deviceFunctions = m_window->vulkanInstance()->deviceFunctions( m_window->device() );
+	}
+
+	void startNextFrame() override {
+		if ( m_window == nullptr || m_deviceFunctions == nullptr ) {
+			return;
+		}
+
+		QVector<VkClearValue> clearValues;
+		clearValues.resize( m_window->depthStencilFormat() == VK_FORMAT_UNDEFINED ? 1 : 2 );
+		clearValues[0].color.float32[0] = 0.05f;
+		clearValues[0].color.float32[1] = 0.07f;
+		clearValues[0].color.float32[2] = 0.09f;
+		clearValues[0].color.float32[3] = 1.0f;
+		if ( clearValues.size() > 1 ) {
+			clearValues[1].depthStencil.depth = 1.0f;
+			clearValues[1].depthStencil.stencil = 0;
+		}
+
+		VkRenderPassBeginInfo rpBeginInfo = {};
+		rpBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		rpBeginInfo.renderPass = m_window->defaultRenderPass();
+		rpBeginInfo.framebuffer = m_window->currentFramebuffer();
+		rpBeginInfo.renderArea.extent.width = static_cast<uint32_t>( m_window->swapChainImageSize().width() );
+		rpBeginInfo.renderArea.extent.height = static_cast<uint32_t>( m_window->swapChainImageSize().height() );
+		rpBeginInfo.clearValueCount = static_cast<uint32_t>( clearValues.size() );
+		rpBeginInfo.pClearValues = clearValues.constData();
+
+		const VkCommandBuffer commandBuffer = m_window->currentCommandBuffer();
+		m_deviceFunctions->vkCmdBeginRenderPass( commandBuffer, &rpBeginInfo, VK_SUBPASS_CONTENTS_INLINE );
+		m_deviceFunctions->vkCmdEndRenderPass( commandBuffer );
+		m_window->frameReady();
+	}
+};
+
+class ExperimentalVulkanWindow final : public QVulkanWindow
+{
+public:
+	QVulkanWindowRenderer* createRenderer() override {
+		return new ExperimentalVulkanClearRenderer( this );
+	}
+};
+#endif
+
+class ExperimentalPreviewHostWidget final : public QWidget
+{
+	QComboBox* m_backendCombo = nullptr;
+	QLabel* m_statusLabel = nullptr;
+	QVBoxLayout* m_surfaceLayout = nullptr;
+	QWidget* m_surfaceWidget = nullptr;
+#if QT_CONFIG(vulkan)
+	QVulkanInstance* m_vulkanInstance = nullptr;
+	QVulkanWindow* m_vulkanWindow = nullptr;
+#endif
+public:
+	explicit ExperimentalPreviewHostWidget( QWidget* parent = nullptr ) : QWidget( parent ){
+		auto* vbox = new QVBoxLayout( this );
+		auto* form = new QFormLayout;
+		m_backendCombo = new QComboBox( this );
+		m_backendCombo->addItems( QStringList() << "OpenGL" << "Vulkan" );
+		m_statusLabel = new QLabel( this );
+		m_statusLabel->setWordWrap( true );
+		form->addRow( "Backend", m_backendCombo );
+		form->addRow( "Status", m_statusLabel );
+		vbox->addLayout( form );
+
+		auto* surfaceHost = new QWidget( this );
+		m_surfaceLayout = new QVBoxLayout( surfaceHost );
+		m_surfaceLayout->setContentsMargins( 0, 0, 0, 0 );
+		vbox->addWidget( surfaceHost, 1 );
+
+		m_backendCombo->setCurrentText( Experimental_requestedPreviewBackend() );
+		QObject::connect( m_backendCombo, &QComboBox::currentTextChanged, [this]( const QString& backend ){
+			rebuildPreview( backend );
+		} );
+
+		rebuildPreview( m_backendCombo->currentText() );
+	}
+
+	void setRequestedBackend( const QString& backend ){
+		const QString normalised = Experimental_normalisePreviewBackend( backend );
+		if ( m_backendCombo->currentText() == normalised ) {
+			rebuildPreview( normalised );
+			return;
+		}
+		m_backendCombo->setCurrentText( normalised );
+	}
+
+private:
+	void destroySurface(){
+		if ( m_surfaceWidget != nullptr ) {
+			m_surfaceLayout->removeWidget( m_surfaceWidget );
+			delete m_surfaceWidget;
+			m_surfaceWidget = nullptr;
+		}
+	#if QT_CONFIG(vulkan)
+		m_vulkanWindow = nullptr;
+		delete m_vulkanInstance;
+		m_vulkanInstance = nullptr;
+	#endif
+	}
+
+	void rebuildPreview( const QString& backend ){
+		const QString requestedBackend = Experimental_normalisePreviewBackend( backend );
+		Experimental_storeRequestedPreviewBackend( requestedBackend );
+		destroySurface();
+
+		QString status;
+		if ( requestedBackend == "Vulkan" ) {
+	#if QT_CONFIG(vulkan)
+			auto* instance = new QVulkanInstance;
+			if ( instance->create() ) {
+				auto* window = new ExperimentalVulkanWindow;
+				window->setVulkanInstance( instance );
+				auto* container = QWidget::createWindowContainer( window, this );
+				if ( container != nullptr ) {
+					container->setFocusPolicy( Qt::StrongFocus );
+					m_vulkanInstance = instance;
+					m_vulkanWindow = window;
+					m_surfaceWidget = container;
+					g_exp_activePreviewBackend = "Vulkan";
+					status = "Vulkan preview active.";
+					}
+					else{
+						delete window;
+						delete instance;
+						status = "Vulkan preview container could not be created. Falling back to OpenGL.";
+					}
+				}
+				else{
+					delete instance;
+					status = "Vulkan runtime is unavailable on this machine. Falling back to OpenGL.";
+				}
+	#else
+			status = "This Qt build does not expose Vulkan support. Falling back to OpenGL.";
+#endif
+		}
+
+		if ( m_surfaceWidget == nullptr ) {
+			m_surfaceWidget = new ExperimentalPreviewWidget;
+			g_exp_activePreviewBackend = "OpenGL";
+			if ( status.isEmpty() ) {
+				status = "OpenGL preview active.";
+			}
+		}
+
+		m_surfaceLayout->addWidget( m_surfaceWidget, 1 );
+		m_statusLabel->setText( status );
+		Experimental_liveSyncPreviewBackendChanged();
+		Experimental_refreshLiveSyncUi();
+	}
+};
+
+static QJsonArray Experimental_vector3ToJson( const Vector3& value ){
+	QJsonArray array;
+	array.append( value.x() );
+	array.append( value.y() );
+	array.append( value.z() );
+	return array;
+}
+
+static bool Experimental_tryParseVector3( const QJsonValue& value, Vector3& out ){
+	if ( !value.isArray() ) {
+		return false;
+	}
+	const QJsonArray array = value.toArray();
+	if ( array.size() < 3 ) {
+		return false;
+	}
+	out = Vector3( array[0].toDouble(), array[1].toDouble(), array[2].toDouble() );
+	return true;
+}
+
+static const char* Experimental_selectionModeName( SelectionSystem::EMode mode ){
+	switch ( mode )
+	{
+	case SelectionSystem::eEntity:
+		return "entity";
+	case SelectionSystem::ePrimitive:
+		return "primitive";
+	case SelectionSystem::eComponent:
+		return "component";
+	}
+	return "unknown";
+}
+
+static const char* Experimental_componentModeName( SelectionSystem::EComponentMode mode ){
+	switch ( mode )
+	{
+	case SelectionSystem::eDefault:
+		return "default";
+	case SelectionSystem::eVertex:
+		return "vertex";
+	case SelectionSystem::eEdge:
+		return "edge";
+	case SelectionSystem::eFace:
+		return "face";
+	}
+	return "unknown";
+}
+
+static const char* Experimental_manipulatorModeName( SelectionSystem::EManipulatorMode mode ){
+	switch ( mode )
+	{
+	case SelectionSystem::eTranslate:
+		return "translate";
+	case SelectionSystem::eRotate:
+		return "rotate";
+	case SelectionSystem::eScale:
+		return "scale";
+	case SelectionSystem::eSkew:
+		return "skew";
+	case SelectionSystem::eDrag:
+		return "drag";
+	case SelectionSystem::eClip:
+		return "clip";
+	case SelectionSystem::eBuild:
+		return "build";
+	case SelectionSystem::eUV:
+		return "uv";
+	}
+	return "unknown";
+}
+
+static QString Experimental_firstBrushShader( scene::Node& node );
+
+static QString Experimental_currentMapPath(){
+	if ( !Map_Valid( g_map ) || Map_Unnamed( g_map ) ) {
+		return {};
+	}
+	return QString::fromLatin1( Map_Name( g_map ) );
+}
+
+static QJsonObject Experimental_buildCameraState(){
+	QJsonObject camera;
+	if ( CamWnd* camwnd = GlobalCamera_getCamWnd() ) {
+		camera.insert( "origin", Experimental_vector3ToJson( Camera_getOrigin( *camwnd ) ) );
+		camera.insert( "angles", Experimental_vector3ToJson( Camera_getAngles( *camwnd ) ) );
+		camera.insert( "viewVector", Experimental_vector3ToJson( Camera_getViewVector( *camwnd ) ) );
+	}
+	return camera;
+}
+
+static QJsonObject Experimental_buildCameraBookmarksState( const QString& reason = QString() ){
+	QJsonObject state;
+	if ( !reason.isEmpty() ) {
+		state.insert( "reason", reason );
+	}
+	state.insert( "cameraBookmarks", Experimental_buildCameraBookmarksArray() );
+	return state;
+}
+
+static QJsonObject Experimental_buildSelectionState(){
+	QJsonObject selection;
+	selection.insert( "count", static_cast<int>( GlobalSelectionSystem().countSelected() ) );
+	selection.insert( "componentCount", static_cast<int>( GlobalSelectionSystem().countSelectedComponents() ) );
+	selection.insert( "mode", Experimental_selectionModeName( GlobalSelectionSystem().Mode() ) );
+	selection.insert( "componentMode", Experimental_componentModeName( GlobalSelectionSystem().ComponentMode() ) );
+	selection.insert( "manipulator", Experimental_manipulatorModeName( GlobalSelectionSystem().ManipulatorMode() ) );
+
+	if ( GlobalSelectionSystem().countSelected() > 0 ) {
+		const AABB bounds = GlobalSelectionSystem().getBoundsSelected();
+		if ( aabb_valid( bounds ) ) {
+			QJsonObject boundsJson;
+			boundsJson.insert( "origin", Experimental_vector3ToJson( bounds.origin ) );
+			boundsJson.insert( "extents", Experimental_vector3ToJson( bounds.extents ) );
+			selection.insert( "bounds", boundsJson );
+		}
+	}
+
+	QJsonArray items;
+	class SelectedVisitor final : public SelectionSystem::Visitor
+	{
+		QJsonArray& m_items;
+	public:
+		explicit SelectedVisitor( QJsonArray& items ) : m_items( items ){
+		}
+
+		void visit( scene::Instance& instance ) const override {
+			if ( m_items.size() >= 24 ) {
+				return;
+			}
+
+			scene::Node& node = instance.path().top();
+			QJsonObject item;
+			if ( Entity* entity = Node_getEntity( node ) ) {
+				item.insert( "type", "entity" );
+				item.insert( "classname", entity->getClassName() );
+				const char* name = entity->getKeyValue( "name" );
+				const char* targetname = entity->getKeyValue( "targetname" );
+				if ( name != nullptr && !string_empty( name ) ) {
+					item.insert( "name", QString::fromLatin1( name ) );
+				}
+				else if ( targetname != nullptr && !string_empty( targetname ) ) {
+					item.insert( "name", QString::fromLatin1( targetname ) );
+				}
+				else{
+					item.insert( "name", QString::fromLatin1( entity->getClassName() ) );
+				}
+			}
+			else if ( Node_getBrush( node ) != nullptr ) {
+				item.insert( "type", "brush" );
+				item.insert( "shader", Experimental_firstBrushShader( node ) );
+			}
+			else if ( Patch* patch = Node_getPatch( node ) ) {
+				item.insert( "type", "patch" );
+				item.insert( "shader", QString::fromLatin1( patch->GetShader() ) );
+			}
+			else{
+				item.insert( "type", "node" );
+			}
+
+			const AABB bounds = instance.worldAABB();
+			if ( aabb_valid( bounds ) ) {
+				item.insert( "origin", Experimental_vector3ToJson( bounds.origin ) );
+				item.insert( "extents", Experimental_vector3ToJson( bounds.extents ) );
+			}
+
+			m_items.append( item );
+		}
+	} visitor( items );
+
+	GlobalSelectionSystem().foreachSelected( visitor );
+	selection.insert( "items", items );
+	return selection;
+}
+
+static QJsonObject Experimental_buildSceneSummary(){
+	QJsonObject sceneSummary;
+	sceneSummary.insert( "projectRoot", QString::fromLatin1( GameToolsPath_get() ) );
+	sceneSummary.insert( "mapPath", Experimental_currentMapPath() );
+	sceneSummary.insert( "modified", Map_Modified( g_map ) );
+	sceneSummary.insert( "brushes", static_cast<int>( g_brushCount.get() ) );
+	sceneSummary.insert( "patches", static_cast<int>( g_patchCount.get() ) );
+	sceneSummary.insert( "entities", static_cast<int>( g_entityCount.get() ) );
+	sceneSummary.insert( "previewBackendRequested", Experimental_requestedPreviewBackend() );
+	sceneSummary.insert( "previewBackendActive", g_exp_activePreviewBackend );
+	if ( Layer* currentLayer = GlobalSceneGraph().currentLayer() ) {
+		sceneSummary.insert( "currentLayer", QString::fromLatin1( currentLayer->m_name.c_str() ) );
+	}
+
+	struct RuntimeSyncCounts
+	{
+		int streamingVolumes = 0;
+		int spawnAnchors = 0;
+		int props = 0;
+		int fxEntities = 0;
+	};
+
+	class RuntimeSyncWalker final : public scene::Graph::Walker
+	{
+		RuntimeSyncCounts& m_counts;
+	public:
+		explicit RuntimeSyncWalker( RuntimeSyncCounts& counts ) : m_counts( counts ){
+		}
+
+			bool pre( const scene::Path& path, scene::Instance& ) const override {
+				if ( Entity* entity = Node_getEntity( path.top() ) ) {
+				const char* classname = entity->getClassName();
+				if ( string_equal_prefix_nocase( classname, "trigger_level" ) || string_equal_prefix_nocase( classname, "trigger_stream" ) ) {
+					++m_counts.streamingVolumes;
+				}
+				if ( string_equal_prefix_nocase( classname, "env_spawn" ) || string_equal_prefix_nocase( classname, "info_player" ) ) {
+					++m_counts.spawnAnchors;
+				}
+				if ( string_equal_prefix_nocase( classname, "prop_" ) || string_equal_nocase( classname, "func_static" ) ) {
+					++m_counts.props;
+				}
+				if ( string_equal_prefix_nocase( classname, "env_" ) || string_equal_prefix_nocase( classname, "fx_" ) ) {
+					++m_counts.fxEntities;
+				}
+				}
+				return true;
+			}
+		};
+		RuntimeSyncCounts counts;
+	GlobalSceneGraph().traverse( RuntimeSyncWalker( counts ) );
+	sceneSummary.insert( "streamingVolumes", counts.streamingVolumes );
+	sceneSummary.insert( "spawnAnchors", counts.spawnAnchors );
+	sceneSummary.insert( "props", counts.props );
+	sceneSummary.insert( "fxEntities", counts.fxEntities );
+	return sceneSummary;
+}
+
+static QJsonObject Experimental_buildLiveSyncSnapshot( const QString& reason ){
+	QJsonObject payload;
+	payload.insert( "reason", reason );
+	payload.insert( "scene", Experimental_buildSceneSummary() );
+	payload.insert( "selection", Experimental_buildSelectionState() );
+	payload.insert( "camera", Experimental_buildCameraState() );
+	payload.insert( "bookmarks", Experimental_buildCameraBookmarksState() );
+	return payload;
+}
+
+static QJsonObject Experimental_buildLiveSyncEnvelope( const QString& type, const QJsonObject& payload = QJsonObject() ){
+	QJsonObject envelope;
+	envelope.insert( "type", type );
+	envelope.insert( "sentAt", QDateTime::currentDateTimeUtc().toString( Qt::ISODate ) );
+	envelope.insert( "editorVersion", RADIANT_VERSION );
+	envelope.insert( "payload", payload );
+	return envelope;
+}
+
+class ExperimentalLiveSyncService final : public QObject
+{
+	struct PeerState
+	{
+		QByteArray buffer;
+		bool handshakeComplete = false;
+		QString runtimeName;
+		QString runtimeRole;
+		QString runtimeBuild;
+		QDateTime lastMessageAt;
+	};
+
+	QTcpServer m_server;
+	QHash<QTcpSocket*, PeerState> m_peers;
+	QTimer m_sceneTimer;
+	QTimer m_selectionTimer;
+	QTimer m_cameraTimer;
+	bool m_autoSync = true;
+
+public:
+	explicit ExperimentalLiveSyncService( QObject* parent = nullptr ) : QObject( parent ){
+		m_sceneTimer.setSingleShot( true );
+		m_selectionTimer.setSingleShot( true );
+		m_cameraTimer.setSingleShot( true );
+
+		QObject::connect( &m_server, &QTcpServer::newConnection, [this](){ acceptConnections(); } );
+		QObject::connect( &m_sceneTimer, &QTimer::timeout, [this](){ sendSnapshot( "sceneChanged" ); } );
+		QObject::connect( &m_selectionTimer, &QTimer::timeout, [this](){ broadcastSelectionState( "selectionChanged" ); } );
+		QObject::connect( &m_cameraTimer, &QTimer::timeout, [this](){ broadcastCameraState( "cameraChanged" ); } );
+	}
+
+	~ExperimentalLiveSyncService() override {
+		stop();
+	}
+
+	bool isRunning() const {
+		return m_server.isListening();
+	}
+
+	quint16 port() const {
+		return m_server.serverPort();
+	}
+
+	int clientCount() const {
+		int count = 0;
+		for ( auto it = m_peers.constBegin(); it != m_peers.constEnd(); ++it )
+		{
+			if ( it.value().handshakeComplete && it.key() != nullptr && it.key()->state() == QAbstractSocket::ConnectedState ) {
+				++count;
+			}
+		}
+		return count;
+	}
+
+	QString clientSummary() const {
+		QStringList labels;
+		for ( auto it = m_peers.constBegin(); it != m_peers.constEnd(); ++it )
+		{
+			if ( !it.value().handshakeComplete || it.key() == nullptr || it.key()->state() != QAbstractSocket::ConnectedState ) {
+				continue;
+			}
+
+			QString label = it.value().runtimeName.trimmed();
+			if ( label.isEmpty() ) {
+				label = it.key()->peerAddress().toString();
+			}
+			if ( !it.value().runtimeRole.trimmed().isEmpty() ) {
+				label += QString( " (%1)" ).arg( it.value().runtimeRole.trimmed() );
+			}
+			labels.push_back( label );
+		}
+		return labels.join( ", " );
+	}
+
+	bool autoSync() const {
+		return m_autoSync;
+	}
+
+	void setAutoSync( bool enabled ){
+		m_autoSync = enabled;
+	}
+
+	bool start( quint16 requestedPort ){
+		if ( isRunning() && port() == requestedPort ) {
+			Experimental_refreshLiveSyncUi();
+			return true;
+		}
+
+		stop();
+		if ( !m_server.listen( QHostAddress::LocalHost, requestedPort ) ) {
+			Experimental_appendLiveSyncLog( QString( "Live Sync failed to start on ws://127.0.0.1:%1: %2" )
+				.arg( requestedPort )
+				.arg( m_server.errorString() ) );
+			Experimental_refreshLiveSyncUi();
+			return false;
+		}
+
+		Experimental_appendLiveSyncLog( QString( "Live Sync listening on ws://127.0.0.1:%1" ).arg( m_server.serverPort() ) );
+		Experimental_refreshLiveSyncUi();
+		return true;
+	}
+
+	void stop(){
+		for ( auto it = m_peers.begin(); it != m_peers.end(); ++it )
+		{
+			if ( it.key() != nullptr ) {
+				sendControlFrame( it.key(), 0x8, QByteArray() );
+				it.key()->disconnectFromHost();
+				it.key()->deleteLater();
+			}
+		}
+		m_peers.clear();
+		if ( m_server.isListening() ) {
+			m_server.close();
+			Experimental_appendLiveSyncLog( "Live Sync stopped." );
+		}
+		Experimental_refreshLiveSyncUi();
+	}
+
+	void scheduleSceneSync(){
+		if ( m_autoSync && clientCount() > 0 ) {
+			m_sceneTimer.start( 100 );
+		}
+	}
+
+	void scheduleSelectionSync(){
+		if ( m_autoSync && clientCount() > 0 ) {
+			m_selectionTimer.start( 60 );
+		}
+	}
+
+	void scheduleCameraSync(){
+		if ( m_autoSync && clientCount() > 0 ) {
+			m_cameraTimer.start( 45 );
+		}
+	}
+
+	void sendSnapshot( const QString& reason ){
+		if ( clientCount() == 0 ) {
+			return;
+		}
+		broadcastJson( Experimental_buildLiveSyncEnvelope( "snapshot", Experimental_buildLiveSyncSnapshot( reason ) ) );
+	}
+
+	void broadcastSelectionState( const QString& reason ){
+		if ( clientCount() == 0 ) {
+			return;
+		}
+		QJsonObject payload;
+		payload.insert( "reason", reason );
+		payload.insert( "selection", Experimental_buildSelectionState() );
+		broadcastJson( Experimental_buildLiveSyncEnvelope( "selection", payload ) );
+	}
+
+	void broadcastCameraState( const QString& reason ){
+		if ( clientCount() == 0 ) {
+			return;
+		}
+		QJsonObject payload;
+		payload.insert( "reason", reason );
+		payload.insert( "camera", Experimental_buildCameraState() );
+		broadcastJson( Experimental_buildLiveSyncEnvelope( "camera", payload ) );
+	}
+
+	void broadcastRendererState(){
+		if ( clientCount() == 0 ) {
+			return;
+		}
+		QJsonObject payload;
+		payload.insert( "requested", Experimental_requestedPreviewBackend() );
+		payload.insert( "active", g_exp_activePreviewBackend );
+		broadcastJson( Experimental_buildLiveSyncEnvelope( "renderer", payload ) );
+	}
+
+	void broadcastBookmarksState( const QString& reason ){
+		if ( clientCount() == 0 ) {
+			return;
+		}
+		broadcastJson( Experimental_buildLiveSyncEnvelope( "bookmarks", Experimental_buildCameraBookmarksState( reason ) ) );
+	}
+
+private:
+	static QByteArray websocketAcceptKey( const QByteArray& key ){
+		return QCryptographicHash::hash(
+			key.trimmed() + QByteArrayLiteral( "258EAFA5-E914-47DA-95CA-C5AB0DC85B11" ),
+			QCryptographicHash::Sha1 ).toBase64();
+	}
+
+	void acceptConnections(){
+		while ( m_server.hasPendingConnections() )
+		{
+			QTcpSocket* socket = m_server.nextPendingConnection();
+			if ( socket == nullptr ) {
+				continue;
+			}
+
+			m_peers.insert( socket, PeerState() );
+			QObject::connect( socket, &QTcpSocket::readyRead, [this, socket](){ handleReadyRead( socket ); } );
+			QObject::connect( socket, &QTcpSocket::disconnected, [this, socket](){ handleDisconnected( socket ); } );
+
+			Experimental_appendLiveSyncLog( QString( "Incoming runtime connection from %1" ).arg( socket->peerAddress().toString() ) );
+		}
+	}
+
+	void handleReadyRead( QTcpSocket* socket ){
+		auto it = m_peers.find( socket );
+		if ( it == m_peers.end() || socket == nullptr ) {
+			return;
+		}
+
+		it->buffer += socket->readAll();
+		if ( !it->handshakeComplete ) {
+			if ( !tryHandleHandshake( socket, it.value() ) ) {
+				return;
+			}
+		}
+
+		processFrames( socket, it.value() );
+	}
+
+	void handleDisconnected( QTcpSocket* socket ){
+		if ( socket == nullptr ) {
+			return;
+		}
+		if ( m_peers.remove( socket ) > 0 ) {
+			Experimental_appendLiveSyncLog( QString( "Runtime disconnected: %1" ).arg( socket->peerAddress().toString() ) );
+			Experimental_refreshLiveSyncUi();
+		}
+		socket->deleteLater();
+	}
+
+	bool tryHandleHandshake( QTcpSocket* socket, PeerState& peer ){
+		const int headerEnd = peer.buffer.indexOf( "\r\n\r\n" );
+		if ( headerEnd < 0 ) {
+			return false;
+		}
+
+		const QByteArray request = peer.buffer.left( headerEnd + 4 );
+		peer.buffer.remove( 0, headerEnd + 4 );
+
+		if ( !request.startsWith( "GET " ) ) {
+			Experimental_appendLiveSyncLog( "Rejected non-WebSocket runtime connection." );
+			socket->disconnectFromHost();
+			return false;
+		}
+
+		QByteArray websocketKey;
+		const QList<QByteArray> lines = request.split( '\n' );
+		for ( QByteArray line : lines )
+		{
+			line = line.trimmed();
+			if ( line.startsWith( "Sec-WebSocket-Key:" ) ) {
+				websocketKey = line.mid( QByteArray( "Sec-WebSocket-Key:" ).size() ).trimmed();
+			}
+		}
+
+		if ( websocketKey.isEmpty() ) {
+			Experimental_appendLiveSyncLog( "Rejected WebSocket connection with missing Sec-WebSocket-Key." );
+			socket->disconnectFromHost();
+			return false;
+		}
+
+		QByteArray response;
+		response += "HTTP/1.1 101 Switching Protocols\r\n";
+		response += "Upgrade: websocket\r\n";
+		response += "Connection: Upgrade\r\n";
+		response += "Sec-WebSocket-Accept: " + websocketAcceptKey( websocketKey ) + "\r\n\r\n";
+		socket->write( response );
+		peer.handshakeComplete = true;
+
+		Experimental_appendLiveSyncLog( QString( "Runtime handshake complete: ws://127.0.0.1:%1" ).arg( m_server.serverPort() ) );
+		Experimental_refreshLiveSyncUi();
+		sendJson( socket, Experimental_buildLiveSyncEnvelope( "hello", Experimental_buildLiveSyncSnapshot( "hello" ) ) );
+		broadcastRendererState();
+		return true;
+	}
+
+	void processFrames( QTcpSocket* socket, PeerState& peer ){
+		for (;; )
+		{
+			if ( peer.buffer.size() < 2 ) {
+				return;
+			}
+
+			const auto* data = reinterpret_cast<const unsigned char*>( peer.buffer.constData() );
+			const bool fin = ( data[0] & 0x80 ) != 0;
+			const quint8 opcode = data[0] & 0x0F;
+			const bool masked = ( data[1] & 0x80 ) != 0;
+			quint64 payloadLength = data[1] & 0x7F;
+			int offset = 2;
+
+			if ( !fin ) {
+				Experimental_appendLiveSyncLog( "Fragmented WebSocket frames are not supported; closing runtime connection." );
+				socket->disconnectFromHost();
+				return;
+			}
+
+			if ( payloadLength == 126 ) {
+				if ( peer.buffer.size() < 4 ) {
+					return;
+				}
+				payloadLength = ( static_cast<quint64>( data[2] ) << 8 ) | static_cast<quint64>( data[3] );
+				offset = 4;
+			}
+			else if ( payloadLength == 127 ) {
+				if ( peer.buffer.size() < 10 ) {
+					return;
+				}
+				payloadLength = 0;
+				for ( int i = 0; i < 8; ++i )
+				{
+					payloadLength = ( payloadLength << 8 ) | static_cast<quint64>( data[2 + i] );
+				}
+				offset = 10;
+			}
+
+			if ( payloadLength > static_cast<quint64>( std::numeric_limits<int>::max() ) ) {
+				Experimental_appendLiveSyncLog( "Received an oversized WebSocket payload; closing runtime connection." );
+				socket->disconnectFromHost();
+				return;
+			}
+
+			if ( masked ) {
+				if ( peer.buffer.size() < offset + 4 ) {
+					return;
+				}
+			}
+
+			const int frameSize = offset + ( masked ? 4 : 0 ) + static_cast<int>( payloadLength );
+			if ( peer.buffer.size() < frameSize ) {
+				return;
+			}
+
+			QByteArray payload = peer.buffer.mid( offset + ( masked ? 4 : 0 ), static_cast<int>( payloadLength ) );
+			if ( masked ) {
+				const QByteArray mask = peer.buffer.mid( offset, 4 );
+				for ( int i = 0; i < payload.size(); ++i )
+				{
+					payload[i] = payload[i] ^ mask[i % 4];
+				}
+			}
+			peer.buffer.remove( 0, frameSize );
+
+			if ( opcode == 0x8 ) {
+				sendControlFrame( socket, 0x8, QByteArray() );
+				socket->disconnectFromHost();
+				return;
+			}
+			if ( opcode == 0x9 ) {
+				sendControlFrame( socket, 0xA, payload );
+				continue;
+			}
+			if ( opcode == 0xA ) {
+				continue;
+			}
+			if ( opcode == 0x1 ) {
+				handleTextMessage( socket, payload );
+			}
+		}
+	}
+
+	void handleTextMessage( QTcpSocket* socket, const QByteArray& payload ){
+		auto peerIt = m_peers.find( socket );
+		if ( peerIt != m_peers.end() ) {
+			peerIt->lastMessageAt = QDateTime::currentDateTimeUtc();
+		}
+
+		QJsonParseError parseError;
+		const QJsonDocument doc = QJsonDocument::fromJson( payload, &parseError );
+		if ( parseError.error != QJsonParseError::NoError || !doc.isObject() ) {
+			Experimental_appendLiveSyncLog( QString( "Ignored malformed runtime JSON: %1" ).arg( parseError.errorString() ) );
+			return;
+		}
+
+		const QJsonObject message = doc.object();
+		const QString type = message.value( "type" ).toString();
+		const QJsonObject body = message.value( "payload" ).toObject();
+
+		if ( type == "hello" ) {
+			if ( peerIt != m_peers.end() ) {
+				peerIt->runtimeName = body.value( "name" ).toString();
+				peerIt->runtimeRole = body.value( "role" ).toString();
+				peerIt->runtimeBuild = body.value( "build" ).toString();
+			}
+			const QString label = !body.value( "name" ).toString().trimmed().isEmpty()
+				? body.value( "name" ).toString().trimmed()
+				: socket->peerAddress().toString();
+			g_exp_lastRuntimeEvent = QString( "Connected runtime: %1" ).arg( label );
+			Experimental_appendLiveSyncLog( QString( "Runtime hello from %1" ).arg( label ) );
+			Experimental_refreshLiveSyncUi();
+			sendJson( socket, Experimental_buildLiveSyncEnvelope( "hello", Experimental_buildLiveSyncSnapshot( "editorHello" ) ) );
+			return;
+		}
+
+		if ( type == "ping" ) {
+			sendJson( socket, Experimental_buildLiveSyncEnvelope( "pong", QJsonObject() ) );
+			return;
+		}
+
+		if ( type == "requestSnapshot" || type == "syncNow" ) {
+			sendJson( socket, Experimental_buildLiveSyncEnvelope( "snapshot", Experimental_buildLiveSyncSnapshot( "runtimeRequest" ) ) );
+			return;
+		}
+
+		if ( type == "requestSelection" ) {
+			QJsonObject payload;
+			payload.insert( "reason", "runtimeRequest" );
+			payload.insert( "selection", Experimental_buildSelectionState() );
+			sendJson( socket, Experimental_buildLiveSyncEnvelope( "selection", payload ) );
+			return;
+		}
+
+		if ( type == "requestRenderer" || type == "requestRendererState" ) {
+			QJsonObject payload;
+			payload.insert( "requested", Experimental_requestedPreviewBackend() );
+			payload.insert( "active", g_exp_activePreviewBackend );
+			sendJson( socket, Experimental_buildLiveSyncEnvelope( "renderer", payload ) );
+			return;
+		}
+
+		if ( type == "requestBookmarks" || type == "requestCameraBookmarks" ) {
+			sendJson( socket, Experimental_buildLiveSyncEnvelope( "bookmarks", Experimental_buildCameraBookmarksState( "runtimeRequest" ) ) );
+			return;
+		}
+
+		if ( type == "focusSelection" ) {
+			FocusAllViews();
+			sendJson( socket, Experimental_buildLiveSyncEnvelope( "ack", QJsonObject{ { "command", type } } ) );
+			return;
+		}
+
+		if ( type == "setPreviewBackend" ) {
+			const QString backend = Experimental_normalisePreviewBackend( body.value( "backend" ).toString() );
+			if ( g_exp_previewHost != nullptr ) {
+				g_exp_previewHost->setRequestedBackend( backend );
+			}
+			sendJson( socket, Experimental_buildLiveSyncEnvelope( "ack", QJsonObject{ { "command", type }, { "backend", backend } } ) );
+			return;
+		}
+
+		if ( type == "runtimeCamera" || type == "setCamera" ) {
+			if ( CamWnd* camwnd = GlobalCamera_getCamWnd() ) {
+				Vector3 origin;
+				Vector3 angles;
+				bool changed = false;
+				if ( Experimental_tryParseVector3( body.value( "origin" ), origin ) ) {
+					Camera_setOrigin( *camwnd, origin );
+					changed = true;
+				}
+				if ( Experimental_tryParseVector3( body.value( "angles" ), angles ) ) {
+					Camera_setAngles( *camwnd, angles );
+					changed = true;
+				}
+				if ( changed ) {
+					CamWnd_Update( *camwnd );
+					UpdateAllWindows();
+					Experimental_appendLiveSyncLog( "Applied runtime camera transform." );
+					sendJson( socket, Experimental_buildLiveSyncEnvelope( "camera", QJsonObject{ { "camera", Experimental_buildCameraState() } } ) );
+				}
+			}
+			return;
+		}
+
+		if ( type == "storeBookmark" ) {
+			const int index = body.value( "index" ).toInt( -1 );
+			if ( index >= 0 && index < 5 ) {
+				CameraBookmark_store( static_cast<std::size_t>( index ) );
+				broadcastBookmarksState( "runtimeStore" );
+				sendJson( socket, Experimental_buildLiveSyncEnvelope( "bookmarks", Experimental_buildCameraBookmarksState( "runtimeStore" ) ) );
+			}
+			return;
+		}
+
+		if ( type == "recallBookmark" ) {
+			const int index = body.value( "index" ).toInt( -1 );
+			if ( index >= 0 && index < 5 ) {
+				CameraBookmark_recall( static_cast<std::size_t>( index ) );
+				sendJson( socket, Experimental_buildLiveSyncEnvelope( "camera", QJsonObject{ { "camera", Experimental_buildCameraState() } } ) );
+			}
+			return;
+		}
+
+		const QString messageText = body.value( "message" ).toString();
+		if ( type == "runtimeEvent" || type == "runtimeState" ) {
+			g_exp_lastRuntimeEvent = messageText.isEmpty() ? type : messageText;
+			Experimental_appendLiveSyncLog( QString( "Runtime: %1" ).arg( g_exp_lastRuntimeEvent ) );
+			Experimental_refreshLiveSyncUi();
+			return;
+		}
+
+		Experimental_appendLiveSyncLog( QString( "Ignored runtime message of type '%1'." ).arg( type ) );
+	}
+
+	void sendJson( QTcpSocket* socket, const QJsonObject& object ){
+		if ( socket == nullptr || socket->state() != QAbstractSocket::ConnectedState ) {
+			return;
+		}
+		sendDataFrame( socket, 0x1, QJsonDocument( object ).toJson( QJsonDocument::Compact ) );
+	}
+
+	void broadcastJson( const QJsonObject& object ){
+		const QByteArray payload = QJsonDocument( object ).toJson( QJsonDocument::Compact );
+		for ( auto it = m_peers.begin(); it != m_peers.end(); ++it )
+		{
+			if ( it.value().handshakeComplete ) {
+				sendDataFrame( it.key(), 0x1, payload );
+			}
+		}
+	}
+
+	void sendControlFrame( QTcpSocket* socket, quint8 opcode, const QByteArray& payload ){
+		sendDataFrame( socket, opcode, payload );
+	}
+
+	void sendDataFrame( QTcpSocket* socket, quint8 opcode, const QByteArray& payload ){
+		if ( socket == nullptr || socket->state() != QAbstractSocket::ConnectedState ) {
+			return;
+		}
+
+		QByteArray frame;
+		frame.append( static_cast<char>( 0x80 | opcode ) );
+		if ( payload.size() < 126 ) {
+			frame.append( static_cast<char>( payload.size() ) );
+		}
+		else if ( payload.size() <= 0xFFFF ) {
+			frame.append( static_cast<char>( 126 ) );
+			frame.append( static_cast<char>( ( payload.size() >> 8 ) & 0xFF ) );
+			frame.append( static_cast<char>( payload.size() & 0xFF ) );
+		}
+		else{
+			frame.append( static_cast<char>( 127 ) );
+			const quint64 size = static_cast<quint64>( payload.size() );
+			for ( int shift = 56; shift >= 0; shift -= 8 )
+			{
+				frame.append( static_cast<char>( ( size >> shift ) & 0xFF ) );
+			}
+		}
+		frame.append( payload );
+		socket->write( frame );
+	}
+};
+
+static void Experimental_appendLiveSyncLog( const QString& message ){
+	const QString stamped = QString( "[%1] %2" )
+		.arg( QDateTime::currentDateTime().toString( "HH:mm:ss" ) )
+		.arg( message );
+	if ( g_exp_syncLog != nullptr ) {
+		g_exp_syncLog->addItem( stamped );
+		while ( g_exp_syncLog->count() > 200 )
+		{
+			delete g_exp_syncLog->takeItem( 0 );
+		}
+		g_exp_syncLog->scrollToBottom();
+	}
+	globalOutputStream() << stamped.toLatin1().constData() << '\n';
+}
+
+static void Experimental_refreshLiveSyncUi(){
+	if ( g_exp_syncStateLabel != nullptr ) {
+		if ( g_exp_liveSyncService != nullptr && g_exp_liveSyncService->isRunning() ) {
+			g_exp_syncStateLabel->setText( QString( "Listening on ws://127.0.0.1:%1" ).arg( g_exp_liveSyncService->port() ) );
+		}
+		else{
+			g_exp_syncStateLabel->setText( "Stopped" );
+		}
+	}
+	if ( g_exp_syncClientsLabel != nullptr ) {
+		const int clients = g_exp_liveSyncService != nullptr ? g_exp_liveSyncService->clientCount() : 0;
+		g_exp_syncClientsLabel->setText( QString::number( clients ) );
+		g_exp_syncClientsLabel->setToolTip( g_exp_liveSyncService != nullptr ? g_exp_liveSyncService->clientSummary() : QString() );
+	}
+	if ( g_exp_syncRuntimeLabel != nullptr ) {
+		g_exp_syncRuntimeLabel->setText( g_exp_lastRuntimeEvent );
+		g_exp_syncRuntimeLabel->setToolTip( QString( "Preview backend: %1 active, %2 requested" )
+			.arg( g_exp_activePreviewBackend )
+			.arg( Experimental_requestedPreviewBackend() ) );
+	}
+}
+
+static void Experimental_liveSyncSceneChanged(){
+	if ( g_exp_liveSyncService != nullptr ) {
+		g_exp_liveSyncService->scheduleSceneSync();
+	}
+}
+
+static void Experimental_liveSyncSelectionChanged(){
+	if ( g_exp_liveSyncService != nullptr ) {
+		g_exp_liveSyncService->scheduleSelectionSync();
+	}
+}
+
+static void Experimental_liveSyncCameraChanged(){
+	if ( g_exp_liveSyncService != nullptr ) {
+		g_exp_liveSyncService->scheduleCameraSync();
+	}
+}
+
+static void Experimental_liveSyncPreviewBackendChanged(){
+	if ( g_exp_liveSyncService != nullptr ) {
+		g_exp_liveSyncService->broadcastRendererState();
+	}
+}
 
 class ExperimentalUndoTracker final : public UndoTracker
 {
@@ -1337,6 +2415,7 @@ void Experimental_selectionChanged( const Selectable& ){
 	// Defer refresh: selection callbacks run before onSelectedChanged updates m_selection,
 	// so firstSelected() would assert if we ran synchronously when selecting the first item.
 	QTimer::singleShot( 0, [](){ Experimental_refreshSelection(); } );
+	Experimental_liveSyncSelectionChanged();
 }
 
 void Experimental_applySelectedShader(){
@@ -1388,6 +2467,9 @@ void Experimental_toggleAssetsDock_impl(){
 }
 void Experimental_toggleHistoryDock_impl(){
 	Experimental_toggleDock( g_exp_historyDock );
+}
+void Experimental_toggleSyncDock_impl(){
+	Experimental_toggleDock( g_exp_syncDock );
 }
 void Experimental_toggleUSDDock_impl(){
 	Experimental_toggleDock( g_exp_usdDock );
@@ -1530,6 +2612,1027 @@ static QString usdSanitizeName( const char* name ){
 	return s.isEmpty() ? "unnamed" : s;
 }
 
+struct ExperimentalSceneHierarchyEntry
+{
+	QString name;
+	QString parent;
+	QString type;
+};
+
+struct MayaAsciiNode
+{
+	QString name;
+	QString parent;
+	QString radiantClassname;
+	QString radiantNodeType;
+	QString radiantShader;
+	QString radiantEntityJson;
+	QString radiantSceneJson;
+	QString radiantPatchJson;
+	Vector3 translation{ 0, 0, 0 };
+	Vector3 rotation{ 0, 0, 0 };
+	Vector3 scale{ 1, 1, 1 };
+	Vector3 size{ 16, 16, 16 };
+	int patchWidth = 3;
+	int patchHeight = 3;
+	bool hasGeometry = false;
+};
+
+struct MayaAsciiCreator
+{
+	QString type;
+	double width = 1;
+	double height = 1;
+	double depth = 1;
+	int subdivX = 1;
+	int subdivY = 1;
+};
+
+struct MayaResolvedTransform
+{
+	Vector3 translation{ 0, 0, 0 };
+	Vector3 rotation{ 0, 0, 0 };
+	Vector3 scale{ 1, 1, 1 };
+};
+
+static QString Experimental_escapeMayaString( QString value ){
+	value.replace( '\\', "\\\\" );
+	value.replace( '"', "\\\"" );
+	return value;
+}
+
+static QString Experimental_unescapeMayaString( QString value ){
+	value.replace( "\\\"", "\"" );
+	value.replace( "\\\\", "\\" );
+	return value;
+}
+
+static QString Experimental_mayaSanitizeName( const QString& name ){
+	QString sanitized;
+	for ( const QChar ch : name ) {
+		if ( ch.isLetterOrNumber() || ch == '_' ) {
+			sanitized += ch;
+		}
+		else if ( ch == ' ' || ch == '-' || ch == '.' || ch == ':' || ch == '|' || ch == '/' ) {
+			sanitized += '_';
+		}
+	}
+	if ( sanitized.isEmpty() ) {
+		sanitized = "node";
+	}
+	if ( sanitized.front().isDigit() ) {
+		sanitized.prepend( "n_" );
+	}
+	return sanitized;
+}
+
+static QString Experimental_makeUniqueMayaName( const QString& name, QSet<QString>& usedNames ){
+	const QString base = Experimental_mayaSanitizeName( name );
+	QString candidate = base;
+	int suffix = 1;
+	while ( usedNames.contains( candidate ) ) {
+		candidate = base + "_" + QString::number( suffix++ );
+	}
+	usedNames.insert( candidate );
+	return candidate;
+}
+
+static void Experimental_populateSceneHierarchyTree( const QVector<ExperimentalSceneHierarchyEntry>& entries ){
+	if ( g_exp_usdTree == nullptr ) {
+		return;
+	}
+
+	g_exp_usdTree->clear();
+
+	QHash<QString, QTreeWidgetItem*> items;
+	for ( const auto& entry : entries ) {
+		auto* item = new QTreeWidgetItem( QStringList() << entry.name << entry.type );
+		item->setToolTip( 0, entry.parent.isEmpty() ? entry.type : QString( "%1 under %2" ).arg( entry.type, entry.parent ) );
+		if ( !entry.parent.isEmpty() && items.contains( entry.parent ) ) {
+			items.value( entry.parent )->addChild( item );
+		}
+		else{
+			g_exp_usdTree->addTopLevelItem( item );
+		}
+		items.insert( entry.name, item );
+	}
+
+	g_exp_usdTree->expandAll();
+	if ( g_exp_usdDock != nullptr ) {
+		g_exp_usdDock->show();
+	}
+}
+
+static Vector3 Experimental_componentMultiply( const Vector3& a, const Vector3& b ){
+	return Vector3( a.x() * b.x(), a.y() * b.y(), a.z() * b.z() );
+}
+
+static Vector3 Experimental_componentAbs( const Vector3& value ){
+	return Vector3( std::fabs( value.x() ), std::fabs( value.y() ), std::fabs( value.z() ) );
+}
+
+static bool Experimental_vectorNearlyEqual( const Vector3& value, const Vector3& target, double epsilon = 0.0001 ){
+	return std::fabs( value.x() - target.x() ) < epsilon
+	    && std::fabs( value.y() - target.y() ) < epsilon
+	    && std::fabs( value.z() - target.z() ) < epsilon;
+}
+
+static QString Experimental_vectorToMayaString( const Vector3& value ){
+	return QString( "%1 %2 %3" )
+		.arg( value.x(), 0, 'f', 6 )
+		.arg( value.y(), 0, 'f', 6 )
+		.arg( value.z(), 0, 'f', 6 );
+}
+
+static QString Experimental_exportEntityJson( Entity& entity ){
+	QJsonObject object;
+	class Visitor final : public Entity::Visitor
+	{
+		QJsonObject& m_object;
+	public:
+		explicit Visitor( QJsonObject& object ) : m_object( object ){}
+		void visit( const char* key, const char* value ) override {
+			if ( value == nullptr || string_empty( value ) ) {
+				return;
+			}
+			if ( string_equal( key, "classname" )
+				|| string_equal( key, "origin" )
+				|| string_equal( key, "angle" )
+				|| string_equal( key, "angles" )
+				|| string_equal( key, "modelscale" )
+				|| string_equal( key, "modelscale_vec" ) ) {
+				return;
+			}
+			m_object.insert( QString::fromLatin1( key ), QString::fromLatin1( value ) );
+		}
+	} visitor( object );
+	entity.forEachKeyValue( visitor );
+	if ( object.isEmpty() ) {
+		return {};
+	}
+	return QString::fromUtf8( QJsonDocument( object ).toJson( QJsonDocument::Compact ) );
+}
+
+static void Experimental_restoreEntityJson( Entity& entity, const QString& json ){
+	if ( json.isEmpty() ) {
+		return;
+	}
+
+	QJsonParseError parseError;
+	const QJsonDocument doc = QJsonDocument::fromJson( json.toUtf8(), &parseError );
+	if ( parseError.error != QJsonParseError::NoError || !doc.isObject() ) {
+		globalErrorStream() << "failed to parse Maya entity JSON metadata: " << parseError.errorString().toLatin1().constData() << '\n';
+		return;
+	}
+
+	const QJsonObject object = doc.object();
+	for ( auto it = object.begin(); it != object.end(); ++it ) {
+		if ( it->isString() ) {
+			const QByteArray key = it.key().toUtf8();
+			const QByteArray value = it->toString().toUtf8();
+			entity.setKeyValue( key.constData(), value.constData() );
+		}
+	}
+}
+
+static Vector3 Experimental_entityTranslation( Entity& entity ){
+	Vector3 translation( 0, 0, 0 );
+	string_parse_vector3( entity.getKeyValue( "origin" ), translation );
+	return translation;
+}
+
+static Vector3 Experimental_entityRotation( Entity& entity ){
+	Vector3 rotation( 0, 0, 0 );
+	if ( string_parse_vector3( entity.getKeyValue( "angles" ), rotation ) ) {
+		return rotation;
+	}
+	const QString angle = QString::fromLatin1( entity.getKeyValue( "angle" ) ).trimmed();
+	if ( !angle.isEmpty() ) {
+		bool ok = false;
+		const double yaw = angle.toDouble( &ok );
+		if ( ok ) {
+			rotation.y() = yaw;
+		}
+	}
+	return rotation;
+}
+
+static Vector3 Experimental_entityScale( Entity& entity ){
+	Vector3 scale( 1, 1, 1 );
+	if ( string_parse_vector3( entity.getKeyValue( "modelscale_vec" ), scale ) ) {
+		return scale;
+	}
+	const QString scalar = QString::fromLatin1( entity.getKeyValue( "modelscale" ) ).trimmed();
+	if ( !scalar.isEmpty() ) {
+		bool ok = false;
+		const double value = scalar.toDouble( &ok );
+		if ( ok ) {
+			scale = Vector3( value, value, value );
+		}
+	}
+	return scale;
+}
+
+static QString Experimental_exportSceneMetadataJson(){
+	QJsonObject object;
+	object.insert( "schemaVersion", 2 );
+	object.insert( "projectRoot", QString::fromLatin1( GameToolsPath_get() ) );
+	object.insert( "mapPath", Experimental_currentMapPath() );
+	object.insert( "cameraBookmarks", Experimental_buildCameraBookmarksArray() );
+	return QString::fromUtf8( QJsonDocument( object ).toJson( QJsonDocument::Compact ) );
+}
+
+static void Experimental_restoreSceneMetadataJson( const QString& json ){
+	if ( json.isEmpty() ) {
+		return;
+	}
+
+	QJsonParseError parseError;
+	const QJsonDocument doc = QJsonDocument::fromJson( json.toUtf8(), &parseError );
+	if ( parseError.error != QJsonParseError::NoError || !doc.isObject() ) {
+		globalErrorStream() << "failed to parse Maya scene metadata: " << parseError.errorString().toLatin1().constData() << '\n';
+		return;
+	}
+
+	Experimental_restoreCameraBookmarks( doc.object().value( "cameraBookmarks" ) );
+}
+
+static QString Experimental_exportPatchJson( scene::Node& node, const Vector3& pivot ){
+	const PatchControlMatrix controlPoints = GlobalPatchCreator().Patch_getControlPoints( node );
+	QJsonObject object;
+	object.insert( "schemaVersion", 1 );
+	object.insert( "width", static_cast<int>( controlPoints.y() ) );
+	object.insert( "height", static_cast<int>( controlPoints.x() ) );
+
+	QJsonArray points;
+	for ( std::size_t row = 0; row < controlPoints.x(); ++row ) {
+		for ( std::size_t col = 0; col < controlPoints.y(); ++col ) {
+			const PatchControl& control = controlPoints( row, col );
+			QJsonObject point;
+			point.insert( "vertex", Experimental_vector3ToJson( control.m_vertex - pivot ) );
+			QJsonArray uv;
+			uv.append( control.m_texcoord.x() );
+			uv.append( control.m_texcoord.y() );
+			point.insert( "uv", uv );
+			points.append( point );
+		}
+	}
+
+	object.insert( "points", points );
+	return QString::fromUtf8( QJsonDocument( object ).toJson( QJsonDocument::Compact ) );
+}
+
+static bool Experimental_restorePatchJson( scene::Node& node, const QString& json, const MayaResolvedTransform& transform ){
+	if ( json.isEmpty() ) {
+		return false;
+	}
+
+	QJsonParseError parseError;
+	const QJsonDocument doc = QJsonDocument::fromJson( json.toUtf8(), &parseError );
+	if ( parseError.error != QJsonParseError::NoError || !doc.isObject() ) {
+		globalErrorStream() << "failed to parse Maya patch metadata: " << parseError.errorString().toLatin1().constData() << '\n';
+		return false;
+	}
+
+	const QJsonObject object = doc.object();
+	const int width = object.value( "width" ).toInt();
+	const int height = object.value( "height" ).toInt();
+	const QJsonArray points = object.value( "points" ).toArray();
+	if ( width < 3 || height < 3 || points.size() != width * height ) {
+		return false;
+	}
+
+	struct PatchPointData
+	{
+		Vector3 vertex;
+		Vector2 uv;
+	};
+
+	QVector<PatchPointData> parsedPoints;
+	parsedPoints.reserve( points.size() );
+
+	for ( const QJsonValue& value : points ) {
+		if ( !value.isObject() ) {
+			return false;
+		}
+		const QJsonObject point = value.toObject();
+		Vector3 vertex;
+		if ( !Experimental_tryParseVector3( point.value( "vertex" ), vertex ) ) {
+			return false;
+		}
+		const QJsonArray uvArray = point.value( "uv" ).toArray();
+		if ( uvArray.size() < 2 ) {
+			return false;
+		}
+
+		parsedPoints.push_back( {
+			vertex,
+			Vector2( uvArray[0].toDouble(), uvArray[1].toDouble() )
+		} );
+	}
+
+	Matrix4 localToWorld( g_matrix4_identity );
+	matrix4_transform_by_euler_xyz_degrees( localToWorld, transform.translation, transform.rotation, transform.scale );
+
+	GlobalPatchCreator().Patch_resize( node, static_cast<std::size_t>( width ), static_cast<std::size_t>( height ) );
+	PatchControlMatrix controlPoints = GlobalPatchCreator().Patch_getControlPoints( node );
+	if ( controlPoints.x() != static_cast<std::size_t>( height ) || controlPoints.y() != static_cast<std::size_t>( width ) ) {
+		return false;
+	}
+
+	int index = 0;
+	for ( int row = 0; row < height; ++row ) {
+		for ( int col = 0; col < width; ++col, ++index ) {
+			PatchControl& control = controlPoints( static_cast<std::size_t>( row ), static_cast<std::size_t>( col ) );
+			control.m_vertex = parsedPoints[index].vertex;
+			matrix4_transform_point( localToWorld, control.m_vertex );
+			control.m_texcoord = parsedPoints[index].uv;
+		}
+	}
+
+	GlobalPatchCreator().Patch_controlPointsChanged( node );
+	return true;
+}
+
+static QString Experimental_entityDisplayName( Entity& entity, int index ){
+	const char* name = entity.getKeyValue( "name" );
+	if ( name != nullptr && !string_empty( name ) ) {
+		return QString::fromLatin1( name );
+	}
+	const char* targetname = entity.getKeyValue( "targetname" );
+	if ( targetname != nullptr && !string_empty( targetname ) ) {
+		return QString::fromLatin1( targetname );
+	}
+	const char* classname = entity.getClassName();
+	if ( string_equal( classname, "worldspawn" ) ) {
+		return "World";
+	}
+	return QString( "%1_%2" ).arg( usdSanitizeName( classname ) ).arg( index );
+}
+
+static void Experimental_collectFirstBrushShader( QString& shader, const _QERFaceData& face ){
+	if ( shader.isEmpty() && face.m_shader != nullptr && !string_empty( face.m_shader ) ) {
+		shader = QString::fromLatin1( face.m_shader );
+	}
+}
+typedef ReferenceCaller<QString, void(const _QERFaceData&), Experimental_collectFirstBrushShader> ExperimentalCollectFirstBrushShaderCaller;
+
+static QString Experimental_firstBrushShader( scene::Node& node ){
+	QString shader;
+	GlobalBrushCreator().Brush_forEachFace( node, BrushFaceDataCallback( ExperimentalCollectFirstBrushShaderCaller( shader ) ) );
+	return shader.isEmpty() ? QString::fromLatin1( texdef_name_default() ) : shader;
+}
+
+static int Experimental_normalisePatchSpan( int value ){
+	value = std::max( 3, value );
+	if ( ( value % 2 ) == 0 ) {
+		++value;
+	}
+	return value;
+}
+
+static VIEWTYPE Experimental_smallestAxisToViewType( const Vector3& size ){
+	if ( size.x() <= size.y() && size.x() <= size.z() ) {
+		return YZ;
+	}
+	if ( size.y() <= size.x() && size.y() <= size.z() ) {
+		return XZ;
+	}
+	return XY;
+}
+
+static void Experimental_writeMayaStringAttr( QTextStream& out, const QString& indent, const char* name, const QString& value ){
+	out << indent << "addAttr -ln \"" << name << "\" -dt \"string\";\n";
+	out << indent << "setAttr \"."
+	    << name << "\" -type \"string\" \"" << Experimental_escapeMayaString( value ) << "\";\n";
+}
+
+static void Experimental_writeMayaDoubleAttr( QTextStream& out, const QString& indent, const char* name, double value ){
+	out << indent << "addAttr -ln \"" << name << "\" -at \"double\";\n";
+	out << indent << "setAttr \"."
+	    << name << "\" " << QString::number( value, 'f', 6 ) << ";\n";
+}
+
+static void Experimental_writeMayaIntAttr( QTextStream& out, const QString& indent, const char* name, int value ){
+	out << indent << "addAttr -ln \"" << name << "\" -at \"long\";\n";
+	out << indent << "setAttr \"."
+	    << name << "\" " << value << ";\n";
+}
+
+static void Experimental_writeMayaTransformAttrs( QTextStream& out, const QString& indent, const Vector3& translation, const Vector3& rotation, const Vector3& scale ){
+	if ( !Experimental_vectorNearlyEqual( translation, Vector3( 0, 0, 0 ) ) ) {
+		out << indent << "setAttr \".t\" -type \"double3\" " << Experimental_vectorToMayaString( translation ) << ";\n";
+	}
+	if ( !Experimental_vectorNearlyEqual( rotation, Vector3( 0, 0, 0 ) ) ) {
+		out << indent << "setAttr \".r\" -type \"double3\" " << Experimental_vectorToMayaString( rotation ) << ";\n";
+	}
+	if ( !Experimental_vectorNearlyEqual( scale, Vector3( 1, 1, 1 ) ) ) {
+		out << indent << "setAttr \".s\" -type \"double3\" " << Experimental_vectorToMayaString( scale ) << ";\n";
+	}
+}
+
+static bool Experimental_parseMayaAsciiFile( QTextStream& stream, QVector<MayaAsciiNode>& nodes, QVector<ExperimentalSceneHierarchyEntry>& hierarchy, QString& error ){
+	nodes.clear();
+	hierarchy.clear();
+
+	QHash<QString, int> transformIndices;
+	QHash<QString, QString> meshParents;
+	QHash<QString, MayaAsciiCreator> creators;
+
+	const QRegularExpression createTypeRegex( "^createNode\\s+(\\w+)" );
+	const QRegularExpression flagNameRegex( "-n\\s+\"([^\"]+)\"" );
+	const QRegularExpression flagParentRegex( "-p\\s+\"([^\"]+)\"" );
+	const QRegularExpression setAttrNameRegex( "^setAttr\\s+\"\\.([^\"]+)\"" );
+	const QRegularExpression stringValueRegex( "-type\\s+\"string\"\\s+\"((?:\\\\.|[^\"])*)\"" );
+	const QRegularExpression double3Regex( "-type\\s+\"double3\"\\s+([^\\s;]+)\\s+([^\\s;]+)\\s+([^\\s;]+)" );
+	const QRegularExpression singleNumberRegex( "^setAttr\\s+\"\\.[^\"]+\"\\s+([^\\s;]+)" );
+	const QRegularExpression connectRegex( "^connectAttr\\s+\"([^\"]+)\\.out\"\\s+\"([^\"]+)\\.i\"" );
+
+	auto parseDouble = []( const QString& token, double& value ) -> bool {
+		bool ok = false;
+		value = token.toDouble( &ok );
+		return ok;
+	};
+
+	auto assignCreatorToTransform = [&]( const QString& creatorName, const QString& meshName ){
+		const auto creatorIt = creators.constFind( creatorName );
+		const auto meshParentIt = meshParents.constFind( meshName );
+		if ( creatorIt == creators.constEnd() || meshParentIt == meshParents.constEnd() ) {
+			return;
+		}
+		const auto transformIt = transformIndices.constFind( meshParentIt.value() );
+		if ( transformIt == transformIndices.constEnd() ) {
+			return;
+		}
+
+		MayaAsciiNode& node = nodes[transformIt.value()];
+		if ( creatorIt->type == "polyCube" ) {
+			node.size = Vector3( creatorIt->width, creatorIt->height, creatorIt->depth );
+			node.hasGeometry = true;
+			if ( node.radiantNodeType.isEmpty() ) {
+				node.radiantNodeType = "brush";
+			}
+		}
+		else if ( creatorIt->type == "polyPlane" ) {
+			node.size = Vector3( creatorIt->width, 1, creatorIt->height );
+			node.patchWidth = Experimental_normalisePatchSpan( creatorIt->subdivX + 1 );
+			node.patchHeight = Experimental_normalisePatchSpan( creatorIt->subdivY + 1 );
+			node.hasGeometry = true;
+			if ( node.radiantNodeType.isEmpty() ) {
+				node.radiantNodeType = "patch";
+			}
+		}
+	};
+
+	QString currentNodeName;
+	QString currentNodeType;
+
+	while ( !stream.atEnd() )
+	{
+		const QString line = stream.readLine().trimmed();
+		if ( line.isEmpty() || line.startsWith( "//" ) ) {
+			continue;
+		}
+
+		const auto createTypeMatch = createTypeRegex.match( line );
+		if ( createTypeMatch.hasMatch() ) {
+			currentNodeType = createTypeMatch.captured( 1 );
+			const auto nameMatch = flagNameRegex.match( line );
+			currentNodeName = nameMatch.hasMatch() ? nameMatch.captured( 1 ) : QString();
+			const auto parentMatch = flagParentRegex.match( line );
+			const QString parentName = parentMatch.hasMatch() ? parentMatch.captured( 1 ) : QString();
+
+			if ( currentNodeType == "transform" && !currentNodeName.isEmpty() ) {
+				MayaAsciiNode node;
+				node.name = currentNodeName;
+				node.parent = parentName;
+				nodes.push_back( node );
+				transformIndices.insert( currentNodeName, nodes.size() - 1 );
+			}
+			else if ( currentNodeType == "mesh" && !currentNodeName.isEmpty() ) {
+				meshParents.insert( currentNodeName, parentName );
+			}
+			else if ( ( currentNodeType == "polyCube" || currentNodeType == "polyPlane" ) && !currentNodeName.isEmpty() ) {
+				MayaAsciiCreator creator;
+				creator.type = currentNodeType;
+				creators.insert( currentNodeName, creator );
+			}
+			continue;
+		}
+
+		const auto connectMatch = connectRegex.match( line );
+		if ( connectMatch.hasMatch() ) {
+			assignCreatorToTransform( connectMatch.captured( 1 ), connectMatch.captured( 2 ) );
+			continue;
+		}
+
+		if ( currentNodeName.isEmpty() || !line.startsWith( "setAttr " ) ) {
+			continue;
+		}
+
+		const auto nameMatch = setAttrNameRegex.match( line );
+		if ( !nameMatch.hasMatch() ) {
+			continue;
+		}
+		const QString attrName = nameMatch.captured( 1 );
+
+		if ( currentNodeType == "transform" ) {
+			const auto transformIt = transformIndices.find( currentNodeName );
+			if ( transformIt == transformIndices.end() ) {
+				continue;
+			}
+			MayaAsciiNode& node = nodes[transformIt.value()];
+
+			const auto double3Match = double3Regex.match( line );
+			if ( double3Match.hasMatch() ) {
+				double x = 0;
+				double y = 0;
+				double z = 0;
+				if ( parseDouble( double3Match.captured( 1 ), x )
+					&& parseDouble( double3Match.captured( 2 ), y )
+					&& parseDouble( double3Match.captured( 3 ), z ) ) {
+					if ( attrName == "t" ) {
+						node.translation = Vector3( x, y, z );
+					}
+					else if ( attrName == "r" ) {
+						node.rotation = Vector3( x, y, z );
+					}
+					else if ( attrName == "s" ) {
+						node.scale = Vector3( x, y, z );
+					}
+				}
+				continue;
+			}
+
+			const auto stringMatch = stringValueRegex.match( line );
+			if ( stringMatch.hasMatch() ) {
+				const QString value = Experimental_unescapeMayaString( stringMatch.captured( 1 ) );
+				if ( attrName == "radiantClassname" ) {
+					node.radiantClassname = value;
+				}
+				else if ( attrName == "radiantNodeType" ) {
+					node.radiantNodeType = value;
+				}
+				else if ( attrName == "radiantShader" ) {
+					node.radiantShader = value;
+				}
+				else if ( attrName == "radiantEntityJson" ) {
+					node.radiantEntityJson = value;
+				}
+				else if ( attrName == "radiantSceneJson" ) {
+					node.radiantSceneJson = value;
+				}
+				else if ( attrName == "radiantPatchJson" ) {
+					node.radiantPatchJson = value;
+				}
+				continue;
+			}
+
+			const auto singleNumberMatch = singleNumberRegex.match( line );
+			if ( singleNumberMatch.hasMatch() ) {
+				double value = 0;
+				if ( parseDouble( singleNumberMatch.captured( 1 ), value ) ) {
+					if ( attrName == "radiantWidth" ) {
+						node.size.x() = value;
+						node.hasGeometry = true;
+					}
+					else if ( attrName == "radiantHeight" ) {
+						node.size.y() = value;
+						node.hasGeometry = true;
+					}
+					else if ( attrName == "radiantDepth" ) {
+						node.size.z() = value;
+						node.hasGeometry = true;
+					}
+					else if ( attrName == "radiantSubdivX" ) {
+						node.patchWidth = Experimental_normalisePatchSpan( static_cast<int>( value ) );
+					}
+					else if ( attrName == "radiantSubdivY" ) {
+						node.patchHeight = Experimental_normalisePatchSpan( static_cast<int>( value ) );
+					}
+				}
+			}
+		}
+		else if ( currentNodeType == "polyCube" || currentNodeType == "polyPlane" ) {
+			auto creatorIt = creators.find( currentNodeName );
+			if ( creatorIt == creators.end() ) {
+				continue;
+			}
+			const auto singleNumberMatch = singleNumberRegex.match( line );
+			if ( !singleNumberMatch.hasMatch() ) {
+				continue;
+			}
+			double value = 0;
+			if ( !parseDouble( singleNumberMatch.captured( 1 ), value ) ) {
+				continue;
+			}
+			if ( attrName == "w" ) {
+				creatorIt->width = value;
+			}
+			else if ( attrName == "h" ) {
+				creatorIt->height = value;
+			}
+			else if ( attrName == "d" ) {
+				creatorIt->depth = value;
+			}
+			else if ( attrName == "sx" ) {
+				creatorIt->subdivX = std::max( 1, static_cast<int>( value ) );
+			}
+			else if ( attrName == "sy" ) {
+				creatorIt->subdivY = std::max( 1, static_cast<int>( value ) );
+			}
+		}
+	}
+
+	for ( auto it = meshParents.constBegin(); it != meshParents.constEnd(); ++it ) {
+		const QString meshName = it.key();
+		for ( auto creatorIt = creators.constBegin(); creatorIt != creators.constEnd(); ++creatorIt ) {
+			assignCreatorToTransform( creatorIt.key(), meshName );
+		}
+	}
+
+	if ( nodes.isEmpty() ) {
+		error = "No Maya transform nodes were detected.";
+		return false;
+	}
+
+	for ( const auto& node : nodes ) {
+		QString type = node.radiantNodeType;
+		if ( type.isEmpty() ) {
+			type = node.radiantClassname.isEmpty() ? "Transform" : node.radiantClassname;
+		}
+		hierarchy.push_back( { node.name, node.parent, type } );
+	}
+
+	return true;
+}
+
+static MayaResolvedTransform Experimental_resolveMayaTransform(
+	const QVector<MayaAsciiNode>& nodes,
+	const QHash<QString, int>& indices,
+	int index,
+	QHash<int, MayaResolvedTransform>& cache,
+	QSet<int>& active ){
+	if ( cache.contains( index ) ) {
+		return cache.value( index );
+	}
+	if ( active.contains( index ) ) {
+		return MayaResolvedTransform();
+	}
+	active.insert( index );
+
+	const MayaAsciiNode& node = nodes[index];
+	MayaResolvedTransform result;
+	result.translation = node.translation;
+	result.rotation = node.rotation;
+	result.scale = node.scale;
+
+	const auto parentIt = indices.constFind( node.parent );
+	if ( parentIt != indices.constEnd() ) {
+		const MayaResolvedTransform parent = Experimental_resolveMayaTransform( nodes, indices, parentIt.value(), cache, active );
+		result.translation += parent.translation;
+		result.rotation += parent.rotation;
+		result.scale = Experimental_componentMultiply( parent.scale, result.scale );
+	}
+
+	active.remove( index );
+	cache.insert( index, result );
+	return result;
+}
+
+static scene::Node& Experimental_mayaParentForGeometry( const QString& parentName, const QHash<QString, scene::Node*>& groupNodes, scene::Node& worldspawn ){
+	const auto it = groupNodes.find( parentName );
+	return it != groupNodes.end() && it.value() != nullptr ? *it.value() : worldspawn;
+}
+
+void Experimental_importMayaASCII_impl(){
+	if ( !g_Layout_experimentalFeatures.m_value || !Map_Valid( g_map ) ) {
+		return;
+	}
+
+	const auto filename = QFileDialog::getOpenFileName( MainFrame_getWindow(), "Import Maya ASCII", "", "Maya ASCII Files (*.ma)" );
+	if ( filename.isEmpty() ) {
+		return;
+	}
+
+	QFile file( filename );
+	if ( !file.open( QIODevice::ReadOnly | QIODevice::Text ) ) {
+		globalErrorStream() << "failed to open Maya ASCII file: " << filename.toLatin1().constData() << '\n';
+		return;
+	}
+
+	QTextStream stream( &file );
+	QVector<MayaAsciiNode> nodes;
+	QVector<ExperimentalSceneHierarchyEntry> hierarchy;
+	QString parseError;
+	if ( !Experimental_parseMayaAsciiFile( stream, nodes, hierarchy, parseError ) ) {
+		globalErrorStream() << "failed to parse Maya ASCII file: " << parseError.toLatin1().constData() << '\n';
+		return;
+	}
+
+	Experimental_populateSceneHierarchyTree( hierarchy );
+
+	QHash<QString, int> indices;
+	QHash<QString, int> childCounts;
+	for ( int i = 0; i < nodes.size(); ++i ) {
+		indices.insert( nodes[i].name, i );
+		if ( !nodes[i].parent.isEmpty() ) {
+			childCounts[nodes[i].parent] += 1;
+		}
+	}
+
+	UndoableCommand undo( "importMayaAscii" );
+	scene::Node& worldspawn = Map_FindOrInsertWorldspawn( g_map );
+	QHash<QString, scene::Node*> groupNodes;
+	groupNodes.insert( "worldspawn", &worldspawn );
+
+	QHash<int, MayaResolvedTransform> resolvedCache;
+	QSet<int> resolving;
+	int entityCount = 0;
+	int brushCount = 0;
+	int patchCount = 0;
+
+	GlobalSelectionSystem().setSelectedAll( false );
+
+	for ( int i = 0; i < nodes.size(); ++i ) {
+		const MayaAsciiNode& node = nodes[i];
+		if ( node.radiantNodeType == "scene" ) {
+			Experimental_restoreSceneMetadataJson( node.radiantSceneJson );
+			continue;
+		}
+
+		const MayaResolvedTransform resolved = Experimental_resolveMayaTransform( nodes, indices, i, resolvedCache, resolving );
+		const bool isGenericGroup = node.radiantClassname.isEmpty() && !node.hasGeometry && childCounts.value( node.name ) > 0;
+		QString classname = node.radiantClassname;
+		if ( classname.isEmpty() && isGenericGroup ) {
+			classname = "func_group";
+		}
+
+		if ( classname == "worldspawn" ) {
+			groupNodes.insert( node.name, &worldspawn );
+			continue;
+		}
+
+		if ( !classname.isEmpty() ) {
+			const bool isGroupEntity = classname == "func_group";
+			EntityClass* eclass = GlobalEntityClassManager().findOrInsert( classname.toLatin1().constData(), isGroupEntity );
+			if ( eclass->unknown ) {
+				if ( isGroupEntity ) {
+					eclass = GlobalEntityClassManager().findOrInsert( "func_group", true );
+				}
+				else{
+					globalErrorStream() << "unknown Maya entity class: " << classname.toLatin1().constData() << '\n';
+					continue;
+				}
+			}
+
+			NodeSmartReference entityNode( GlobalEntityCreator().createEntity( eclass ) );
+			Node_getTraversable( GlobalSceneGraph().root() )->insert( entityNode );
+			Entity* entity = Node_getEntity( entityNode );
+			if ( entity == nullptr ) {
+				continue;
+			}
+
+			if ( !node.name.isEmpty() ) {
+				const QByteArray nameUtf8 = node.name.toUtf8();
+				entity->setKeyValue( "name", nameUtf8.constData() );
+			}
+			if ( !node.parent.isEmpty() && node.parent != "RadiantScene" ) {
+				const QByteArray parentUtf8 = node.parent.toUtf8();
+				entity->setKeyValue( "mayaParent", parentUtf8.constData() );
+			}
+			Experimental_restoreEntityJson( *entity, node.radiantEntityJson );
+
+			if ( eclass->fixedsize ) {
+				scene::Path entityPath( makeReference( GlobalSceneGraph().root() ) );
+				entityPath.push( makeReference( entityNode.get() ) );
+				if ( scene::Instance* instance = GlobalSceneGraph().find( entityPath ) ) {
+					if ( Transformable* transform = Instance_getTransformable( *instance ) ) {
+						transform->setType( TRANSFORM_PRIMITIVE );
+						transform->setTranslation( resolved.translation );
+						transform->freezeTransform();
+					}
+				}
+
+				if ( !Experimental_vectorNearlyEqual( resolved.rotation, Vector3( 0, 0, 0 ) ) ) {
+					const QByteArray rotationUtf8 = Experimental_vectorToMayaString( resolved.rotation ).toUtf8();
+					entity->setKeyValue( "angles", rotationUtf8.constData() );
+				}
+				if ( !Experimental_vectorNearlyEqual( resolved.scale, Vector3( 1, 1, 1 ) ) ) {
+					if ( Experimental_vectorNearlyEqual( resolved.scale, Vector3( resolved.scale.x(), resolved.scale.x(), resolved.scale.x() ) ) ) {
+						const QByteArray scaleUtf8 = QString::number( resolved.scale.x(), 'f', 6 ).toUtf8();
+						entity->setKeyValue( "modelscale", scaleUtf8.constData() );
+					}
+					else{
+						const QByteArray scaleUtf8 = Experimental_vectorToMayaString( resolved.scale ).toUtf8();
+						entity->setKeyValue( "modelscale_vec", scaleUtf8.constData() );
+					}
+				}
+			}
+
+			groupNodes.insert( node.name, entityNode.get_pointer() );
+			++entityCount;
+			continue;
+		}
+
+		if ( !node.hasGeometry && node.radiantNodeType.isEmpty() ) {
+			continue;
+		}
+
+		Vector3 scaledSize = Experimental_componentAbs( Experimental_componentMultiply( node.size, resolved.scale ) );
+		scaledSize.x() = std::max<float>( 1.0f, scaledSize.x() );
+		scaledSize.y() = std::max<float>( 1.0f, scaledSize.y() );
+		scaledSize.z() = std::max<float>( 1.0f, scaledSize.z() );
+
+		scene::Node& parentNode = Experimental_mayaParentForGeometry( node.parent, groupNodes, worldspawn );
+		const QByteArray shaderUtf8 = ( node.radiantShader.isEmpty() ? QString::fromLatin1( texdef_name_default() ) : node.radiantShader ).toUtf8();
+		const AABB bounds( resolved.translation, scaledSize * 0.5f );
+
+		if ( node.radiantNodeType == "patch" ) {
+			NodeSmartReference patchNode( GlobalPatchCreator().createPatch() );
+			Node_getTraversable( parentNode )->insert( patchNode );
+			Patch* patch = Node_getPatch( patchNode );
+			if ( patch != nullptr ) {
+				patch->SetShader( shaderUtf8.constData() );
+				if ( !Experimental_restorePatchJson( patchNode.get(), node.radiantPatchJson, resolved ) ) {
+					patch->ConstructPrefab(
+						bounds,
+						EPatchPrefab::Plane,
+						Experimental_smallestAxisToViewType( scaledSize ),
+						Experimental_normalisePatchSpan( node.patchWidth ),
+						Experimental_normalisePatchSpan( node.patchHeight ) );
+					patch->controlPointsChanged();
+				}
+				++patchCount;
+			}
+			continue;
+		}
+
+		scene::Node* brushNode = &GlobalBrushCreator().createBrush();
+		Node_getTraversable( parentNode )->insert( NodeSmartReference( *brushNode ) );
+		if ( Brush* brush = Node_getBrush( *brushNode ) ) {
+			Brush_ConstructCuboid( *brush, bounds, shaderUtf8.constData(), TextureTransform_getDefault() );
+			++brushCount;
+		}
+	}
+
+	SceneChangeNotify();
+	Sys_Status( QString( "Imported Maya ASCII: %1 entities, %2 brushes, %3 patches" )
+		.arg( entityCount )
+		.arg( brushCount )
+		.arg( patchCount )
+		.toUtf8().constData() );
+}
+
+void Experimental_exportToMayaASCII_impl(){
+	if ( !g_Layout_experimentalFeatures.m_value || !Map_Valid( g_map ) ) {
+		return;
+	}
+
+	const auto filename = QFileDialog::getSaveFileName( MainFrame_getWindow(), "Export to Maya ASCII", "", "Maya ASCII Files (*.ma)" );
+	if ( filename.isEmpty() ) {
+		return;
+	}
+
+	QFile file( filename );
+	if ( !file.open( QIODevice::WriteOnly | QIODevice::Text ) ) {
+		globalErrorStream() << "failed to open Maya ASCII file for write: " << filename.toLatin1().constData() << '\n';
+		return;
+	}
+
+	QTextStream out( &file );
+	out << "//Maya ASCII 2024 scene\n";
+	out << "requires maya \"2024\";\n";
+	out << "currentUnit -l centimeter -a degree -t film;\n";
+	out << "fileInfo \"application\" \"idTech3Radiant\";\n";
+	out << "fileInfo \"product\" \"Experimental Maya ASCII Export\";\n\n";
+	out << "createNode transform -n \"RadiantScene\";\n";
+	Experimental_writeMayaStringAttr( out, "    ", "radiantNodeType", "scene" );
+	Experimental_writeMayaStringAttr( out, "    ", "radiantSceneJson", Experimental_exportSceneMetadataJson() );
+	out << '\n';
+
+	class MayaExportWalker final : public scene::Graph::Walker
+	{
+		QTextStream& m_out;
+		mutable QList<QString> m_entityStack;
+		mutable QHash<QString, QString> m_namedEntities;
+		mutable QSet<QString> m_usedNames;
+		mutable QVector<ExperimentalSceneHierarchyEntry> m_hierarchy;
+		mutable int m_entityIndex = 0;
+		mutable int m_brushIndex = 0;
+		mutable int m_patchIndex = 0;
+	public:
+		explicit MayaExportWalker( QTextStream& out ) : m_out( out ){}
+
+		const QVector<ExperimentalSceneHierarchyEntry>& hierarchy() const {
+			return m_hierarchy;
+		}
+
+		bool pre( const scene::Path& path, scene::Instance& instance ) const override {
+			scene::Node& node = path.top();
+			if ( Entity* entity = Node_getEntity( node ) ) {
+				const QString exportName = Experimental_makeUniqueMayaName( Experimental_entityDisplayName( *entity, m_entityIndex++ ), m_usedNames );
+				QString parentName = "RadiantScene";
+				const QString mayaParent = QString::fromLatin1( entity->getKeyValue( "mayaParent" ) ).trimmed();
+				if ( !mayaParent.isEmpty() && m_namedEntities.contains( mayaParent ) ) {
+					parentName = m_namedEntities.value( mayaParent );
+				}
+
+				m_out << "createNode transform -n \"" << exportName << "\" -p \"" << parentName << "\";\n";
+				Experimental_writeMayaStringAttr( m_out, "    ", "radiantNodeType", "entity" );
+				Experimental_writeMayaStringAttr( m_out, "    ", "radiantClassname", QString::fromLatin1( entity->getClassName() ) );
+				const QString entityJson = Experimental_exportEntityJson( *entity );
+				if ( !entityJson.isEmpty() ) {
+					Experimental_writeMayaStringAttr( m_out, "    ", "radiantEntityJson", entityJson );
+				}
+				Experimental_writeMayaTransformAttrs(
+					m_out,
+					"    ",
+					Experimental_entityTranslation( *entity ),
+					Experimental_entityRotation( *entity ),
+					Experimental_entityScale( *entity ) );
+				m_out << '\n';
+
+				const QString logicalName = QString::fromLatin1( entity->getKeyValue( "name" ) ).trimmed();
+				if ( !logicalName.isEmpty() ) {
+					m_namedEntities.insert( logicalName, exportName );
+				}
+				m_entityStack.push_back( exportName );
+				m_hierarchy.push_back( { exportName, parentName, QString::fromLatin1( entity->getClassName() ) } );
+				return true;
+			}
+
+			const QString parentName = m_entityStack.isEmpty() ? QString( "RadiantScene" ) : m_entityStack.back();
+			if ( Node_getBrush( node ) != nullptr ) {
+				const QString exportName = Experimental_makeUniqueMayaName( QString( "brush_%1" ).arg( m_brushIndex++ ), m_usedNames );
+				const QString polyName = exportName + "PolyCube";
+				const QString shapeName = exportName + "Shape";
+				const AABB bounds = instance.worldAABB();
+				const Vector3 size = bounds.extents * 2;
+				const QString shader = Experimental_firstBrushShader( node );
+
+				m_out << "createNode transform -n \"" << exportName << "\" -p \"" << parentName << "\";\n";
+				Experimental_writeMayaStringAttr( m_out, "    ", "radiantNodeType", "brush" );
+				Experimental_writeMayaStringAttr( m_out, "    ", "radiantShader", shader );
+				Experimental_writeMayaDoubleAttr( m_out, "    ", "radiantWidth", size.x() );
+				Experimental_writeMayaDoubleAttr( m_out, "    ", "radiantHeight", size.y() );
+				Experimental_writeMayaDoubleAttr( m_out, "    ", "radiantDepth", size.z() );
+				Experimental_writeMayaTransformAttrs( m_out, "    ", bounds.origin, Vector3( 0, 0, 0 ), Vector3( 1, 1, 1 ) );
+				m_out << "createNode mesh -n \"" << shapeName << "\" -p \"" << exportName << "\";\n";
+				m_out << "createNode polyCube -n \"" << polyName << "\";\n";
+				m_out << "    setAttr \".w\" " << QString::number( size.x(), 'f', 6 ) << ";\n";
+				m_out << "    setAttr \".h\" " << QString::number( size.y(), 'f', 6 ) << ";\n";
+				m_out << "    setAttr \".d\" " << QString::number( size.z(), 'f', 6 ) << ";\n";
+				m_out << "connectAttr \"" << polyName << ".out\" \"" << shapeName << ".i\";\n\n";
+
+				m_hierarchy.push_back( { exportName, parentName, "Brush" } );
+				return false;
+			}
+
+			if ( Patch* patch = Node_getPatch( node ) ) {
+				const QString exportName = Experimental_makeUniqueMayaName( QString( "patch_%1" ).arg( m_patchIndex++ ), m_usedNames );
+				const QString polyName = exportName + "PolyPlane";
+				const QString shapeName = exportName + "Shape";
+				const AABB bounds = instance.worldAABB();
+				const Vector3 size = bounds.extents * 2;
+
+				m_out << "createNode transform -n \"" << exportName << "\" -p \"" << parentName << "\";\n";
+				Experimental_writeMayaStringAttr( m_out, "    ", "radiantNodeType", "patch" );
+				Experimental_writeMayaStringAttr( m_out, "    ", "radiantShader", QString::fromLatin1( patch->GetShader() ) );
+				Experimental_writeMayaDoubleAttr( m_out, "    ", "radiantWidth", size.x() );
+				Experimental_writeMayaDoubleAttr( m_out, "    ", "radiantHeight", size.y() );
+				Experimental_writeMayaDoubleAttr( m_out, "    ", "radiantDepth", size.z() );
+				Experimental_writeMayaIntAttr( m_out, "    ", "radiantSubdivX", static_cast<int>( patch->getWidth() ) );
+				Experimental_writeMayaIntAttr( m_out, "    ", "radiantSubdivY", static_cast<int>( patch->getHeight() ) );
+				Experimental_writeMayaStringAttr( m_out, "    ", "radiantPatchJson", Experimental_exportPatchJson( node, bounds.origin ) );
+				Experimental_writeMayaTransformAttrs( m_out, "    ", bounds.origin, Vector3( 0, 0, 0 ), Vector3( 1, 1, 1 ) );
+				m_out << "createNode mesh -n \"" << shapeName << "\" -p \"" << exportName << "\";\n";
+				m_out << "createNode polyPlane -n \"" << polyName << "\";\n";
+				m_out << "    setAttr \".w\" " << QString::number( size.x(), 'f', 6 ) << ";\n";
+				m_out << "    setAttr \".h\" " << QString::number( size.z(), 'f', 6 ) << ";\n";
+				m_out << "    setAttr \".sx\" " << std::max( 1, static_cast<int>( patch->getWidth() ) - 1 ) << ";\n";
+				m_out << "    setAttr \".sy\" " << std::max( 1, static_cast<int>( patch->getHeight() ) - 1 ) << ";\n";
+				m_out << "connectAttr \"" << polyName << ".out\" \"" << shapeName << ".i\";\n\n";
+
+				m_hierarchy.push_back( { exportName, parentName, "Patch" } );
+				return false;
+			}
+
+			return true;
+		}
+
+		void post( const scene::Path& path, scene::Instance& instance ) const override {
+			if ( Node_getEntity( path.top() ) != nullptr && !m_entityStack.isEmpty() ) {
+				m_entityStack.removeLast();
+			}
+		}
+	} walker( out );
+
+	GlobalSceneGraph().traverse( walker );
+	Experimental_populateSceneHierarchyTree( walker.hierarchy() );
+	Sys_Status( "Exported map to Maya ASCII" );
+}
+
 void Experimental_exportToUSDA_impl(){
 	if ( !g_Layout_experimentalFeatures.m_value || !Map_Valid( g_map ) ) {
 		return;
@@ -1615,6 +3718,10 @@ void Experimental_createDocks( QMainWindow* window ){
 	}
 
 	Experimental_setUndoTrackerAttached( true );
+	if ( g_exp_liveSyncService == nullptr ) {
+		g_exp_liveSyncService = new ExperimentalLiveSyncService( window );
+		g_exp_liveSyncService->setAutoSync( QSettings().value( "Properties/Experimental/LiveSyncAutoSync", true ).toBool() );
+	}
 
 	g_exp_propertiesDock = new QDockWidget( "Properties", window );
 	g_exp_propertiesDock->setObjectName( "dock_experimental_properties" );
@@ -1840,7 +3947,8 @@ void Experimental_createDocks( QMainWindow* window ){
 
 	g_exp_previewDock = new QDockWidget( "Preview", window );
 	g_exp_previewDock->setObjectName( "dock_experimental_preview" );
-	g_exp_previewDock->setWidget( new ExperimentalPreviewWidget );
+	g_exp_previewHost = new ExperimentalPreviewHostWidget( g_exp_previewDock );
+	g_exp_previewDock->setWidget( g_exp_previewHost );
 	window->addDockWidget( Qt::RightDockWidgetArea, g_exp_previewDock );
 
 	g_exp_assetsDock = new QDockWidget( "Asset Library", window );
@@ -1875,24 +3983,117 @@ void Experimental_createDocks( QMainWindow* window ){
 	}
 	window->addDockWidget( Qt::LeftDockWidgetArea, g_exp_historyDock );
 
-	g_exp_usdDock = new QDockWidget( "USD Structure", window );
+	g_exp_syncDock = new QDockWidget( "Live Sync", window );
+	g_exp_syncDock->setObjectName( "dock_experimental_live_sync" );
+	{
+		auto* root = new QWidget( g_exp_syncDock );
+		auto* vbox = new QVBoxLayout( root );
+		auto* form = new QFormLayout;
+		g_exp_syncPort = new QSpinBox( root );
+		g_exp_syncPort->setRange( 1024, 65535 );
+		g_exp_syncPort->setValue( QSettings().value( "Properties/Experimental/LiveSyncPort", 28930 ).toInt() );
+		g_exp_syncStateLabel = new QLabel( "Stopped", root );
+		g_exp_syncStateLabel->setWordWrap( true );
+		g_exp_syncClientsLabel = new QLabel( "0", root );
+		g_exp_syncRuntimeLabel = new QLabel( g_exp_lastRuntimeEvent, root );
+		g_exp_syncRuntimeLabel->setWordWrap( true );
+		form->addRow( "Port", g_exp_syncPort );
+		form->addRow( "Server", g_exp_syncStateLabel );
+		form->addRow( "Clients", g_exp_syncClientsLabel );
+		form->addRow( "Last Runtime", g_exp_syncRuntimeLabel );
+		vbox->addLayout( form );
+
+		g_exp_syncAutoStart = new QCheckBox( "Start automatically", root );
+		g_exp_syncAutoStart->setChecked( QSettings().value( "Properties/Experimental/LiveSyncAutoStart", false ).toBool() );
+		g_exp_syncAutoSync = new QCheckBox( "Broadcast scene, selection, and camera changes", root );
+		g_exp_syncAutoSync->setChecked( QSettings().value( "Properties/Experimental/LiveSyncAutoSync", true ).toBool() );
+		vbox->addWidget( g_exp_syncAutoStart );
+		vbox->addWidget( g_exp_syncAutoSync );
+
+		auto* buttons = new QWidget( root );
+		auto* buttonsLayout = new QGridLayout( buttons );
+		buttonsLayout->setContentsMargins( 0, 0, 0, 0 );
+		auto* startButton = new QPushButton( "Start", root );
+		auto* stopButton = new QPushButton( "Stop", root );
+		auto* snapshotButton = new QPushButton( "Send Snapshot", root );
+		auto* copyUrlButton = new QPushButton( "Copy URL", root );
+		buttonsLayout->addWidget( startButton, 0, 0 );
+		buttonsLayout->addWidget( stopButton, 0, 1 );
+		buttonsLayout->addWidget( snapshotButton, 1, 0 );
+		buttonsLayout->addWidget( copyUrlButton, 1, 1 );
+		vbox->addWidget( buttons );
+
+		g_exp_syncLog = new QListWidget( root );
+		vbox->addWidget( g_exp_syncLog, 1 );
+
+		QObject::connect( g_exp_syncPort, QOverload<int>::of( &QSpinBox::valueChanged ), []( int value ){
+			QSettings().setValue( "Properties/Experimental/LiveSyncPort", value );
+			if ( g_exp_liveSyncService != nullptr && g_exp_liveSyncService->isRunning() ) {
+				g_exp_liveSyncService->start( static_cast<quint16>( value ) );
+			}
+		} );
+		QObject::connect( g_exp_syncAutoStart, &QCheckBox::toggled, []( bool checked ){
+			QSettings().setValue( "Properties/Experimental/LiveSyncAutoStart", checked );
+		} );
+		QObject::connect( g_exp_syncAutoSync, &QCheckBox::toggled, []( bool checked ){
+			QSettings().setValue( "Properties/Experimental/LiveSyncAutoSync", checked );
+			if ( g_exp_liveSyncService != nullptr ) {
+				g_exp_liveSyncService->setAutoSync( checked );
+			}
+		} );
+		QObject::connect( startButton, &QPushButton::clicked, [](){
+			if ( g_exp_liveSyncService != nullptr && g_exp_syncPort != nullptr ) {
+				g_exp_liveSyncService->start( static_cast<quint16>( g_exp_syncPort->value() ) );
+			}
+		} );
+		QObject::connect( stopButton, &QPushButton::clicked, [](){
+			if ( g_exp_liveSyncService != nullptr ) {
+				g_exp_liveSyncService->stop();
+			}
+		} );
+		QObject::connect( snapshotButton, &QPushButton::clicked, [](){
+			if ( g_exp_liveSyncService != nullptr ) {
+				Experimental_appendLiveSyncLog( "Manual snapshot requested." );
+				g_exp_liveSyncService->sendSnapshot( "manual" );
+			}
+		} );
+		QObject::connect( copyUrlButton, &QPushButton::clicked, [](){
+			if ( g_exp_syncPort == nullptr ) {
+				return;
+			}
+			const QString url = QString( "ws://127.0.0.1:%1" ).arg( g_exp_syncPort->value() );
+			QGuiApplication::clipboard()->setText( url );
+			Sys_Status( "Live Sync URL copied to clipboard" );
+		} );
+
+		g_exp_syncDock->setWidget( root );
+	}
+	window->addDockWidget( Qt::LeftDockWidgetArea, g_exp_syncDock );
+
+	g_exp_usdDock = new QDockWidget( "Scene Hierarchy", window );
 	g_exp_usdDock->setObjectName( "dock_experimental_usd_structure" );
 	{
 		auto* root = new QWidget( g_exp_usdDock );
 		auto* vbox = new QVBoxLayout( root );
 		auto* btnRow = new QWidget( root );
-		auto* btnLayout = new QHBoxLayout( btnRow );
+		auto* btnLayout = new QGridLayout( btnRow );
 		btnLayout->setContentsMargins( 0, 0, 0, 0 );
-		auto* importButton = new QPushButton( "Import", root );
+		auto* importButton = new QPushButton( "Import USD", root );
 		auto* exportButton = new QPushButton( "Export to USDA", root );
-		btnLayout->addWidget( importButton );
-		btnLayout->addWidget( exportButton );
+		auto* importMayaButton = new QPushButton( "Import Maya", root );
+		auto* exportMayaButton = new QPushButton( "Export .ma", root );
+		btnLayout->addWidget( importButton, 0, 0 );
+		btnLayout->addWidget( exportButton, 0, 1 );
+		btnLayout->addWidget( importMayaButton, 1, 0 );
+		btnLayout->addWidget( exportMayaButton, 1, 1 );
 		g_exp_usdTree = new QTreeWidget( root );
-		g_exp_usdTree->setHeaderLabels( QStringList( "Prim" ) );
+		g_exp_usdTree->setHeaderLabels( QStringList() << "Node" << "Type" );
 		vbox->addWidget( btnRow );
 		vbox->addWidget( g_exp_usdTree );
 		QObject::connect( importButton, &QPushButton::clicked, [](){ Experimental_importUSDStructure(); } );
 		QObject::connect( exportButton, &QPushButton::clicked, [](){ Experimental_exportToUSDA(); } );
+		QObject::connect( importMayaButton, &QPushButton::clicked, [](){ Experimental_importMayaASCII(); } );
+		QObject::connect( exportMayaButton, &QPushButton::clicked, [](){ Experimental_exportToMayaASCII(); } );
 		g_exp_usdDock->setWidget( root );
 	}
 	window->addDockWidget( Qt::LeftDockWidgetArea, g_exp_usdDock );
@@ -1940,21 +4141,32 @@ void Experimental_createDocks( QMainWindow* window ){
 
 	window->tabifyDockWidget( g_exp_propertiesDock, g_exp_previewDock );
 	window->tabifyDockWidget( g_exp_assetsDock, g_exp_historyDock );
-	window->tabifyDockWidget( g_exp_historyDock, g_exp_usdDock );
+	window->tabifyDockWidget( g_exp_historyDock, g_exp_syncDock );
+	window->tabifyDockWidget( g_exp_syncDock, g_exp_usdDock );
 	window->tabifyDockWidget( g_exp_usdDock, g_exp_ecsDock );
 
 	Experimental_refreshSelection();
 	Experimental_refreshAssetLibrary();
+	Experimental_refreshLiveSyncUi();
+	if ( g_exp_syncAutoStart != nullptr && g_exp_syncAutoStart->isChecked() && g_exp_liveSyncService != nullptr && g_exp_syncPort != nullptr ) {
+		g_exp_liveSyncService->start( static_cast<quint16>( g_exp_syncPort->value() ) );
+	}
 }
 
 void Experimental_destroyDocks(){
 	Experimental_setUndoTrackerAttached( false );
+	if ( g_exp_liveSyncService != nullptr ) {
+		g_exp_liveSyncService->stop();
+		g_exp_liveSyncService = nullptr;
+	}
 	g_exp_propertiesDock = nullptr;
 	g_exp_previewDock = nullptr;
 	g_exp_assetsDock = nullptr;
 	g_exp_historyDock = nullptr;
 	g_exp_usdDock = nullptr;
 	g_exp_ecsDock = nullptr;
+	g_exp_syncDock = nullptr;
+	g_exp_previewHost = nullptr;
 	g_exp_ecsCategoryCombo = nullptr;
 	g_exp_ecsEntityList = nullptr;
 	g_exp_selectedCountLabel = nullptr;
@@ -1977,7 +4189,64 @@ void Experimental_destroyDocks(){
 	g_exp_assetsList = nullptr;
 	g_exp_historyList = nullptr;
 	g_exp_usdTree = nullptr;
+	g_exp_syncStateLabel = nullptr;
+	g_exp_syncClientsLabel = nullptr;
+	g_exp_syncRuntimeLabel = nullptr;
+	g_exp_syncPort = nullptr;
+	g_exp_syncAutoStart = nullptr;
+	g_exp_syncAutoSync = nullptr;
+	g_exp_syncLog = nullptr;
 	g_exp_historyCounter = 0;
+}
+
+static QJsonArray Experimental_buildCameraBookmarksArray(){
+	QJsonArray bookmarks;
+	for ( int i = 0; i < 5; ++i ) {
+		QJsonObject bookmark;
+		bookmark.insert( "index", i );
+		bookmark.insert( "valid", ::g_cameraBookmarks_valid[i] );
+		if ( ::g_cameraBookmarks_valid[i] ) {
+			bookmark.insert( "origin", Experimental_vector3ToJson( ::g_cameraBookmarks_origin[i] ) );
+			bookmark.insert( "angles", Experimental_vector3ToJson( ::g_cameraBookmarks_angles[i] ) );
+		}
+		bookmarks.append( bookmark );
+	}
+	return bookmarks;
+}
+
+static void Experimental_restoreCameraBookmarks( const QJsonValue& value ){
+	if ( !value.isArray() ) {
+		return;
+	}
+
+	for ( bool& valid : ::g_cameraBookmarks_valid ) {
+		valid = false;
+	}
+
+	for ( const QJsonValue& entryValue : value.toArray() ) {
+		if ( !entryValue.isObject() ) {
+			continue;
+		}
+
+		const QJsonObject entry = entryValue.toObject();
+		const int index = entry.value( "index" ).toInt( -1 );
+		if ( index < 0 || index >= 5 ) {
+			continue;
+		}
+		if ( !entry.value( "valid" ).toBool( true ) ) {
+			::g_cameraBookmarks_valid[index] = false;
+			continue;
+		}
+
+		Vector3 origin;
+		Vector3 angles;
+		if ( Experimental_tryParseVector3( entry.value( "origin" ), origin )
+			&& Experimental_tryParseVector3( entry.value( "angles" ), angles ) ) {
+			::g_cameraBookmarks_origin[index] = origin;
+			::g_cameraBookmarks_angles[index] = angles;
+			::g_cameraBookmarks_valid[index] = true;
+		}
+	}
 }
 }
 
@@ -2205,6 +4474,9 @@ void CameraBookmark_store( std::size_t index ){
 	g_cameraBookmarks_origin[index] = Camera_getOrigin( *g_pParentWnd->GetCamWnd() );
 	g_cameraBookmarks_angles[index] = Camera_getAngles( *g_pParentWnd->GetCamWnd() );
 	g_cameraBookmarks_valid[index] = true;
+	if ( g_exp_liveSyncService != nullptr ) {
+		g_exp_liveSyncService->broadcastBookmarksState( "editorStore" );
+	}
 	Sys_Status( StringStream( "Stored camera bookmark ", index + 1 ).c_str() );
 }
 
@@ -2219,6 +4491,10 @@ void CameraBookmark_recall( std::size_t index ){
 	Camera_setOrigin( *g_pParentWnd->GetCamWnd(), g_cameraBookmarks_origin[index] );
 	Camera_setAngles( *g_pParentWnd->GetCamWnd(), g_cameraBookmarks_angles[index] );
 	UpdateAllWindows();
+	if ( g_exp_liveSyncService != nullptr ) {
+		g_exp_liveSyncService->broadcastCameraState( "bookmarkRecall" );
+		g_exp_liveSyncService->broadcastBookmarksState( "bookmarkRecall" );
+	}
 	Sys_Status( StringStream( "Recalled camera bookmark ", index + 1 ).c_str() );
 }
 
@@ -2351,6 +4627,9 @@ void Experimental_toggleAssetsDock(){
 void Experimental_toggleHistoryDock(){
 	Experimental_toggleHistoryDock_impl();
 }
+void Experimental_toggleSyncDock(){
+	Experimental_toggleSyncDock_impl();
+}
 void Experimental_toggleUSDDock(){
 	Experimental_toggleUSDDock_impl();
 }
@@ -2362,6 +4641,12 @@ void Experimental_importUSDStructure(){
 }
 void Experimental_exportToUSDA(){
 	Experimental_exportToUSDA_impl();
+}
+void Experimental_importMayaASCII(){
+	Experimental_importMayaASCII_impl();
+}
+void Experimental_exportToMayaASCII(){
+	Experimental_exportToMayaASCII_impl();
 }
 void Lua_editMain(){
 	Lua_openScript( g_luaScriptMain, "Lua Main", false );
@@ -2607,7 +4892,8 @@ void create_view_menu( QMenuBar *menubar, MainFrame::EViewStyle style ){
 		create_highlighted_view_menu_item( menu, "[Preview]", "ToggleExperimentalPreview" );
 		create_highlighted_view_menu_item( menu, "[Asset Library]", "ToggleExperimentalAssets" );
 		create_highlighted_view_menu_item( menu, "[History]", "ToggleExperimentalHistory" );
-		create_highlighted_view_menu_item( menu, "[USD Structure]", "ToggleExperimentalUSD" );
+		create_highlighted_view_menu_item( menu, "[Live Sync]", "ToggleExperimentalSync" );
+			create_highlighted_view_menu_item( menu, "[Scene Hierarchy]", "ToggleExperimentalUSD" );
 		create_highlighted_view_menu_item( menu, "[ECS Authoring]", "ToggleExperimentalECS" );
 	}
 
@@ -2848,10 +5134,12 @@ void create_misc_menu( QMenuBar *menubar ){
 	create_menu_item_with_mnemonic( menu, "Find brush", "FindBrush" );
 	create_menu_item_with_mnemonic( menu, "Map Info", "MapInfo" );
 	create_menu_item_with_mnemonic( menu, "&Refresh models", "RefreshReferences" );
-	if ( g_Layout_experimentalFeatures.m_value ) {
-		create_menu_item_with_mnemonic( menu, "Import USD structure", "ImportUSDStructure" );
-		create_menu_item_with_mnemonic( menu, "Export to USDA", "ExportToUSDA" );
-	}
+		if ( g_Layout_experimentalFeatures.m_value ) {
+			create_menu_item_with_mnemonic( menu, "Import USD structure", "ImportUSDStructure" );
+			create_menu_item_with_mnemonic( menu, "Export to USDA", "ExportToUSDA" );
+			create_menu_item_with_mnemonic( menu, "Import Maya ASCII", "ImportMayaASCII" );
+			create_menu_item_with_mnemonic( menu, "Export to Maya ASCII", "ExportToMayaASCII" );
+		}
 	create_menu_item_with_mnemonic( menu, "Set 2D &Background image", makeCallbackF( WXY_SetBackgroundImage ) );
 	create_menu_item_with_mnemonic( menu, "Fullscreen", "Fullscreen" );
 	create_menu_item_with_mnemonic( menu, "Maximize view", "MaximizeView" );
@@ -3965,6 +6253,8 @@ void MainFrame_Construct(){
 	GlobalEntityCreator().setCounter( &g_entityCount );
 	GlobalSelectionSystem().addSelectionChangeCallback( FreeCaller<void(const Selectable&), brushCountChanged>() );
 	GlobalSelectionSystem().addSelectionChangeCallback( FreeCaller<void(const Selectable&), Experimental_selectionChanged>() );
+	AddSceneChangeCallback( FreeCaller<void(), Experimental_liveSyncSceneChanged>() );
+	AddCameraMovedCallback( FreeCaller<void(), Experimental_liveSyncCameraChanged>() );
 
 	GLWidget_sharedContextCreated = GlobalGL_sharedContextCreated;
 	GLWidget_sharedContextDestroyed = GlobalGL_sharedContextDestroyed;

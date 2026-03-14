@@ -441,7 +441,7 @@ void    LoadBSPFileTexinfo( char *filename ){
 	header = malloc( sizeof( dheader_t ) );
 
 	f = fopen( filename, "rb" );
-	fread( header, sizeof( dheader_t ), 1, f );
+	SafeRead( f, header, sizeof( dheader_t ) );
 
 // swap the header
 	for ( size_t i = 0 ; i < sizeof( dheader_t ) / 4 ; i++ )
@@ -459,7 +459,7 @@ void    LoadBSPFileTexinfo( char *filename ){
 	ofs = header->lumps[LUMP_TEXINFO].fileofs;
 
 	fseek( f, ofs, SEEK_SET );
-	fread( texinfo, length, 1, f );
+	SafeRead( f, texinfo, length );
 	fclose( f );
 
 	numtexinfo = length / sizeof( texinfo_t );

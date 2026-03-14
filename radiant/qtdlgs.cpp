@@ -1467,7 +1467,8 @@ void ShaderHighlighter::highlightBlock( const QString &text )
 {
 	int start = 0;
 	stateSetComment( false );
-	depthSet( depth( previousBlockState() ) == -1? eShaderDepth0 : depth( previousBlockState() ) );
+	const auto previousDepth = depth( previousBlockState() );
+	depthSet( previousDepth == -1 ? static_cast<std::int16_t>( eShaderDepth0 ) : previousDepth );
 
 	if( auto *data = currentBlockUserData() ){
 		static_cast<BlockData*>( data )->shaderFormat = nullptr;

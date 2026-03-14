@@ -1179,10 +1179,16 @@ void BackgroundImage::render( const VIEWTYPE viewtype ){
 #include "qe3.h"
 #include "os/file.h"
 const char* BackgroundImage::background_image_dialog(){
-	auto buffer = StringStream( g_qeglobals.m_userGamePath, "textures/" );
+	auto buffer = StringStream( GameToolsPath_get(), "content/textures/" );
 
-	if ( !file_readable( buffer ) ) {
-		// just go to fsmain
+	if ( !file_is_directory( buffer ) ) {
+		buffer( g_qeglobals.m_userGamePath, "textures/" );
+	}
+	if ( !file_is_directory( buffer ) ) {
+		// just go to the best available root
+		buffer( GameToolsPath_get(), "content/" );
+	}
+	if ( !file_is_directory( buffer ) ) {
 		buffer( g_qeglobals.m_userGamePath );
 	}
 

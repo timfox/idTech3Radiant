@@ -280,7 +280,10 @@ char *ExpandPathAndArchive( const char *path ){
 	expanded = ExpandPath( path );
 
 	if ( archive ) {
-		sprintf( archivename, "%s/%s", archivedir, path );
+		const int written = snprintf( archivename, sizeof( archivename ), "%s/%s", archivedir, path );
+		if ( written < 0 || written >= (int)sizeof( archivename ) ) {
+			Error( "ExpandPathAndArchive: archive path too long" );
+		}
 		QCopyFile( expanded, archivename );
 	}
 	return expanded;
@@ -332,7 +335,9 @@ void Q_getwd( char *out ){
 	strcat( out, "\\" );
 #else
 	// Gef: Changed from getwd() to getcwd() to avoid potential buffer overflow
-	getcwd( out, 256 );
+	if ( getcwd( out, 256 ) == NULL ) {
+		Error( "Q_getwd: getcwd failed" );
+	}
 	strcat( out, "/" );
 #endif
 	while ( out[i] != 0 )

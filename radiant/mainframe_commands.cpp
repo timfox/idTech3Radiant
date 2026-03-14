@@ -93,10 +93,13 @@ void MainFrame_registerCommands(){
 	GlobalCommands_insert( "ToggleExperimentalPreview", makeCallbackF( Experimental_togglePreviewDock ) );
 	GlobalCommands_insert( "ToggleExperimentalAssets", makeCallbackF( Experimental_toggleAssetsDock ) );
 	GlobalCommands_insert( "ToggleExperimentalHistory", makeCallbackF( Experimental_toggleHistoryDock ) );
+	GlobalCommands_insert( "ToggleExperimentalSync", makeCallbackF( Experimental_toggleSyncDock ) );
 	GlobalCommands_insert( "ToggleExperimentalUSD", makeCallbackF( Experimental_toggleUSDDock ) );
 	GlobalCommands_insert( "ToggleExperimentalECS", makeCallbackF( Experimental_toggleECSDock ) );
 	GlobalCommands_insert( "ImportUSDStructure", makeCallbackF( Experimental_importUSDStructure ) );
 	GlobalCommands_insert( "ExportToUSDA", makeCallbackF( Experimental_exportToUSDA ) );
+	GlobalCommands_insert( "ImportMayaASCII", makeCallbackF( Experimental_importMayaASCII ) );
+	GlobalCommands_insert( "ExportToMayaASCII", makeCallbackF( Experimental_exportToMayaASCII ) );
 
 	Select_registerCommands();
 	Layers_registerCommands();

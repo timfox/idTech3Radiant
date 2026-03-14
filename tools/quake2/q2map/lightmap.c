@@ -212,7 +212,7 @@ triangle_t  *AllocTriangle( triangulation_t *trian ){
    ============
  */
 void TriEdge_r( triangulation_t *trian, triedge_t *e ){
-	int i, bestp;
+	int i, bestp = -1;
 	vec3_t v1, v2;
 	vec_t   *p0, *p1, *p;
 	vec_t best, ang;
@@ -247,7 +247,7 @@ void TriEdge_r( triangulation_t *trian, triedge_t *e ){
 			bestp = i;
 		}
 	}
-	if ( best >= 1 ) {
+	if ( best >= 1 || bestp == -1 ) {
 		return;     // edge doesn't match anything
 
 	}
@@ -270,7 +270,7 @@ void TriEdge_r( triangulation_t *trian, triedge_t *e ){
 void TriangulatePoints( triangulation_t *trian ){
 	vec_t d, bestd;
 	vec3_t v1;
-	int bp1, bp2, i, j;
+	int bp1 = 0, bp2 = 1, i, j;
 	vec_t   *p1, *p2;
 	triedge_t   *e, *e2;
 
@@ -923,7 +923,7 @@ void GatherSampleLight( vec3_t pos, vec3_t normal,
 	vec3_t delta;
 	float dot, dot2;
 	float dist;
-	float scale;
+	float scale = 0;
 	float           *dest;
 
 	// get the PVS for the pos to limit the number of checks
@@ -1174,16 +1174,23 @@ void FinalLightFace( int facenum ){
 	int i, j, k, st;
 	vec3_t lb;
 	patch_t     *patch;
-	triangulation_t *trian;
+	triangulation_t *trian = NULL;
 	facelight_t *fl;
 	float minlight;
 	float max, newmax;
 	byte        *dest;
 	int pfacenum;
+	int numstyles;
+	int truncatedstyles;
 	vec3_t facemins, facemaxs;
 
 	f = &dfaces[facenum];
 	fl = &facelight[facenum];
+	numstyles = fl->numstyles;
+	truncatedstyles = numstyles > MAXLIGHTMAPS;
+	if ( truncatedstyles ) {
+		numstyles = MAXLIGHTMAPS;
+	}
 
 	if ( texinfo[f->texinfo].flags & ( SURF_WARP | SURF_SKY ) ) {
 		return;     // non-lit texture
@@ -1191,7 +1198,7 @@ void FinalLightFace( int facenum ){
 	}
 	ThreadLock();
 	f->lightofs = lightdatasize;
-	lightdatasize += fl->numstyles * ( fl->numsamples * 3 );
+	lightdatasize += numstyles * ( fl->numsamples * 3 );
 
 // add green sentinals between lightmaps
 #if 0
@@ -1268,8 +1275,7 @@ void FinalLightFace( int facenum ){
 
 	dest = &dlightdata[f->lightofs];
 
-	if ( fl->numstyles > MAXLIGHTMAPS ) {
-		fl->numstyles = MAXLIGHTMAPS;
+	if ( truncatedstyles ) {
 		Sys_Printf( "face with too many lightstyles: (%f %f %f)\n",
 					face_patches[facenum]->origin[0],
 					face_patches[facenum]->origin[1],
@@ -1277,7 +1283,7 @@ void FinalLightFace( int facenum ){
 					);
 	}
 
-	for ( st = 0 ; st < fl->numstyles ; st++ )
+	for ( st = 0 ; st < numstyles ; st++ )
 	{
 		f->styles[st] = fl->stylenums[st];
 		for ( j = 0 ; j < fl->numsamples ; j++ )

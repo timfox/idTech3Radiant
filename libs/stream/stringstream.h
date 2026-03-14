@@ -36,9 +36,10 @@ public:
 	StringBuffer(){
 		m_string.push_back( '\0' );
 	}
-	explicit StringBuffer( std::size_t capacity ){
-		m_string.reserve( capacity );
-		m_string.push_back( '\0' );
+	explicit StringBuffer( std::size_t capacity ) : m_string( 1, '\0' ){
+		if( capacity > m_string.capacity() ){
+			m_string.reserve( capacity );
+		}
 	}
 	explicit StringBuffer( const char* string ) : m_string( string, string + string_length( string ) + 1 ){
 	}

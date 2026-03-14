@@ -141,7 +141,7 @@ void QE_CheckAutoSave(){
 			else
 			{
 				if ( Map_Unnamed( g_map ) ) {
-					auto autosave = StringStream( g_qeglobals.m_userGamePath, "maps/" );
+					auto autosave = StringStream( getMapsPath() );
 					Q_mkdir( autosave );
 					autosave << "autosave.map";
 					Map_SaveFile( autosave );

@@ -59,7 +59,59 @@
 #include "watchbsp.h"
 #include "autosave.h"
 
+#include <cstring>
+
 QEGlobals_t g_qeglobals;
+
+namespace
+{
+void QE_pushUniquePath( std::vector<CopiedString>& paths, const char* newPath ){
+	if ( !string_empty( newPath )
+	  && std::ranges::none_of( paths, [newPath]( const CopiedString& path ){ return path_equal( path.c_str(), newPath ); } ) ) {
+		paths.emplace_back( newPath );
+	}
+}
+
+CopiedString QE_projectContentPath(){
+	if ( string_empty( GameToolsPath_get() ) ) {
+		return "";
+	}
+
+	const auto contentPath = StringStream( GameToolsPath_get(), "content/" );
+	return path_is_directory( contentPath ) ? CopiedString( contentPath.c_str() ) : CopiedString();
+}
+
+void QE_collectExtraResourcePaths( std::vector<CopiedString>& paths ){
+	for( const auto& path : ExtraResourcePaths_get() )
+		QE_pushUniquePath( paths, path.c_str() );
+
+	const auto projectContentPath = QE_projectContentPath();
+	QE_pushUniquePath( paths, projectContentPath.c_str() );
+}
+
+CopiedString QE_bspOutputDirForMapDir( const char* mapdir ){
+	const auto cleanedMapDir = StringStream( PathCleaned( mapdir ) );
+	if ( const char* contentMapsrc = std::strstr( cleanedMapDir.c_str(), "/content/mapsrc" ) ) {
+		return StringStream( StringRange( cleanedMapDir.c_str(), contentMapsrc ), "/content/maps" ).c_str();
+	}
+
+	const auto parentDir = StringStream( PathCleaned( PathFilenameless( cleanedMapDir.c_str() ) ) );
+	return string_empty( parentDir.c_str() )
+		? CopiedString( "content/maps" )
+		: CopiedString( StringStream( PathCleaned( parentDir.c_str() ), "/content/maps" ).c_str() );
+}
+}
+
+CopiedString QE_GetExtraResourceArgs(){
+	std::vector<CopiedString> paths;
+	QE_collectExtraResourcePaths( paths );
+
+	StringOutputStream stream( 256 );
+	for ( const auto& path : paths )
+		stream << " -fs_pakpath " << Quoted( path.c_str() );
+
+	return stream.c_str();
+}
 
 
 #if defined( POSIX )
@@ -79,15 +131,11 @@ void QE_InitVFS(){
 	const char* globalRoot = EnginePath_get();
 
 	std::vector<CopiedString> paths;
-	const auto paths_push = [&paths]( const char* newPath ){ // collects unique paths
-		if( !string_empty( newPath )
-		&& std::ranges::none_of( paths, [newPath]( const CopiedString& path ){ return path_equal( path.c_str(), newPath ); } ) )
-			paths.emplace_back( newPath );
+	const auto paths_push = [&paths]( const char* newPath ){
+		QE_pushUniquePath( paths, newPath );
 	};
 
-
-	for( const auto& path : ExtraResourcePaths_get() )
-		paths_push( path.c_str() );
+	QE_collectExtraResourcePaths( paths );
 
 	// Tools default content (e.g. textures/common/toolsskybox) - searched first so game content overrides
 	{
@@ -184,10 +232,8 @@ void build_init_variables(){
 	build_set_variable( "ExecutableType", RADIANT_EXECUTABLE );
 	build_set_variable( "EnginePath", EnginePath_get() );
 	build_set_variable( "UserEnginePath", g_qeglobals.m_userEnginePath.c_str() );
-	for( const auto& path : ExtraResourcePaths_get() )
-		if( !path.empty() )
-			stream << " -fs_pakpath " << Quoted( path );
-	build_set_variable( "ExtraResourcePaths", stream );
+	const auto extraResourceArgs = QE_GetExtraResourceArgs();
+	build_set_variable( "ExtraResourcePaths", extraResourceArgs.c_str() );
 	build_set_variable( "MonitorAddress", ( g_WatchBSP_Enabled ) ? RADIANT_MONITOR_ADDRESS : "" );
 	build_set_variable( "GameName", gamename_get() );
 
@@ -208,11 +254,8 @@ void build_init_variables(){
 
 	/* MapsrcDir = MapDir; BspOutputDir/BspOutputFile = content/maps for final BSP */
 	build_set_variable( "MapsrcDir", mapdir );
-	const auto parentDir = stream( PathCleaned( PathFilenameless( mapdir.c_str() ) ) );
-	const auto bspOutputDir = string_empty( parentDir.c_str() )
-		? StringStream<256>( "content/maps" )
-		: StringStream<256>( PathCleaned( parentDir.c_str() ), "/content/maps" );
-	build_set_variable( "BspOutputDir", bspOutputDir );
+	const auto bspOutputDir = QE_bspOutputDirForMapDir( mapdir.c_str() );
+	build_set_variable( "BspOutputDir", bspOutputDir.c_str() );
 	const auto bspOutputFile = stream( bspOutputDir, "/", PathFilename( mapname ), ".bsp" );
 	build_set_variable( "BspOutputFile", bspOutputFile );
 

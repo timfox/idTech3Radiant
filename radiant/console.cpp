@@ -48,6 +48,7 @@
 #include <QSocketNotifier>
 #include <QKeyEvent>
 #include <QKeySequence>
+#include <QPointer>
 
 #ifndef WIN32
 #include <cerrno>
@@ -95,14 +96,14 @@ void Sys_LogFile( bool enable ){
 	}
 }
 
-QPlainTextEdit* g_console = 0;
+QPointer<QPlainTextEdit> g_console;
 
 namespace
 {
-QWidget* g_consoleContainer = nullptr;
-QProgressBar* g_buildProgressBar = nullptr;
-QLabel* g_buildProgressLabel = nullptr;
-QTimer* g_buildElapsedTimer = nullptr;
+QPointer<QWidget> g_consoleContainer;
+QPointer<QProgressBar> g_buildProgressBar;
+QPointer<QLabel> g_buildProgressLabel;
+QPointer<QTimer> g_buildElapsedTimer;
 std::chrono::steady_clock::time_point g_buildStartTime;
 
 #ifndef WIN32
@@ -243,7 +244,6 @@ QWidget* Console_constructWindow(){
 
 	{
 		g_console = text;
-		text->connect( text, &QObject::destroyed, [](){ g_console = nullptr; } );
 	}
 
 	vbox->addWidget( text, 1 );
@@ -466,7 +466,8 @@ std::size_t Sys_Print( int level, const char* buf, std::size_t length ){
 	if ( level != SYS_NOCON ) {
 #ifndef WIN32
 		{  // on linux/macos log also to terminal
-			(void)write( Console_terminalFd( level ), buf, length );
+			const auto written = write( Console_terminalFd( level ), buf, length );
+			(void)written;
 		}
 #endif
 

@@ -225,6 +225,7 @@ struct camera_t
 	bool m_strafe_forward; // true when in strafemode by ctrl-key and shift is pressed for forward strafing
 	bool m_strafe_forward_invert; //silly option to invert forward strafing to support old fegs
 	bool m_orbit = false;
+	bool m_maya_dolly = false;
 	Vector3 m_orbit_center;
 	Vector3 m_orbit_initial_pos;
 	int m_orbit_offset = 0;
@@ -370,11 +371,17 @@ void Camera_FreeMove( camera_t& camera, int dx, int dy ){
 	// free strafe mode, toggled by the ctrl key with optional shift for forward movement
 	if ( camera.m_strafe ) {
 		const float speed = g_camwindow_globals_private.m_strafeSpeed;
-		camera.origin -= camera.vright * speed * dx;
-		if ( camera.m_strafe_forward )
-			camera.origin += camera.vpn * speed * dy * ( camera.m_strafe_forward_invert ? 1 : -1 );
-		else
-			camera.origin += camera.vup * speed * dy;
+		if( camera.m_maya_dolly ){
+			const int dominantDelta = std::abs( dx ) > std::abs( dy ) ? dx : -dy;
+			camera.origin += camera.vpn * speed * dominantDelta;
+		}
+		else{
+			camera.origin -= camera.vright * speed * dx;
+			if ( camera.m_strafe_forward )
+				camera.origin += camera.vpn * speed * dy * ( camera.m_strafe_forward_invert ? 1 : -1 );
+			else
+				camera.origin += camera.vup * speed * dy;
+		}
 	}
 	else // free rotation
 	{
@@ -723,9 +730,21 @@ static void Camera_motionDelta( int x, int y, const QMouseEvent *event, camera_t
 	cam.m_mouseMove.motion_delta( x, y, event );
 	cam.m_idleDraw.queueDraw( DeferredMotionDelta2::InvokeCaller( cam.m_mouseMove ), true );
 
-	cam.m_orbit = maya_modifier_pressed( event->modifiers() ) && ( event->buttons() & Qt::MouseButton::RightButton );
+	cam.m_maya_dolly = false;
+	cam.m_orbit = g_bMayaNavigation
+		&& maya_modifier_pressed( event->modifiers() )
+		&& ( event->buttons() & Qt::MouseButton::LeftButton );
 	if( cam.m_orbit ){
 		cam.m_strafe = false;
+		return;
+	}
+
+	if( g_bMayaNavigation
+		&& maya_modifier_pressed( event->modifiers() )
+		&& ( event->buttons() & Qt::MouseButton::RightButton ) ){
+		cam.m_strafe = true;
+		cam.m_strafe_forward = false;
+		cam.m_maya_dolly = true;
 		return;
 	}
 
@@ -1141,7 +1160,13 @@ void camera_orbit_init( camera_t& cam, Vector2 xy ){
 }
 
 inline bool ORBIT_EVENT( const QMouseEvent& event ){
-	return event.button() == Qt::MouseButton::RightButton
+	return g_bMayaNavigation
+		&& event.button() == Qt::MouseButton::LeftButton
+		&& ( modifiers_for_state( event.modifiers() ) == c_modifierAlt || maya_modifier_pressed( event.modifiers() ) );
+}
+inline bool DOLLY_EVENT( const QMouseEvent& event ){
+	return g_bMayaNavigation
+		&& event.button() == Qt::MouseButton::RightButton
 		&& ( modifiers_for_state( event.modifiers() ) == c_modifierAlt || maya_modifier_pressed( event.modifiers() ) );
 }
 inline bool M2_EVENT( const QMouseEvent& event ){
@@ -1158,8 +1183,9 @@ inline bool PAN_RELEASE_EVENT( const QMouseEvent& event ){
 static void enable_freelook_button_press( const QMouseEvent& event, CamWnd& camwnd ){
 	const bool m2    = M2_EVENT( event );
 	const bool m2alt = ORBIT_EVENT( event );
+	const bool dolly = DOLLY_EVENT( event );
 	const bool pan   = PAN_EVENT( event );
-	if ( m2 || m2alt || pan ) {
+	if ( m2 || m2alt || dolly || pan ) {
 		camwnd.m_bFreeMove_entering = true;
 		if( m2 && context_menu_try( camwnd ) ){
 			context_menu_show();
@@ -1177,7 +1203,8 @@ static void enable_freelook_button_press( const QMouseEvent& event, CamWnd& camw
 static void disable_freelook_button_press( const QMouseEvent& event, CamWnd& camwnd ){
 	const bool m2    = M2_EVENT( event );
 	const bool m2alt = ORBIT_EVENT( event );
-	if ( m2 || m2alt ) {
+	const bool dolly = DOLLY_EVENT( event );
+	if ( m2 || m2alt || dolly ) {
 		camwnd.m_bFreeMove_entering = false;
 		if( m2 && context_menu_try( camwnd ) ){
 			camwnd.DisableFreeMove();
@@ -1195,12 +1222,17 @@ static void disable_freelook_button_press( const QMouseEvent& event, CamWnd& cam
 static void disable_freelook_button_release( const QMouseEvent& event, CamWnd& camwnd ){
 	const bool m2    = M2_EVENT( event );
 	const bool m2alt = ORBIT_EVENT( event );
+	const bool dolly = DOLLY_EVENT( event );
 	const bool pan_release = PAN_RELEASE_EVENT( event );
 	if ( m2 || m2alt ) {
 		camwnd.getCamera().m_orbit = false;
 		if( ( ( camwnd.m_rightClickTimer.elapsed_msec() < 300 && camwnd.m_rightClickMove < 56 ) == !camwnd.m_bFreeMove_entering ) ){
 			camwnd.DisableFreeMove();
 		}
+	}
+	else if ( dolly ) {
+		camwnd.getCamera().m_maya_dolly = false;
+		camwnd.DisableFreeMove();
 	}
 	else if ( pan_release ) {
 		camwnd.DisableFreeMove();
@@ -1215,12 +1247,13 @@ void camwnd_update_xor_rectangle( CamWnd& self, rect_t area ){
 
 
 static void selection_button_press( const QMouseEvent& event, WindowObserver* observer ){
-	if( !ORBIT_EVENT( event ) )
+	if( !ORBIT_EVENT( event ) && !DOLLY_EVENT( event ) )
 		observer->onMouseDown( WindowVector( event.x(), event.y() ), button_for_button( event.button() ), modifiers_for_state( event.modifiers() ) );
 }
 
 static void selection_button_release( const QMouseEvent& event, WindowObserver* observer ){
-	observer->onMouseUp( WindowVector( event.x(), event.y() ), button_for_button( event.button() ), modifiers_for_state( event.modifiers() ) );
+	if( !ORBIT_EVENT( event ) && !DOLLY_EVENT( event ) )
+		observer->onMouseUp( WindowVector( event.x(), event.y() ), button_for_button( event.button() ), modifiers_for_state( event.modifiers() ) );
 }
 
 void selection_motion( const QMouseEvent& event, WindowObserver* observer ){

@@ -325,10 +325,16 @@ const char* browse_sound( QWidget* parent, const char* filepath ){
 			buffer << root << filepath;
 	}
 	if( buffer.empty() ){
-		buffer << g_qeglobals.m_userGamePath << "sound/";
+		buffer << GameToolsPath_get() << "content/sound/";
 
-		if ( !file_readable( buffer ) ) {
-			// just go to fsmain
+		if ( !file_is_directory( buffer ) ) {
+			buffer( g_qeglobals.m_userGamePath, "sound/" );
+		}
+		if ( !file_is_directory( buffer ) ) {
+			// just go to the best available root
+			buffer( GameToolsPath_get(), "content/" );
+		}
+		if ( !file_is_directory( buffer ) ) {
 			buffer( g_qeglobals.m_userGamePath );
 		}
 	}
