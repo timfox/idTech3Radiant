@@ -1448,20 +1448,37 @@ void CSG_Hollow( EHollowType type, const char* undoString, const CSGToolDialog& 
 
 //=================DLG
 
+static HollowSettings CSG_DefaultHollowSettings(){
+	HollowSettings settings;
+	settings.m_hollowType = eExtrude;
+	settings.m_offset = GetGridSize();
+	settings.m_excludeByAxis = false;
+	settings.m_excludeSelectedFaces = true;
+	settings.m_caulk = true;
+	settings.m_removeInner = true;
+	return settings;
+}
+
+static void CSG_MakeHollow(){
+	HollowSettings settings = CSG_DefaultHollowSettings();
+	UndoableCommand undo( "makeHollow" );
+	GlobalSceneGraph().traverse( BrushHollowSelectedWalker( settings ) );
+	GlobalSceneGraph().traverse( BrushDeleteSelected() );
+	SceneChangeNotify();
+}
+
 static void CSGdlg_BrushShrink(){
 	HollowSettings settings = CSGdlg_getSettings( g_csgtool_dialog );
 	settings.m_offset *= -1;
 	UndoableCommand undo( "Shrink brush" );
-//	Scene_forEachSelectedBrush( BrushFaceOffset( settings ) );
-	Scene_forEachVisibleBrush( GlobalSceneGraph(), BrushFaceOffset( settings ) );
+	Scene_forEachSelectedBrush( BrushFaceOffset( settings ) );
 	SceneChangeNotify();
 }
 
 static void CSGdlg_BrushExpand(){
 	HollowSettings settings = CSGdlg_getSettings( g_csgtool_dialog );
 	UndoableCommand undo( "Expand brush" );
-//	Scene_forEachSelectedBrush( BrushFaceOffset( settings ) );
-	Scene_forEachVisibleBrush( GlobalSceneGraph(), BrushFaceOffset( settings ) );
+	Scene_forEachSelectedBrush( BrushFaceOffset( settings ) );
 	SceneChangeNotify();
 }
 
@@ -1589,6 +1606,9 @@ void CSG_Tool(){
 #include "commands.h"
 
 void CSG_registerCommands(){
+	GlobalCommands_insert( "MakeHollow", makeCallbackF( CSG_MakeHollow ) );
+	GlobalCommands_insert( "BrushExpand", makeCallbackF( CSGdlg_BrushExpand ) );
+	GlobalCommands_insert( "BrushShrink", makeCallbackF( CSGdlg_BrushShrink ) );
 	GlobalCommands_insert( "CSGSubtract", makeCallbackF( CSG_Subtract ), QKeySequence( "Shift+U" ) );
 	GlobalCommands_insert( "CSGMerge", makeCallbackF( CSG_Merge ) );
 	GlobalCommands_insert( "CSGWrapMerge", FreeCaller<void(), CSG_WrapMerge>(), QKeySequence( "Ctrl+U" ) );

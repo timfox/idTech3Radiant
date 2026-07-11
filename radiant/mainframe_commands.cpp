@@ -20,6 +20,7 @@
 #include "video_workbench.h"
 #include "spreadsheet_workbench.h"
 #include "python_script_workbench.h"
+#include "aiml_workbench.h"
 #include "scenegraphinspector.h"
 #include "ai_assistant.h"
 #include "referencecache.h"
@@ -54,6 +55,7 @@ void MainFrame_registerCommands(){
 	GlobalCommands_insert( "OpenCinematicPlayer", makeCallbackF( VideoWorkbench_open ), QKeySequence( "Ctrl+Alt+V" ) );
 	GlobalCommands_insert( "OpenSpreadsheetWorkbench", makeCallbackF( Spreadsheet_open ), QKeySequence( "Ctrl+Alt+E" ) );
 	GlobalCommands_insert( "OpenPythonScript", makeCallbackF( PythonScript_open ), QKeySequence( "Ctrl+Alt+Y" ) );
+	GlobalCommands_insert( "OpenAIMLEditor", makeCallbackF( AIMLWorkbench_open ), QKeySequence( "Ctrl+Alt+A" ) );
 	GlobalCommands_insert( "OpenAudioPreview", makeCallbackF( AudioWorkbench_open ) );
 	GlobalCommands_insert( "ToolQ3Map2Help", makeCallbackF( +[](){ IdTech3Tool_runHelp( g_idTech3Tools[0] ); } ) );
 	GlobalCommands_insert( "ToolQData3Help", makeCallbackF( +[](){ IdTech3Tool_runHelp( g_idTech3Tools[1] ); } ) );

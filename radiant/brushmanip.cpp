@@ -1511,6 +1511,9 @@ void Brush_constructMenu( QMenu* menu ){
 		create_menu_item_with_mnemonic( submenu, "CSG &Wrap Merge", "CSGWrapMerge" );
 		create_menu_item_with_mnemonic( submenu, "CSG &Intersect", "CSGIntersect" );
 		create_menu_item_with_mnemonic( submenu, "Make &Room", "CSGroom" );
+		create_menu_item_with_mnemonic( submenu, "Make &Hollow", "MakeHollow" );
+		create_menu_item_with_mnemonic( submenu, "E&xpand Brush", "BrushExpand" );
+		create_menu_item_with_mnemonic( submenu, "S&hrink Brush", "BrushShrink" );
 		create_menu_item_with_mnemonic( submenu, "CSG &Tool", "CSGTool" );
 	}
 	menu->addSeparator();
@@ -1519,6 +1522,8 @@ void Brush_constructMenu( QMenu* menu ){
 
 		submenu->setTearOffEnabled( g_Layout_enableDetachableMenus.m_value );
 
+		create_check_menu_item_with_mnemonic( submenu, "Toggle Clipper Tool", "ToggleClipper" );
+		submenu->addSeparator();
 		create_menu_item_with_mnemonic( submenu, "Clip selection", "ClipperClip" );
 		create_menu_item_with_mnemonic( submenu, "Split selection", "ClipperSplit" );
 		create_menu_item_with_mnemonic( submenu, "Flip Clip orientation", "ClipperFlip" );

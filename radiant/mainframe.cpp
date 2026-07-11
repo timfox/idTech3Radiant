@@ -194,6 +194,7 @@
 #include "video_workbench.h"
 #include "spreadsheet_workbench.h"
 #include "python_script_workbench.h"
+#include "aiml_workbench.h"
 #include "scenegraphinspector.h"
 #include "ai_assistant.h"
 
@@ -747,7 +748,7 @@ void Radiant_Shutdown(){
 }
 
 void Exit(){
-	if ( ConfirmModified( "Exit Radiant" ) && Spreadsheet_requestClose() ) {
+	if ( ConfirmModified( "Exit Radiant" ) && Spreadsheet_requestClose() && AIMLWorkbench_requestClose() ) {
 		QCoreApplication::quit();
 	}
 }
@@ -764,7 +765,7 @@ void Exit(){
 extern char **environ;
 #endif
 void Radiant_Restart(){
-	if( ConfirmModified( "Restart Radiant" ) && Spreadsheet_requestClose() ){
+	if( ConfirmModified( "Restart Radiant" ) && Spreadsheet_requestClose() && AIMLWorkbench_requestClose() ){
 		const auto mapname = StringStream( Quoted( Map_Name( g_map ) ) );
 
 		char *argv[] = { string_clone( environment_get_app_filepath() ),
@@ -5617,6 +5618,7 @@ void create_tools_menu( QMenuBar *menubar ){
 	create_menu_item_with_mnemonic( menu, "Video Player", "OpenCinematicPlayer" );
 	create_menu_item_with_mnemonic( menu, "Spreadsheet Editor", "OpenSpreadsheetWorkbench" );
 	create_menu_item_with_mnemonic( menu, "Python Script Editor", "OpenPythonScript" );
+	create_menu_item_with_mnemonic( menu, "AIML 3.0 Editor", "OpenAIMLEditor" );
 	create_menu_item_with_mnemonic( menu, "AI Assistant", "OpenAIAssistant" );
 	menu->addSeparator();
 	create_menu_item_with_mnemonic( menu, "Q3Map2++ Help", "ToolQ3Map2Help" );
@@ -5766,6 +5768,7 @@ void register_shortcuts(){
 void File_constructToolbar( QToolBar* toolbar ){
 	toolbar_append_button( toolbar, "Open an existing map", "file_open.png", "OpenMap" );
 	toolbar_append_button( toolbar, "Save the active map", "file_save.png", "SaveMap" );
+	toolbar_append_button( toolbar, "Search commands and tools", "search.svg", "CommandLauncher" );
 	toolbar_append_button( toolbar, "Make Room", "selection_makeroom.png", "CSGroom" );
 }
 
@@ -5797,6 +5800,9 @@ void CSG_constructToolbar( QToolBar* toolbar ){
 	toolbar_append_button( toolbar, "CSG Subtract", "selection_csgsubtract.png", "CSGSubtract" );
 	toolbar_append_button( toolbar, "CSG Wrap Merge", "selection_csgmerge.png", "CSGWrapMerge" );
 	toolbar_append_button( toolbar, "Room", "selection_makeroom.png", "CSGroom" );
+	toolbar_append_button( toolbar, "Make Hollow", "selection_makeroom.png", "MakeHollow" );
+	toolbar_append_button( toolbar, "Expand Brush", "csgtool_expand.png", "BrushExpand" );
+	toolbar_append_button( toolbar, "Shrink Brush", "csgtool_shrink.png", "BrushShrink" );
 	toolbar_append_button( toolbar, "CSG Tool", "ellipsis.png", "CSGTool" );
 	toolbar_append_button( toolbar, "Auto-Caulk Selected", "f-caulk.png", "AutoCaulkSelected" );
 }
@@ -6401,6 +6407,7 @@ void MainFrame::Create(){
 	VideoWorkbench_createDock( window );
 	Spreadsheet_createDock( window );
 	PythonScript_createDock( window );
+	AIMLWorkbench_createDock( window );
 	ScenegraphInspector_createDock( window );
 	AIAssistant_createDock( window );
 
@@ -6465,6 +6472,7 @@ void MainFrame::Shutdown(){
 	VideoWorkbench_stopAndRelease();
 	Spreadsheet_stopAndRelease();
 	PythonScript_stopAndRelease();
+	AIMLWorkbench_stopAndRelease();
 	ScenegraphInspector_destroyDock();
 	AIAssistant_destroy();
 	g_consoleDock = nullptr;

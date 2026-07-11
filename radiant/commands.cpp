@@ -479,11 +479,83 @@ QString humanizeCommandName( const char* name ){
 }
 
 QString commandLauncherTitle( const char* name ){
+	if( string_equal( name, "MakeHollow" ) ){
+		return "Make Hollow";
+	}
+	if( string_equal( name, "BrushExpand" ) ){
+		return "Expand Brush";
+	}
+	if( string_equal( name, "BrushShrink" ) ){
+		return "Shrink Brush";
+	}
 	if( string_equal( name, "CSGroom" ) ){
 		return "Make Room";
 	}
 	if( string_equal( name, "CSGTool" ) ){
-		return "CSG Tool";
+		return "Brush Shell Tool";
+	}
+	if( string_equal( name, "CSGSubtract" ) ){
+		return "Carve / Subtract";
+	}
+	if( string_equal( name, "ToggleClipper" ) ){
+		return "Toggle Clipper Tool";
+	}
+	if( string_equal( name, "ClipperClip" ) ){
+		return "Clip Selected";
+	}
+	if( string_equal( name, "ClipperSplit" ) ){
+		return "Split Selected";
+	}
+	if( string_equal( name, "ClipperFlip" ) ){
+		return "Flip Clip Plane";
+	}
+	if( string_equal( name, "EntityMovePrimitivesToLast" ) ){
+		return "Move Selection to Entity";
+	}
+	if( string_equal( name, "EntityMovePrimitivesToFirst" ) ){
+		return "Move Selection to World";
+	}
+	if( string_equal( name, "EntityUngroup" ) ){
+		return "Ungroup Entity";
+	}
+	if( string_equal( name, "AddEntityByName" ) ){
+		return "Create Entity";
+	}
+	if( string_equal( name, "AddInfoPlayerStart" ) ){
+		return "Create Player Start";
+	}
+	if( string_equal( name, "AddInfoPlayerDeathmatch" ) ){
+		return "Create Deathmatch Start";
+	}
+	if( string_equal( name, "MakeDetail" ) ){
+		return "Make Detail";
+	}
+	if( string_equal( name, "MakeStructural" ) ){
+		return "Make Structural";
+	}
+	if( string_equal( name, "ShowHidden" ) || string_equal( name, "ShowHiddenAlt" ) ){
+		return "Show Hidden";
+	}
+	if( string_equal( name, "HideSelected" ) ){
+		return "Hide Selected";
+	}
+	if( string_equal( name, "SnapToGrid" ) ){
+		return "Snap to Grid";
+	}
+	if( string_equal( name, "SelectAllOfType" ) ){
+		return "Select All of Type";
+	}
+	if( string_equal( name, "MoveToCamera" ) ){
+		return "Move to Camera";
+	}
+	if( string_equal( name, "PasteToCamera" ) ){
+		return "Paste to Camera";
+	}
+	if( string_equal( name, "TransformDialog" ) ){
+		return "Transform";
+	}
+	if( string_equal( name, "OpenAIMLEditor" ) ){
+		return "AIML 3.0 Editor";
 	}
 	if( string_equal( name, "XYFocusOnSelected" ) ){
 		return "Focus All 2D Views on Selected";
@@ -618,8 +690,35 @@ int scoreWordMatch( const QString& queryWord, const QString& targetWord ){
 }
 
 QStringList commandSearchAliases( const char* name ){
+	if( string_equal( name, "MakeHollow" ) ){
+		return { "make hollow", "make hallow", "hollow", "shell", "thicken brush", "wall thickness" };
+	}
+	if( string_equal( name, "BrushExpand" ) ){
+		return { "expand", "inflate", "grow brush", "push faces out" };
+	}
+	if( string_equal( name, "BrushShrink" ) ){
+		return { "shrink", "contract", "inset brush", "pull faces in" };
+	}
 	if( string_equal( name, "CSGroom" ) ){
 		return { "make room", "make hollow", "make hallow", "hollow" };
+	}
+	if( string_equal( name, "CSGTool" ) ){
+		return { "hollow tool", "shell tool", "brush shell", "thickness tool", "expand shrink hollow" };
+	}
+	if( string_equal( name, "CSGSubtract" ) ){
+		return { "carve", "subtract", "boolean subtract", "cut out" };
+	}
+	if( string_equal( name, "ToggleClipper" ) ){
+		return { "clip tool", "knife tool", "slice tool", "plane cut" };
+	}
+	if( string_equal( name, "ClipperClip" ) ){
+		return { "clip selection", "cut selection", "apply clip" };
+	}
+	if( string_equal( name, "ClipperSplit" ) ){
+		return { "split brush", "slice brush", "split selection" };
+	}
+	if( string_equal( name, "ClipperFlip" ) ){
+		return { "flip clip", "invert clip", "reverse cut" };
 	}
 	if( string_equal( name, "CommandLauncher" ) ){
 		return { "command palette", "tool finder", "action search" };
@@ -645,11 +744,65 @@ QStringList commandSearchAliases( const char* name ){
 	if( string_equal( name, "CloneSelectionAndMakeUnique" ) ){
 		return { "duplicate unique" };
 	}
+	if( string_equal( name, "EntityMovePrimitivesToLast" ) ){
+		return { "tie to entity", "group to entity", "parent to entity" };
+	}
+	if( string_equal( name, "EntityMovePrimitivesToFirst" ) ){
+		return { "move to world", "to worldspawn", "remove from entity" };
+	}
+	if( string_equal( name, "EntityUngroup" ) ){
+		return { "ungroup", "break apart entity", "detach children" };
+	}
+	if( string_equal( name, "AddEntityByName" ) ){
+		return { "entity browser", "entity palette", "entity search", "create entity", "place entity", "add entity" };
+	}
+	if( string_equal( name, "AddInfoPlayerStart" ) ){
+		return { "player start", "spawn point", "info player start", "start position" };
+	}
+	if( string_equal( name, "AddInfoPlayerDeathmatch" ) ){
+		return { "deathmatch spawn", "dm start", "spawn point" };
+	}
+	if( string_equal( name, "MakeDetail" ) ){
+		return { "detail", "convert to detail", "detail brush", "non structural" };
+	}
+	if( string_equal( name, "MakeStructural" ) ){
+		return { "structural", "convert to structural", "world brush", "blocking brush" };
+	}
+	if( string_equal( name, "ShowHidden" ) || string_equal( name, "ShowHiddenAlt" ) ){
+		return { "unhide", "show all hidden", "reveal hidden" };
+	}
+	if( string_equal( name, "HideSelected" ) ){
+		return { "hide", "hide selection", "isolate inverse" };
+	}
 	if( string_equal( name, "HideUnselected" ) ){
 		return { "show only selected" };
 	}
 	if( string_equal( name, "IsolateSelection" ) ){
 		return { "solo selected", "isolate" };
+	}
+	if( string_equal( name, "SnapToGrid" ) ){
+		return { "snap", "align to grid", "grid snap" };
+	}
+	if( string_equal( name, "SelectAllOfType" ) ){
+		return { "select similar", "select same type", "select same class" };
+	}
+	if( string_equal( name, "SelectTextured" ) ){
+		return { "select same material", "select same texture", "select textured" };
+	}
+	if( string_equal( name, "MoveToCamera" ) ){
+		return { "bring to camera", "move selected to camera", "drop at camera" };
+	}
+	if( string_equal( name, "PasteToCamera" ) ){
+		return { "paste at camera", "spawn at camera" };
+	}
+	if( string_equal( name, "TransformDialog" ) ){
+		return { "position rotation scale", "prs", "transform panel", "numeric transform" };
+	}
+	if( string_equal( name, "RepeatTransforms" ) ){
+		return { "repeat last transform", "repeat move", "repeat rotate", "repeat scale" };
+	}
+	if( string_equal( name, "OpenAIMLEditor" ) ){
+		return { "aiml", "aiml 3", "chatbot", "bot editor", "bot script", "pattern template editor", "alice markup language" };
 	}
 	return {};
 }

@@ -927,6 +927,7 @@ $(INSTALLDIR)/radiant.$(EXE): LIBS_EXTRA := $(LIBS_GL) $(LIBS_DL) $(LIBS_XML) $(
 $(INSTALLDIR)/radiant.$(EXE): CPPFLAGS_EXTRA := $(CPPFLAGS_GL) $(CPPFLAGS_DL) $(CPPFLAGS_XML) $(CPPFLAGS_GLIB) $(CPPFLAGS_QTWIDGETS) $(CPPFLAGS_QTSVG) $(CPPFLAGS_QTMULTIMEDIA) $(CPPFLAGS_QTMULTIMEDIAWIDGETS) $(CPPFLAGS_QTNETWORK) -Ilibs -Iinclude -Ilibs/recast/Recast/Include -Ilibs/recast/Detour/Include -Ilibs/recast/DetourCrowd/Include -Ilibs/recast/DetourTileCache/Include
 $(INSTALLDIR)/radiant.$(EXE): \
 	radiant/audio_workbench.o \
+	radiant/aiml_workbench.o \
 	radiant/ai_assistant_workbench.o \
 	radiant/autosave.o \
 	radiant/brushmanip.o \
