@@ -40,6 +40,7 @@ const KeyEvent& GlobalKeyEvents_find( const char* name );
 
 
 void DoCommandListDlg();
+void DoCommandLauncher();
 
 void LoadCommandMap( const char* path );
 void SaveCommandMap( const char* path );

@@ -387,15 +387,17 @@ void Camera_FreeMove( camera_t& camera, int dx, int dy ){
 	{
 		const float dtime = 0.0333333f;
 		Vector3 angles0( camera.angles );
+		const int rotateDx = camera.m_orbit ? -dx : dx;
+		const int rotateDy = camera.m_orbit ? -dy : dy;
 
 		if ( g_camwindow_globals_private.m_bCamInverseMouse ) {
-			camera.angles[CAMERA_PITCH] -= dy * dtime * g_camwindow_globals_private.m_angleSpeed;
+			camera.angles[CAMERA_PITCH] -= rotateDy * dtime * g_camwindow_globals_private.m_angleSpeed;
 		}
 		else{
-			camera.angles[CAMERA_PITCH] += dy * dtime * g_camwindow_globals_private.m_angleSpeed;
+			camera.angles[CAMERA_PITCH] += rotateDy * dtime * g_camwindow_globals_private.m_angleSpeed;
 		}
 
-		camera.angles[CAMERA_YAW] += dx * dtime * g_camwindow_globals_private.m_angleSpeed;
+		camera.angles[CAMERA_YAW] += rotateDx * dtime * g_camwindow_globals_private.m_angleSpeed;
 
 		camera.angles[CAMERA_PITCH] = std::clamp( camera.angles[CAMERA_PITCH], -90.f, 90.f );
 

@@ -261,6 +261,10 @@ void PythonScript_run(){
 	}
 	if ( !gamePath.isEmpty() ) {
 		env.insert( "RADIANT_GAME_PATH", gamePath );
+		const QString idprojPath = QDir( gamePath ).filePath( "game.idproj" );
+		if ( QFile::exists( idprojPath ) ) {
+			env.insert( "RADIANT_IDPROJ_PATH", idprojPath );
+		}
 	}
 	if ( !mapsPath.isEmpty() ) {
 		env.insert( "RADIANT_MAPS_PATH", mapsPath );

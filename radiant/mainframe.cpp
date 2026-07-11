@@ -4325,6 +4325,7 @@ void create_edit_menu( QMenuBar *menubar ){
 	create_menu_item_with_mnemonic( menu, "Select Connected Entities", "SelectConnectedEntities" );
 
 	menu->addSeparator();
+	create_menu_item_with_mnemonic( menu, "Command &Launcher", "CommandLauncher" );
 	create_menu_item_with_mnemonic( menu, "&Shortcuts", "Shortcuts" );
 	create_menu_item_with_mnemonic( menu, "Pre&ferences", "Preferences" );
 }
@@ -4945,10 +4946,11 @@ void create_view_menu( QMenuBar *menubar, MainFrame::EViewStyle style ){
 			submenu->addSeparator();
 		}
 		else{
-			create_menu_item_with_mnemonic( submenu, "Center on Selected", "NextView" );
+			create_menu_item_with_mnemonic( submenu, "Focus Active View on Selected", "XYFocusActiveOnSelected" );
 		}
 
 		create_menu_item_with_mnemonic( submenu, "Focus on Selected", "XYFocusOnSelected" );
+		create_menu_item_with_mnemonic( submenu, "Focus Active View on Selected", "XYFocusActiveOnSelected" );
 		create_menu_item_with_mnemonic( submenu, "Center on Selected", "CenterXYView" );
 		submenu->addSeparator();
 		create_menu_item_with_mnemonic( submenu, "&XY 100%", "Zoom100" );
@@ -4994,6 +4996,8 @@ void create_view_menu( QMenuBar *menubar, MainFrame::EViewStyle style ){
 	menu->addSeparator();
 	{
 		create_check_menu_item_with_mnemonic( menu, "Hide Selected", "HideSelected" );
+		create_check_menu_item_with_mnemonic( menu, "Isolate Selection", "IsolateSelection" );
+		create_menu_item_with_mnemonic( menu, "Hide Unselected", "HideUnselected" );
 		create_menu_item_with_mnemonic( menu, "Show Hidden", "ShowHidden" );
 	}
 	menu->addSeparator();

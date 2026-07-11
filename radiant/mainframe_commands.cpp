@@ -76,8 +76,8 @@ void MainFrame_registerCommands(){
 	GlobalCommands_insert( "CameraRecallBookmark4", makeCallbackF( +[](){ CameraBookmark_recall( 3 ); } ), QKeySequence( "Shift+4" ) );
 	GlobalCommands_insert( "CameraRecallBookmark5", makeCallbackF( +[](){ CameraBookmark_recall( 4 ); } ), QKeySequence( "Shift+5" ) );
 
-	GlobalCommands_insert( "Shortcuts", makeCallbackF( DoCommandListDlg ),
-	                       g_Layout_experimentalFeatures.m_value ? QKeySequence( "Ctrl+Alt+P" ) : QKeySequence( "Ctrl+Shift+P" ) );
+	GlobalCommands_insert( "CommandLauncher", makeCallbackF( DoCommandLauncher ), QKeySequence( "Ctrl+Shift+P" ) );
+	GlobalCommands_insert( "Shortcuts", makeCallbackF( DoCommandListDlg ), QKeySequence( "Ctrl+Alt+P" ) );
 	GlobalCommands_insert( "Preferences", makeCallbackF( PreferencesDialog_showDialog ), QKeySequence( "Ctrl+," ) );
 	GlobalCommands_insert( "FrameSelection", makeCallbackF( FocusAllViews ), QKeySequence( "F" ) );
 

@@ -141,6 +141,12 @@ const KeyEvent& GlobalKeyEvents_find( const char* name ){
 #include <QKeySequenceEdit>
 #include <QKeyEvent>
 #include <QApplication>
+#include <QListWidget>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QLabel>
+
+#include <algorithm>
 
 
 void disconnect_accelerator( const char *name ){
@@ -439,6 +445,333 @@ void DoCommandListDlg(){
 		} );
 	}
 
+	dialog.exec();
+}
+
+namespace
+{
+struct CommandLauncherEntry
+{
+	QString id;
+	QString title;
+	QString subtitle;
+	QString search;
+	int type{};
+	int score{};
+};
+
+QString humanizeCommandName( const char* name ){
+	QString out;
+	const QString source = QString::fromLatin1( name );
+	for( int i = 0; i < source.size(); ++i ){
+		const QChar c = source[i];
+		const QChar prev = i > 0 ? source[i - 1] : QChar();
+		if( c == '_' || c == ':' || c == '-' ){
+			out += ' ';
+			continue;
+		}
+		if( i > 0 && c.isUpper() && ( prev.isLower() || prev.isDigit() ) ){
+			out += ' ';
+		}
+		out += c;
+	}
+	return out.simplified();
+}
+
+QString commandLauncherTitle( const char* name ){
+	if( string_equal( name, "CSGroom" ) ){
+		return "Make Room";
+	}
+	if( string_equal( name, "CSGTool" ) ){
+		return "CSG Tool";
+	}
+	if( string_equal( name, "XYFocusOnSelected" ) ){
+		return "Focus All 2D Views on Selected";
+	}
+	if( string_equal( name, "XYFocusActiveOnSelected" ) ){
+		return "Focus Active 2D View on Selected";
+	}
+	if( string_equal( name, "CommandLauncher" ) ){
+		return "Command Launcher";
+	}
+	return humanizeCommandName( name );
+}
+
+QString normalizeText( QString text ){
+	text = text.toLower();
+	for( QChar& c : text ){
+		if( !c.isLetterOrNumber() ){
+			c = ' ';
+		}
+	}
+	return text.simplified();
+}
+
+QStringList normalizedWords( const QString& text ){
+	const QString normalized = normalizeText( text );
+	return normalized.isEmpty() ? QStringList() : normalized.split( ' ', Qt::SkipEmptyParts );
+}
+
+bool isSubsequence( const QString& needle, const QString& haystack ){
+	if( needle.isEmpty() ){
+		return true;
+	}
+	int i = 0;
+	for( const QChar c : haystack ){
+		if( c == needle[i] ){
+			++i;
+			if( i == needle.size() ){
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+int boundedEditDistance( const QString& a, const QString& b, int maxDistance ){
+	if( std::abs( a.size() - b.size() ) > maxDistance ){
+		return maxDistance + 1;
+	}
+
+	std::vector<int> previous( b.size() + 1 );
+	std::vector<int> current( b.size() + 1 );
+	for( int j = 0; j <= b.size(); ++j )
+		previous[j] = j;
+
+	for( int i = 1; i <= a.size(); ++i ){
+		current[0] = i;
+		int rowBest = current[0];
+		for( int j = 1; j <= b.size(); ++j ){
+			const int substitutionCost = a[i - 1] == b[j - 1] ? 0 : 1;
+			current[j] = std::min( {
+				previous[j] + 1,
+				current[j - 1] + 1,
+				previous[j - 1] + substitutionCost
+			} );
+			rowBest = std::min( rowBest, current[j] );
+		}
+		if( rowBest > maxDistance ){
+			return maxDistance + 1;
+		}
+		std::swap( previous, current );
+	}
+	return previous[b.size()];
+}
+
+int scoreWordMatch( const QString& queryWord, const QString& targetWord ){
+	if( queryWord == targetWord ){
+		return 140;
+	}
+	if( targetWord.startsWith( queryWord ) ){
+		return 110;
+	}
+	if( targetWord.contains( queryWord ) ){
+		return 90;
+	}
+	const int distance = boundedEditDistance( queryWord, targetWord, 2 );
+	if( distance == 1 ){
+		return 70;
+	}
+	if( distance == 2 ){
+		return 55;
+	}
+	if( isSubsequence( queryWord, targetWord ) ){
+		return 45;
+	}
+	return -1;
+}
+
+QStringList commandSearchAliases( const char* name ){
+	if( string_equal( name, "CSGroom" ) ){
+		return { "make room", "make hollow", "make hallow", "hollow" };
+	}
+	if( string_equal( name, "CommandLauncher" ) ){
+		return { "command palette", "tool finder", "action search" };
+	}
+	if( string_equal( name, "CloneSelection" ) ){
+		return { "duplicate" };
+	}
+	if( string_equal( name, "CloneSelectionAndMakeUnique" ) ){
+		return { "duplicate unique" };
+	}
+	if( string_equal( name, "HideUnselected" ) ){
+		return { "show only selected" };
+	}
+	if( string_equal( name, "IsolateSelection" ) ){
+		return { "solo selected", "isolate" };
+	}
+	return {};
+}
+
+int computeLauncherScore( const QString& query, const QString& searchText, const QString& title, const QString& id ){
+	if( query.isEmpty() ){
+		return 1;
+	}
+
+	int score = 0;
+	if( title.startsWith( query, Qt::CaseInsensitive ) ){
+		score += 300;
+	}
+	if( normalizeText( title ).contains( query ) ){
+		score += 220;
+	}
+	if( normalizeText( id ).contains( query ) ){
+		score += 140;
+	}
+	if( searchText.startsWith( query ) ){
+		score += 160;
+	}
+	if( searchText.contains( query ) ){
+		score += 120;
+	}
+	if( isSubsequence( query, searchText ) ){
+		score += 60;
+	}
+
+	const QStringList queryWords = normalizedWords( query );
+	const QStringList targetWords = normalizedWords( searchText );
+	for( const QString& queryWord : queryWords ){
+		int best = -1;
+		for( const QString& targetWord : targetWords ){
+			best = std::max( best, scoreWordMatch( queryWord, targetWord ) );
+		}
+		if( best < 0 ){
+			return 0;
+		}
+		score += best;
+	}
+	return score;
+}
+
+template<typename Functor>
+void GlobalCommands_foreach( Functor&& functor ){
+	for ( const auto& [name, command] : g_commands )
+		functor( name.c_str(), command );
+}
+
+template<typename Functor>
+void GlobalToggles_foreach( Functor&& functor ){
+	for ( const auto& [name, toggle] : g_toggles )
+		functor( name.c_str(), toggle );
+}
+
+std::vector<CommandLauncherEntry> collectLauncherEntries(){
+	std::vector<CommandLauncherEntry> entries;
+	entries.reserve( g_commands.size() + g_toggles.size() );
+
+	GlobalCommands_foreach( [&]( const char* name, const Command& command ){
+		if( string_equal( name, "Shortcuts" ) ){
+			return;
+		}
+		CommandLauncherEntry entry;
+		entry.id = name;
+		entry.title = commandLauncherTitle( name );
+		entry.subtitle = command.m_accelerator.toString();
+		entry.search = normalizeText( entry.title + ' ' + entry.id + ' ' + commandSearchAliases( name ).join( ' ' ) );
+		entry.type = 1;
+		entries.emplace_back( std::move( entry ) );
+	} );
+
+	GlobalToggles_foreach( [&]( const char* name, const Toggle& toggle ){
+		CommandLauncherEntry entry;
+		entry.id = name;
+		entry.title = commandLauncherTitle( name );
+		entry.subtitle = toggle.m_command.m_accelerator.toString();
+		entry.search = normalizeText( entry.title + ' ' + entry.id + ' ' + commandSearchAliases( name ).join( ' ' ) );
+		entry.type = 2;
+		entries.emplace_back( std::move( entry ) );
+	} );
+
+	return entries;
+}
+
+void executeLauncherEntry( const CommandLauncherEntry& entry ){
+	if( entry.type == 1 ){
+		GlobalCommands_find( entry.id.toLatin1().constData() ).m_callback();
+	}
+	else if( entry.type == 2 ){
+		GlobalToggles_find( entry.id.toLatin1().constData() ).m_command.m_callback();
+	}
+}
+
+void refillLauncherList( QListWidget& list, const std::vector<CommandLauncherEntry>& sourceEntries, const QString& query ){
+	std::vector<CommandLauncherEntry> matches;
+	matches.reserve( sourceEntries.size() );
+	for( CommandLauncherEntry entry : sourceEntries ){
+		entry.score = computeLauncherScore( query, entry.search, entry.title, entry.id );
+		if( entry.score > 0 ){
+			matches.emplace_back( std::move( entry ) );
+		}
+	}
+
+	std::sort( matches.begin(), matches.end(), []( const CommandLauncherEntry& a, const CommandLauncherEntry& b ){
+		if( a.score != b.score ){
+			return a.score > b.score;
+		}
+		return QString::compare( a.title, b.title, Qt::CaseInsensitive ) < 0;
+	} );
+
+	list.clear();
+	for( const CommandLauncherEntry& entry : matches ){
+		auto *item = new QListWidgetItem( entry.title, &list );
+		item->setData( Qt::UserRole, entry.id );
+		item->setData( Qt::UserRole + 1, entry.type );
+		item->setToolTip( entry.subtitle.isEmpty() ? entry.id : QString( "%1\n%2" ).arg( entry.id, entry.subtitle ) );
+		if( !entry.subtitle.isEmpty() ){
+			item->setText( QString( "%1    %2" ).arg( entry.title, entry.subtitle ) );
+		}
+	}
+
+	if( list.count() > 0 ){
+		list.setCurrentRow( 0 );
+	}
+}
+}
+
+void DoCommandLauncher(){
+	QDialog dialog( MainFrame_getWindow(), Qt::Dialog | Qt::WindowCloseButtonHint );
+	dialog.setWindowTitle( "Command Launcher" );
+	dialog.resize( 720, 520 );
+
+	auto *layout = new QVBoxLayout( &dialog );
+	auto *searchLine = new QLineEdit( &dialog );
+	searchLine->setClearButtonEnabled( true );
+	searchLine->setPlaceholderText( "Type a tool or action name" );
+	layout->addWidget( searchLine );
+
+	auto *hintLabel = new QLabel( "Enter runs the selected action. Search matches command names, tool phrases, and shortcuts.", &dialog );
+	layout->addWidget( hintLabel );
+
+	auto *list = new QListWidget( &dialog );
+	list->setUniformItemSizes( true );
+	list->setAlternatingRowColors( true );
+	layout->addWidget( list );
+
+	auto *buttons = new QDialogButtonBox( QDialogButtonBox::Close, &dialog );
+	auto *runButton = buttons->addButton( "Run", QDialogButtonBox::ButtonRole::AcceptRole );
+	layout->addWidget( buttons );
+
+	const std::vector<CommandLauncherEntry> entries = collectLauncherEntries();
+	const auto refill = [&](){ refillLauncherList( *list, entries, normalizeText( searchLine->text() ) ); };
+	refill();
+
+	const auto runSelected = [&](){
+		if( QListWidgetItem *item = list->currentItem() ){
+			CommandLauncherEntry entry;
+			entry.id = item->data( Qt::UserRole ).toString();
+			entry.type = item->data( Qt::UserRole + 1 ).toInt();
+			dialog.accept();
+			executeLauncherEntry( entry );
+		}
+	};
+
+	QObject::connect( searchLine, &QLineEdit::textChanged, [&](){ refill(); } );
+	QObject::connect( searchLine, &QLineEdit::returnPressed, runSelected );
+	QObject::connect( list, &QListWidget::itemActivated, [&]( QListWidgetItem* ){ runSelected(); } );
+	QObject::connect( runButton, &QPushButton::clicked, runSelected );
+	QObject::connect( buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject );
+
+	searchLine->setFocus();
 	dialog.exec();
 }
 

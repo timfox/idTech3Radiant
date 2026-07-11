@@ -953,8 +953,39 @@ inline void hide_node( scene::Node& node, bool hide ){
 }
 
 bool g_nodes_be_hidden = false;
+bool g_selection_isolated = false;
 
 ToggleItem g_hidden_item{ BoolExportCaller( g_nodes_be_hidden ) };
+ToggleItem g_isolate_selected_item{ BoolExportCaller( g_selection_isolated ) };
+std::vector<NodeSmartReference> g_isolated_hidden_nodes;
+
+class HiddenNodeWalker : public scene::Graph::Walker
+{
+	mutable bool m_hasHiddenNodes;
+public:
+	HiddenNodeWalker() : m_hasHiddenNodes( false ){
+	}
+	bool pre( const scene::Path& path, scene::Instance& instance ) const override {
+		(void) instance;
+		if( m_hasHiddenNodes ){
+			return false;
+		}
+		if( path.top().get().excluded( scene::Node::eHidden ) ){
+			m_hasHiddenNodes = true;
+			return false;
+		}
+		return true;
+	}
+	bool hasHiddenNodes() const {
+		return m_hasHiddenNodes;
+	}
+};
+
+bool Scene_hasHiddenNodes(){
+	HiddenNodeWalker walker;
+	GlobalSceneGraph().traverse( walker );
+	return walker.hasHiddenNodes();
+}
 
 class HideSelectedWalker : public scene::Graph::Walker
 {
@@ -1019,8 +1050,99 @@ void Scene_Hide_All( bool hide ){
 void Select_ShowAllHidden(){
 	Scene_Hide_All( false );
 	SceneChangeNotify();
-	g_nodes_be_hidden = false;
+	g_nodes_be_hidden = Scene_hasHiddenNodes();
+	g_selection_isolated = false;
+	g_isolated_hidden_nodes.clear();
 	g_hidden_item.update();
+	g_isolate_selected_item.update();
+}
+
+class HideUnselectedWalker : public scene::Graph::Walker
+{
+	std::vector<NodeSmartReference>* m_hiddenNodes;
+public:
+	HideUnselectedWalker( std::vector<NodeSmartReference>* hiddenNodes )
+		: m_hiddenNodes( hiddenNodes ){
+	}
+	bool pre( const scene::Path& path, scene::Instance& instance ) const override {
+		scene::Node& node = path.top();
+		if( !node.visible() ){
+			return false;
+		}
+		if( node.isRoot() ){
+			return true;
+		}
+
+		if( scene::Traversable* traversable = Node_getTraversable( node ) ){
+			(void) traversable;
+			return true;
+		}
+
+		if( !Instance_isSelected( instance ) ){
+			hide_node( node, true );
+			if( m_hiddenNodes != nullptr ){
+				m_hiddenNodes->emplace_back( node );
+			}
+		}
+		return true;
+	}
+	void post( const scene::Path& path, scene::Instance& instance ) const override {
+		scene::Node& node = path.top();
+		if( !node.visible() || !Node_isEntity( node ) || Instance_isSelected( instance ) ){
+			return;
+		}
+		if( scene::Traversable* traversable = Node_getTraversable( node ) ){
+			if( Traversable_all_of_children( traversable, []( const scene::Node& child ){ return child.excluded( scene::Node::eHidden ); } ) ){
+				hide_node( node, true );
+				if( m_hiddenNodes != nullptr ){
+					m_hiddenNodes->emplace_back( node );
+				}
+			}
+		}
+	}
+};
+
+void Select_HideUnselected(){
+	GlobalSceneGraph().traverse( HideUnselectedWalker( nullptr ) );
+	if( scene::Node* w = Map_FindWorldspawn( g_map ) ){
+		hide_node( *w, false );
+	}
+	SceneChangeNotify();
+	g_selection_isolated = false;
+	g_isolated_hidden_nodes.clear();
+	g_nodes_be_hidden = Scene_hasHiddenNodes();
+	g_hidden_item.update();
+	g_isolate_selected_item.update();
+}
+
+void Selection_Isolate(){
+	if( g_selection_isolated ){
+		for( NodeSmartReference& node : g_isolated_hidden_nodes )
+			hide_node( node, false );
+		g_isolated_hidden_nodes.clear();
+		g_selection_isolated = false;
+		g_nodes_be_hidden = Scene_hasHiddenNodes();
+		SceneChangeNotify();
+		g_hidden_item.update();
+		g_isolate_selected_item.update();
+		return;
+	}
+
+	if( GlobalSelectionSystem().countSelected() == 0 && GlobalSelectionSystem().countSelectedComponents() == 0 ){
+		globalWarningStream() << "Selection_Isolate: nothing selected\n";
+		return;
+	}
+
+	g_isolated_hidden_nodes.clear();
+	GlobalSceneGraph().traverse( HideUnselectedWalker( &g_isolated_hidden_nodes ) );
+	if( scene::Node* w = Map_FindWorldspawn( g_map ) ){
+		hide_node( *w, false );
+	}
+	SceneChangeNotify();
+	g_selection_isolated = true;
+	g_nodes_be_hidden = Scene_hasHiddenNodes();
+	g_hidden_item.update();
+	g_isolate_selected_item.update();
 }
 
 
@@ -1987,6 +2109,8 @@ void Select_registerCommands(){
 	GlobalCommands_insert( "ShowHidden", makeCallbackF( Select_ShowAllHidden ), QKeySequence( "Shift+H" ) );
 	GlobalCommands_insert( "ShowHiddenAlt", makeCallbackF( Select_ShowAllHidden ), QKeySequence( "Ctrl+Shift+H" ) );
 	GlobalToggles_insert( "HideSelected", makeCallbackF( HideSelected ), ToggleItem::AddCallbackCaller( g_hidden_item ), QKeySequence( "Ctrl+H" ) );
+	GlobalCommands_insert( "HideUnselected", makeCallbackF( Select_HideUnselected ), QKeySequence( "Alt+Shift+H" ) );
+	GlobalToggles_insert( "IsolateSelection", makeCallbackF( Selection_Isolate ), ToggleItem::AddCallbackCaller( g_isolate_selected_item ), QKeySequence( "Alt+H" ) );
 
 	GlobalCommands_insert( "MirrorSelectionX", makeCallbackF( Selection_Flipx ) );
 	GlobalCommands_insert( "RotateSelectionX", makeCallbackF( Selection_Rotatex ) );

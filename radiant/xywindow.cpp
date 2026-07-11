@@ -1998,6 +1998,10 @@ void XY_Focus(){
 	} );
 }
 
+void XY_FocusActive(){
+	g_pParentWnd->ActiveXY()->FocusOnBounds( GetCenterBbox() );
+}
+
 
 
 void XY_SetViewType( VIEWTYPE viewtype ){
@@ -2315,6 +2319,7 @@ void XYWindow_Construct(){
 	GlobalCommands_insert( "Zoom100", makeCallbackF( XY_Zoom100 ) );
 	GlobalCommands_insert( "CenterXYView", makeCallbackF( XY_Centralize ), QKeySequence( "Ctrl+Shift+Tab" ) );
 	GlobalCommands_insert( "XYFocusOnSelected", makeCallbackF( XY_Focus ), QKeySequence( "`" ) );
+	GlobalCommands_insert( "XYFocusActiveOnSelected", makeCallbackF( XY_FocusActive ), QKeySequence( "Shift+F" ) );
 
 	GlobalPreferenceSystem().registerPreference( "XYMSAA", IntImportStringCaller( g_xywindow_globals_private.m_MSAA ), IntExportStringCaller( g_xywindow_globals_private.m_MSAA ) );
 	GlobalPreferenceSystem().registerPreference( "2DZoomInToPointer", BoolImportStringCaller( g_xywindow_globals_private.m_bZoomToPointer ), BoolExportStringCaller( g_xywindow_globals_private.m_bZoomToPointer ) );
