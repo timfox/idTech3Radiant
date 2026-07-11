@@ -40,6 +40,10 @@ public:
 SelectionSystemWindowObserver* NewWindowObserver();
 
 void SelectionSystem_connectTransformsCallbacks( const std::array<Callback<void(const char*)>, 4>& callbacks );
+void Selection_SetPivotToSelectionCenter();
+void Selection_SetPivotToWorldOrigin();
+void Selection_ResetPivotToSelection();
+void Selection_FreezeTransforms();
 
 #include "math/vectorfwd.h"
 

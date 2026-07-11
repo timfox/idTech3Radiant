@@ -527,6 +527,12 @@ QString commandLauncherTitle( const char* name ){
 	if( string_equal( name, "AddInfoPlayerDeathmatch" ) ){
 		return "Create Deathmatch Start";
 	}
+	if( string_equal( name, "AddCapturePointVolume" ) ){
+		return "Create Capture Point Volume";
+	}
+	if( string_equal( name, "AddPVESpawnPoint" ) ){
+		return "Create PvE Spawn Point";
+	}
 	if( string_equal( name, "MakeDetail" ) ){
 		return "Make Detail";
 	}
@@ -554,8 +560,23 @@ QString commandLauncherTitle( const char* name ){
 	if( string_equal( name, "TransformDialog" ) ){
 		return "Transform";
 	}
+	if( string_equal( name, "SelectionCenterPivot" ) ){
+		return "Center Pivot to Selection";
+	}
+	if( string_equal( name, "SelectionWorldPivot" ) ){
+		return "Set Pivot to World Origin";
+	}
+	if( string_equal( name, "SelectionResetPivot" ) ){
+		return "Reset Pivot to Auto";
+	}
+	if( string_equal( name, "FreezeTransforms" ) ){
+		return "Freeze Transforms";
+	}
 	if( string_equal( name, "OpenAIMLEditor" ) ){
 		return "AIML 3.0 Editor";
+	}
+	if( string_equal( name, "OpenLuaWorkbench" ) ){
+		return "Lua Script Hub";
 	}
 	if( string_equal( name, "XYFocusOnSelected" ) ){
 		return "Focus All 2D Views on Selected";
@@ -762,6 +783,12 @@ QStringList commandSearchAliases( const char* name ){
 	if( string_equal( name, "AddInfoPlayerDeathmatch" ) ){
 		return { "deathmatch spawn", "dm start", "spawn point" };
 	}
+	if( string_equal( name, "AddCapturePointVolume" ) ){
+		return { "capture point", "control point", "capture zone", "capture area", "objective volume", "cp volume" };
+	}
+	if( string_equal( name, "AddPVESpawnPoint" ) ){
+		return { "pve spawn", "ai spawn", "npc spawn", "enemy spawn", "monster spawn", "spawn point" };
+	}
 	if( string_equal( name, "MakeDetail" ) ){
 		return { "detail", "convert to detail", "detail brush", "non structural" };
 	}
@@ -798,11 +825,41 @@ QStringList commandSearchAliases( const char* name ){
 	if( string_equal( name, "TransformDialog" ) ){
 		return { "position rotation scale", "prs", "transform panel", "numeric transform" };
 	}
+	if( string_equal( name, "SelectionCenterPivot" ) ){
+		return { "center pivot", "pivot to selection", "maya center pivot", "recenter pivot", "pivot center" };
+	}
+	if( string_equal( name, "SelectionWorldPivot" ) ){
+		return { "pivot to origin", "world origin pivot", "zero pivot", "set pivot origin" };
+	}
+	if( string_equal( name, "SelectionResetPivot" ) ){
+		return { "reset pivot", "auto pivot", "clear custom pivot", "default pivot" };
+	}
+	if( string_equal( name, "FreezeTransforms" ) ){
+		return { "freeze transforms", "bake transforms", "apply transform", "zero channels" };
+	}
 	if( string_equal( name, "RepeatTransforms" ) ){
 		return { "repeat last transform", "repeat move", "repeat rotate", "repeat scale" };
 	}
 	if( string_equal( name, "OpenAIMLEditor" ) ){
 		return { "aiml", "aiml 3", "chatbot", "bot editor", "bot script", "pattern template editor", "alice markup language" };
+	}
+	if( string_equal( name, "CameraFocusOnSelected" ) || string_equal( name, "FrameSelection" ) ){
+		return { "frame selection", "focus selection", "frame selected", "zoom extents selected", "view selected" };
+	}
+	if( string_equal( name, "OpenLuaWorkbench" ) ){
+		return { "lua", "lua hub", "lua editor", "game scripts", "script hub", "props lua", "entities lua", "items lua", "objectives lua", "main lua" };
+	}
+	if( string_equal( name, "LuaEditEntitiesExternal" ) ){
+		return { "external lua entities", "entities lua external", "open entities lua externally" };
+	}
+	if( string_equal( name, "LuaEditItemsExternal" ) ){
+		return { "external lua items", "items lua external", "open items lua externally" };
+	}
+	if( string_equal( name, "LuaEditMainExternal" ) ){
+		return { "external lua main", "main lua external", "open main lua externally" };
+	}
+	if( string_equal( name, "LuaEditObjectivesExternal" ) ){
+		return { "external lua objectives", "objectives lua external", "open objectives lua externally" };
 	}
 	return {};
 }

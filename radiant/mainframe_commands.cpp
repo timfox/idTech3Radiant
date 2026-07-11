@@ -16,11 +16,13 @@
 #include "patchmanip.h"
 #include "xywindow.h"
 #include "select.h"
+#include "selection.h"
 #include "audio_workbench.h"
 #include "video_workbench.h"
 #include "spreadsheet_workbench.h"
 #include "python_script_workbench.h"
 #include "aiml_workbench.h"
+#include "lua_workbench.h"
 #include "scenegraphinspector.h"
 #include "ai_assistant.h"
 #include "referencecache.h"
@@ -42,6 +44,8 @@ void MainFrame_registerCommands(){
 	GlobalCommands_insert( "AddLight", makeCallbackF( Add_createLight ) );
 	GlobalCommands_insert( "AddInfoPlayerStart", makeCallbackF( Add_createInfoPlayerStart ) );
 	GlobalCommands_insert( "AddInfoPlayerDeathmatch", makeCallbackF( Add_createInfoPlayerDeathmatch ) );
+	GlobalCommands_insert( "AddCapturePointVolume", makeCallbackF( Add_createCapturePointVolume ) );
+	GlobalCommands_insert( "AddPVESpawnPoint", makeCallbackF( Add_createPVESpawnPoint ) );
 	GlobalCommands_insert( "AddMiscModel", makeCallbackF( Add_createMiscModel ) );
 	GlobalCommands_insert( "AddSpline", makeCallbackF( Add_createSpline ) );
 	GlobalCommands_insert( "LayoutRegular", makeCallbackF( Layout_setRegular ) );
@@ -56,6 +60,7 @@ void MainFrame_registerCommands(){
 	GlobalCommands_insert( "OpenSpreadsheetWorkbench", makeCallbackF( Spreadsheet_open ), QKeySequence( "Ctrl+Alt+E" ) );
 	GlobalCommands_insert( "OpenPythonScript", makeCallbackF( PythonScript_open ), QKeySequence( "Ctrl+Alt+Y" ) );
 	GlobalCommands_insert( "OpenAIMLEditor", makeCallbackF( AIMLWorkbench_open ), QKeySequence( "Ctrl+Alt+A" ) );
+	GlobalCommands_insert( "OpenLuaWorkbench", makeCallbackF( LuaWorkbench_open ), QKeySequence( "Ctrl+Alt+L" ) );
 	GlobalCommands_insert( "OpenAudioPreview", makeCallbackF( AudioWorkbench_open ) );
 	GlobalCommands_insert( "ToolQ3Map2Help", makeCallbackF( +[](){ IdTech3Tool_runHelp( g_idTech3Tools[0] ); } ) );
 	GlobalCommands_insert( "ToolQData3Help", makeCallbackF( +[](){ IdTech3Tool_runHelp( g_idTech3Tools[1] ); } ) );
@@ -67,6 +72,10 @@ void MainFrame_registerCommands(){
 	GlobalCommands_insert( "LuaEditMain", makeCallbackF( Lua_editMain ) );
 	GlobalCommands_insert( "LuaEditObjectives", makeCallbackF( Lua_editObjectives ) );
 	GlobalCommands_insert( "LuaEditPropsExternal", makeCallbackF( Lua_editPropsExternal ) );
+	GlobalCommands_insert( "LuaEditEntitiesExternal", makeCallbackF( Lua_editEntitiesExternal ) );
+	GlobalCommands_insert( "LuaEditItemsExternal", makeCallbackF( Lua_editItemsExternal ) );
+	GlobalCommands_insert( "LuaEditMainExternal", makeCallbackF( Lua_editMainExternal ) );
+	GlobalCommands_insert( "LuaEditObjectivesExternal", makeCallbackF( Lua_editObjectivesExternal ) );
 	GlobalCommands_insert( "CameraStoreBookmark1", makeCallbackF( +[](){ CameraBookmark_store( 0 ); } ), QKeySequence( "Ctrl+1" ) );
 	GlobalCommands_insert( "CameraStoreBookmark2", makeCallbackF( +[](){ CameraBookmark_store( 1 ); } ), QKeySequence( "Ctrl+2" ) );
 	GlobalCommands_insert( "CameraStoreBookmark3", makeCallbackF( +[](){ CameraBookmark_store( 2 ); } ), QKeySequence( "Ctrl+3" ) );
@@ -82,6 +91,10 @@ void MainFrame_registerCommands(){
 	GlobalCommands_insert( "Shortcuts", makeCallbackF( DoCommandListDlg ), QKeySequence( "Ctrl+Alt+P" ) );
 	GlobalCommands_insert( "Preferences", makeCallbackF( PreferencesDialog_showDialog ), QKeySequence( "Ctrl+," ) );
 	GlobalCommands_insert( "FrameSelection", makeCallbackF( FocusAllViews ), QKeySequence( "F" ) );
+	GlobalCommands_insert( "SelectionCenterPivot", makeCallbackF( Selection_SetPivotToSelectionCenter ) );
+	GlobalCommands_insert( "SelectionWorldPivot", makeCallbackF( Selection_SetPivotToWorldOrigin ) );
+	GlobalCommands_insert( "SelectionResetPivot", makeCallbackF( Selection_ResetPivotToSelection ) );
+	GlobalCommands_insert( "FreezeTransforms", makeCallbackF( Selection_FreezeTransforms ) );
 	GlobalCommands_insert( "OpenWysiwygWorkspace", makeCallbackF( OpenWysiwygWorkspace ) );
 
 	GlobalCommands_insert( "ToggleConsole", makeCallbackF( Console_ToggleShow ), QKeySequence( "O" ) );

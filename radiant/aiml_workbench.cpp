@@ -28,6 +28,7 @@
 #include <QTextCursor>
 #include <QTextBlock>
 #include <QFont>
+#include <QHash>
 
 namespace
 {
@@ -36,6 +37,8 @@ QDockWidget* g_aimlDock{};
 QPlainTextEdit* g_aimlEditor{};
 QListWidget* g_aimlCategoryList{};
 QLineEdit* g_aimlCategoryFilter{};
+QLineEdit* g_aimlTestInput{};
+QPlainTextEdit* g_aimlPreview{};
 QLabel* g_aimlStatusLabel{};
 QString g_aimlCurrentPath;
 bool g_aimlDirty{};
@@ -103,6 +106,22 @@ R"(<?xml version="1.0" encoding="UTF-8"?>
 )";
 }
 
+QString AIMLWorkbench_escapeXml( const QString& text ){
+	QString out = text;
+	out.replace( '&', "&amp;" );
+	out.replace( '<', "&lt;" );
+	out.replace( '>', "&gt;" );
+	out.replace( '"', "&quot;" );
+	return out;
+}
+
+QString AIMLWorkbench_normalizePattern( QString pattern ){
+	pattern = pattern.toUpper();
+	pattern.replace( QRegularExpression( "[^A-Z0-9_* ]" ), " " );
+	pattern = pattern.simplified();
+	return pattern;
+}
+
 void AIMLWorkbench_updateDockTitle(){
 	if ( g_aimlDock == nullptr ) {
 		return;
@@ -129,6 +148,12 @@ void AIMLWorkbench_markDirty(){
 void AIMLWorkbench_setStatus( const QString& text ){
 	if ( g_aimlStatusLabel != nullptr ) {
 		g_aimlStatusLabel->setText( text );
+	}
+}
+
+void AIMLWorkbench_setPreview( const QString& text ){
+	if ( g_aimlPreview != nullptr ) {
+		g_aimlPreview->setPlainText( text );
 	}
 }
 
@@ -208,12 +233,25 @@ QVector<AIMLCategoryEntry> AIMLWorkbench_collectCategories( const QString& text 
 	return out;
 }
 
+QHash<QString, int> AIMLWorkbench_collectDuplicatePatterns( const QVector<AIMLCategoryEntry>& categories ){
+	QHash<QString, int> counts;
+	for ( const AIMLCategoryEntry& entry : categories )
+	{
+		const QString key = AIMLWorkbench_normalizePattern( entry.pattern );
+		if ( !key.isEmpty() ) {
+			counts[key] += 1;
+		}
+	}
+	return counts;
+}
+
 void AIMLWorkbench_refreshCategoryList(){
 	if ( g_aimlCategoryList == nullptr || g_aimlEditor == nullptr ) {
 		return;
 	}
 
 	g_aimlCategories = AIMLWorkbench_collectCategories( g_aimlEditor->toPlainText() );
+	const QHash<QString, int> duplicates = AIMLWorkbench_collectDuplicatePatterns( g_aimlCategories );
 	const QString filter = g_aimlCategoryFilter != nullptr ? g_aimlCategoryFilter->text().trimmed() : QString();
 
 	g_aimlCategoryList->clear();
@@ -222,16 +260,24 @@ void AIMLWorkbench_refreshCategoryList(){
 		if ( !filter.isEmpty() && !entry.pattern.contains( filter, Qt::CaseInsensitive ) ) {
 			continue;
 		}
-		auto* item = new QListWidgetItem( entry.pattern, g_aimlCategoryList );
+		const QString normalized = AIMLWorkbench_normalizePattern( entry.pattern );
+		const bool duplicate = duplicates.value( normalized ) > 1;
+		auto* item = new QListWidgetItem( duplicate ? StringStream( entry.pattern.toUtf8().constData(), "  [duplicate]" ).c_str() : entry.pattern, g_aimlCategoryList );
 		item->setData( Qt::UserRole, entry.line );
-		item->setToolTip( StringStream( "Line ", entry.line ).c_str() );
+		item->setToolTip( duplicate
+			? StringStream( "Line ", entry.line, "\nDuplicate pattern detected" ).c_str()
+			: StringStream( "Line ", entry.line ).c_str() );
 	}
 
 	if ( g_aimlCategoryList->count() > 0 ) {
 		g_aimlCategoryList->setCurrentRow( 0 );
 	}
 
-	AIMLWorkbench_setStatus( StringStream( "Ready - ", g_aimlCategories.size(), " categor", g_aimlCategories.size() == 1 ? "y" : "ies" ).c_str() );
+	int duplicateCount = 0;
+	for ( auto it = duplicates.constBegin(); it != duplicates.constEnd(); ++it )
+		if ( it.value() > 1 )
+			++duplicateCount;
+	AIMLWorkbench_setStatus( StringStream( "Ready - ", g_aimlCategories.size(), " categor", g_aimlCategories.size() == 1 ? "y" : "ies", ", ", duplicateCount, " duplicate pattern", duplicateCount == 1 ? "" : "s" ).c_str() );
 }
 
 bool AIMLWorkbench_validateDocument( QString* errorOut = nullptr, int* errorLineOut = nullptr ){
@@ -284,7 +330,76 @@ bool AIMLWorkbench_validateDocument( QString* errorOut = nullptr, int* errorLine
 		return false;
 	}
 
+	const QVector<AIMLCategoryEntry> categories = AIMLWorkbench_collectCategories( text );
+	const QHash<QString, int> duplicates = AIMLWorkbench_collectDuplicatePatterns( categories );
+	for ( const AIMLCategoryEntry& entry : categories )
+	{
+		const QString normalized = AIMLWorkbench_normalizePattern( entry.pattern );
+		if ( duplicates.value( normalized ) > 1 ) {
+			if ( errorOut != nullptr ) {
+				*errorOut = StringStream( "Duplicate <pattern>: ", entry.pattern.toUtf8().constData() ).c_str();
+			}
+			if ( errorLineOut != nullptr ) {
+				*errorLineOut = entry.line;
+			}
+			return false;
+		}
+	}
+
 	return true;
+}
+
+QString AIMLWorkbench_prettyPrintXml( const QString& text, QString* errorOut = nullptr, int* errorLineOut = nullptr ){
+	QXmlStreamReader xml( text );
+	QString output;
+	QTextStream out( &output );
+	int indent = 0;
+
+	auto writeIndent = [&out, &indent](){
+		for ( int i = 0; i < indent; ++i )
+			out << "  ";
+	};
+
+	while ( !xml.atEnd() )
+	{
+		xml.readNext();
+		if ( xml.isStartDocument() ) {
+			out << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+		}
+		else if ( xml.isStartElement() ) {
+			writeIndent();
+			out << '<' << xml.name().toString();
+			for ( const auto& attr : xml.attributes() )
+				out << ' ' << attr.name().toString() << "=\"" << AIMLWorkbench_escapeXml( attr.value().toString() ) << '"';
+			out << '>';
+			out << '\n';
+			++indent;
+		}
+		else if ( xml.isEndElement() ) {
+			indent = std::max( 0, indent - 1 );
+			writeIndent();
+			out << "</" << xml.name().toString() << ">\n";
+		}
+		else if ( xml.isCharacters() ) {
+			const QString trimmed = xml.text().toString().trimmed();
+			if ( !trimmed.isEmpty() ) {
+				writeIndent();
+				out << AIMLWorkbench_escapeXml( trimmed ) << '\n';
+			}
+		}
+	}
+
+	if ( xml.hasError() ) {
+		if ( errorOut != nullptr ) {
+			*errorOut = xml.errorString();
+		}
+		if ( errorLineOut != nullptr ) {
+			*errorLineOut = int( xml.lineNumber() );
+		}
+		return {};
+	}
+
+	return output.trimmed() + '\n';
 }
 
 void AIMLWorkbench_validateAndReport(){
@@ -415,6 +530,25 @@ void AIMLWorkbench_openFile(){
 	AIMLWorkbench_updateDockTitle();
 }
 
+void AIMLWorkbench_formatDocument(){
+	if ( g_aimlEditor == nullptr ) {
+		return;
+	}
+	QString error;
+	int line = 1;
+	const QString pretty = AIMLWorkbench_prettyPrintXml( g_aimlEditor->toPlainText(), &error, &line );
+	if ( pretty.isEmpty() ) {
+		AIMLWorkbench_setStatus( StringStream( "Format failed at line ", line ).c_str() );
+		AIMLWorkbench_gotoLine( line );
+		QMessageBox::warning( MainFrame_getWindow(), "Format AIML", StringStream( "Line ", line, ": ", error.toUtf8().constData() ).c_str() );
+		return;
+	}
+	g_aimlEditor->setPlainText( pretty );
+	AIMLWorkbench_markDirty();
+	AIMLWorkbench_refreshCategoryList();
+	AIMLWorkbench_setStatus( "Formatted AIML document" );
+}
+
 void AIMLWorkbench_insertSnippet( const QString& snippet ){
 	if ( g_aimlEditor == nullptr ) {
 		return;
@@ -464,6 +598,66 @@ R"(<think>
 </think>)" );
 }
 
+void AIMLWorkbench_createCategoryFromTestInput(){
+	if ( g_aimlTestInput == nullptr ) {
+		return;
+	}
+	const QString pattern = AIMLWorkbench_normalizePattern( g_aimlTestInput->text() );
+	if ( pattern.isEmpty() ) {
+		QMessageBox::information( MainFrame_getWindow(), "Create Category", "Type a test phrase first." );
+		return;
+	}
+	AIMLWorkbench_insertSnippet(
+		StringStream(
+R"(
+  <category>
+    <pattern>)",
+			pattern.toUtf8().constData(),
+R"(</pattern>
+    <template>)",
+			AIMLWorkbench_escapeXml( g_aimlTestInput->text().trimmed().isEmpty() ? "New response." : StringStream( "Response for ", g_aimlTestInput->text().trimmed().toUtf8().constData() ).c_str() ).toUtf8().constData(),
+R"(</template>
+  </category>
+)").c_str() );
+}
+
+void AIMLWorkbench_runTestInput(){
+	if ( g_aimlTestInput == nullptr ) {
+		return;
+	}
+	const QString normalized = AIMLWorkbench_normalizePattern( g_aimlTestInput->text() );
+	if ( normalized.isEmpty() ) {
+		AIMLWorkbench_setPreview( "Type a phrase to test pattern matching." );
+		return;
+	}
+
+	for ( const AIMLCategoryEntry& entry : g_aimlCategories )
+	{
+		const QString candidate = AIMLWorkbench_normalizePattern( entry.pattern );
+		if ( candidate == normalized ) {
+			AIMLWorkbench_setPreview( StringStream( "Exact pattern match:\n", entry.pattern.toUtf8().constData(), "\nLine ", entry.line ).c_str() );
+			AIMLWorkbench_gotoLine( entry.line );
+			return;
+		}
+	}
+
+	for ( const AIMLCategoryEntry& entry : g_aimlCategories )
+	{
+		const QString candidate = AIMLWorkbench_normalizePattern( entry.pattern );
+		QString regexSource = QRegularExpression::escape( candidate );
+		regexSource.replace( "\\*", ".*" );
+		regexSource.replace( "_", "\\S+" );
+		const QRegularExpression regex( StringStream( "^", regexSource.toUtf8().constData(), "$" ).c_str() );
+		if ( regex.match( normalized ).hasMatch() ) {
+			AIMLWorkbench_setPreview( StringStream( "Wildcard match:\n", entry.pattern.toUtf8().constData(), "\nLine ", entry.line ).c_str() );
+			AIMLWorkbench_gotoLine( entry.line );
+			return;
+		}
+	}
+
+	AIMLWorkbench_setPreview( StringStream( "No pattern matched:\n", normalized.toUtf8().constData() ).c_str() );
+}
+
 void AIMLWorkbench_openCategoryFromList( QListWidgetItem* item ){
 	if ( item == nullptr ) {
 		return;
@@ -499,12 +693,14 @@ void AIMLWorkbench_createDock( QMainWindow* window ){
 	auto* saveButton = new QPushButton( "Save", root );
 	auto* saveAsButton = new QPushButton( "Save As", root );
 	auto* validateButton = new QPushButton( "Validate", root );
+	auto* formatButton = new QPushButton( "Format", root );
 	validateButton->setStyleSheet( "font-weight: bold;" );
 	toolbar->addWidget( newButton );
 	toolbar->addWidget( openButton );
 	toolbar->addWidget( saveButton );
 	toolbar->addWidget( saveAsButton );
 	toolbar->addWidget( validateButton );
+	toolbar->addWidget( formatButton );
 	toolbar->addStretch();
 	layout->addLayout( toolbar );
 
@@ -514,14 +710,25 @@ void AIMLWorkbench_createDock( QMainWindow* window ){
 	auto* conditionButton = new QPushButton( "Condition", root );
 	auto* sraiButton = new QPushButton( "SRAI", root );
 	auto* thinkButton = new QPushButton( "Think/Set", root );
+	auto* fromTestButton = new QPushButton( "From Test", root );
 	snippetBar->addWidget( new QLabel( "Insert", root ) );
 	snippetBar->addWidget( categoryButton );
 	snippetBar->addWidget( randomButton );
 	snippetBar->addWidget( conditionButton );
 	snippetBar->addWidget( sraiButton );
 	snippetBar->addWidget( thinkButton );
+	snippetBar->addWidget( fromTestButton );
 	snippetBar->addStretch();
 	layout->addLayout( snippetBar );
+
+	auto* testBar = new QHBoxLayout();
+	testBar->addWidget( new QLabel( "Test", root ) );
+	g_aimlTestInput = new QLineEdit( root );
+	g_aimlTestInput->setPlaceholderText( "Type a user input phrase to test patterns" );
+	auto* testButton = new QPushButton( "Run", root );
+	testBar->addWidget( g_aimlTestInput, 1 );
+	testBar->addWidget( testButton );
+	layout->addLayout( testBar );
 
 	auto* splitter = new QSplitter( Qt::Horizontal, root );
 
@@ -543,7 +750,16 @@ void AIMLWorkbench_createDock( QMainWindow* window ){
 	g_aimlEditor->setLineWrapMode( QPlainTextEdit::NoWrap );
 	g_aimlEditor->setPlaceholderText( AIMLWorkbench_defaultDocument() );
 	splitter->addWidget( g_aimlEditor );
-	splitter->setSizes( { 240, 760 } );
+	auto* previewPanel = new QWidget( splitter );
+	auto* previewLayout = new QVBoxLayout( previewPanel );
+	previewLayout->setContentsMargins( 0, 0, 0, 0 );
+	previewLayout->addWidget( new QLabel( "Preview", previewPanel ) );
+	g_aimlPreview = new QPlainTextEdit( previewPanel );
+	g_aimlPreview->setReadOnly( true );
+	g_aimlPreview->setPlaceholderText( "Pattern test results and validation notes appear here." );
+	previewLayout->addWidget( g_aimlPreview, 1 );
+	splitter->addWidget( previewPanel );
+	splitter->setSizes( { 220, 700, 260 } );
 	layout->addWidget( splitter, 1 );
 
 	g_aimlStatusLabel = new QLabel( "Ready", root );
@@ -554,11 +770,15 @@ void AIMLWorkbench_createDock( QMainWindow* window ){
 	QObject::connect( saveButton, &QPushButton::clicked, [](){ AIMLWorkbench_save(); } );
 	QObject::connect( saveAsButton, &QPushButton::clicked, [](){ AIMLWorkbench_saveAs(); } );
 	QObject::connect( validateButton, &QPushButton::clicked, AIMLWorkbench_validateAndReport );
+	QObject::connect( formatButton, &QPushButton::clicked, AIMLWorkbench_formatDocument );
 	QObject::connect( categoryButton, &QPushButton::clicked, AIMLWorkbench_insertCategory );
 	QObject::connect( randomButton, &QPushButton::clicked, AIMLWorkbench_insertRandom );
 	QObject::connect( conditionButton, &QPushButton::clicked, AIMLWorkbench_insertCondition );
 	QObject::connect( sraiButton, &QPushButton::clicked, AIMLWorkbench_insertSrai );
 	QObject::connect( thinkButton, &QPushButton::clicked, AIMLWorkbench_insertThink );
+	QObject::connect( fromTestButton, &QPushButton::clicked, AIMLWorkbench_createCategoryFromTestInput );
+	QObject::connect( testButton, &QPushButton::clicked, AIMLWorkbench_runTestInput );
+	QObject::connect( g_aimlTestInput, &QLineEdit::returnPressed, AIMLWorkbench_runTestInput );
 	QObject::connect( g_aimlCategoryFilter, &QLineEdit::textChanged, [](){ AIMLWorkbench_refreshCategoryList(); } );
 	QObject::connect( g_aimlCategoryList, &QListWidget::itemActivated, AIMLWorkbench_openCategoryFromList );
 	QObject::connect( g_aimlCategoryList, &QListWidget::itemClicked, AIMLWorkbench_openCategoryFromList );
@@ -599,6 +819,8 @@ void AIMLWorkbench_stopAndRelease(){
 	g_aimlEditor = nullptr;
 	g_aimlCategoryList = nullptr;
 	g_aimlCategoryFilter = nullptr;
+	g_aimlTestInput = nullptr;
+	g_aimlPreview = nullptr;
 	g_aimlStatusLabel = nullptr;
 	g_aimlCurrentPath.clear();
 	g_aimlDirty = false;

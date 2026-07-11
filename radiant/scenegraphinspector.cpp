@@ -18,6 +18,8 @@
 #include <QTreeView>
 #include <QPushButton>
 #include <QHeaderView>
+#include <QLineEdit>
+#include <QSortFilterProxyModel>
 
 #include "treemodel.h"
 
@@ -28,11 +30,38 @@ namespace
 
 QDockWidget* g_scenegraphDock{};
 QTreeView* g_scenegraphTreeView{};
+QSortFilterProxyModel* g_scenegraphProxyModel{};
 bool g_modelAttached{};
+
+class OutlinerFilterModel : public QSortFilterProxyModel
+{
+public:
+	using QSortFilterProxyModel::QSortFilterProxyModel;
+
+protected:
+	bool filterAcceptsRow( int sourceRow, const QModelIndex& sourceParent ) const override {
+		if ( filterRegularExpression().pattern().isEmpty() ) {
+			return true;
+		}
+
+		const QModelIndex index = sourceModel()->index( sourceRow, 0, sourceParent );
+		if ( sourceModel()->data( index ).toString().contains( filterRegularExpression() ) ) {
+			return true;
+		}
+
+		const int childCount = sourceModel()->rowCount( index );
+		for ( int child = 0; child < childCount; ++child )
+			if ( filterAcceptsRow( child, index ) )
+				return true;
+
+		return false;
+	}
+};
 
 void ScenegraphInspector_attachModel(){
 	if ( g_scenegraphTreeView != nullptr && !g_modelAttached ) {
-		g_scenegraphTreeView->setModel( scene_graph_get_tree_model() );
+		g_scenegraphProxyModel->setSourceModel( scene_graph_get_tree_model() );
+		g_scenegraphTreeView->setModel( g_scenegraphProxyModel );
 		g_modelAttached = true;
 	}
 }
@@ -63,12 +92,17 @@ void ScenegraphInspector_createDock( QMainWindow* window ){
 		return;
 	}
 
-	g_scenegraphDock = new QDockWidget( "Scenegraph Inspector", window );
+	g_scenegraphDock = new QDockWidget( "Outliner", window );
 	g_scenegraphDock->setObjectName( "dock_scenegraph_inspector" );
 
 	auto* root = new QWidget( g_scenegraphDock );
 	auto* layout = new QVBoxLayout( root );
 	layout->setContentsMargins( 4, 4, 4, 4 );
+
+	auto* filterLine = new QLineEdit( root );
+	filterLine->setClearButtonEnabled( true );
+	filterLine->setPlaceholderText( "Filter hierarchy" );
+	layout->addWidget( filterLine );
 
 	auto* buttonRow = new QHBoxLayout();
 	auto* expandAllBtn = new QPushButton( "Expand All", root );
@@ -79,6 +113,8 @@ void ScenegraphInspector_createDock( QMainWindow* window ){
 	layout->addLayout( buttonRow );
 
 	g_scenegraphTreeView = new QTreeView( root );
+	g_scenegraphProxyModel = new OutlinerFilterModel( g_scenegraphTreeView );
+	g_scenegraphProxyModel->setFilterCaseSensitivity( Qt::CaseInsensitive );
 	g_scenegraphTreeView->setHeaderHidden( true );
 	g_scenegraphTreeView->setEditTriggers( QAbstractItemView::EditTrigger::NoEditTriggers );
 	g_scenegraphTreeView->setUniformRowHeights( true );
@@ -90,6 +126,14 @@ void ScenegraphInspector_createDock( QMainWindow* window ){
 
 	QObject::connect( expandAllBtn, &QPushButton::clicked, ScenegraphInspector_expandAll );
 	QObject::connect( collapseAllBtn, &QPushButton::clicked, ScenegraphInspector_collapseAll );
+	QObject::connect( filterLine, &QLineEdit::textChanged, []( const QString& text ){
+		if ( g_scenegraphProxyModel != nullptr ) {
+			g_scenegraphProxyModel->setFilterFixedString( text );
+			if ( !text.isEmpty() ) {
+				ScenegraphInspector_expandAll();
+			}
+		}
+	} );
 	QObject::connect( g_scenegraphDock, &QDockWidget::visibilityChanged, []( bool visible ){
 		if ( visible )
 			ScenegraphInspector_attachModel();
@@ -106,6 +150,7 @@ void ScenegraphInspector_destroyDock(){
 	if ( g_scenegraphDock != nullptr ) {
 		ScenegraphInspector_detachModel();
 		g_scenegraphTreeView = nullptr;
+		g_scenegraphProxyModel = nullptr;
 		delete g_scenegraphDock;
 		g_scenegraphDock = nullptr;
 	}

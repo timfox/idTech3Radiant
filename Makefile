@@ -968,6 +968,7 @@ $(INSTALLDIR)/radiant.$(EXE): \
 	radiant/help.o \
 	radiant/image.o \
 	radiant/layerswindow.o \
+	radiant/lua_workbench.o \
 	radiant/mainframe.o \
 	radiant/mainframe_commands.o \
 	radiant/cli.o \

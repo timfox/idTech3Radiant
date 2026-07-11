@@ -108,6 +108,26 @@ Brush entity. Dynamic encounter volume. Alters environment based on player state
 "weight" : probability weight (default 1)
 */
 
+/*QUAKED trigger_capture_point (0.95 0.8 0.15) ?
+Brush entity. Capture point volume for objective-based modes.
+Uses brush bounds as capture volume.
+-------- KEYS --------
+"point_name" : objective label shown to players (default "Alpha")
+"team" : owning team at map start, such as "neutral", "red", or "blue"
+"gametype" : mode filter (default "cp")
+"capture_time" : seconds required to capture (default 8)
+*/
+
+/*QUAKED info_pve_spawn (0.85 0.3 0.2) (-16 -16 0) (16 16 72)
+PvE encounter spawn point. Human-sized locator used by wave or encounter scripts.
+-------- KEYS --------
+"spawn_group" : logical encounter group (default "default")
+"spawn_class" : NPC archetype or script class to spawn (default "grunt")
+"spawn_count" : number of NPCs to spawn from this point (default 1)
+"spawn_interval" : delay between repeated spawns in seconds
+"gametype" : mode filter (default "pve")
+*/
+
 /*QUAKED trigger_level_stream (0.5 0.4 0.8) ?
 Brush entity. Level streaming zone. Loads/unloads map sections without loading screens.
 Uses brush bounds as trigger volume.

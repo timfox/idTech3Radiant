@@ -52,8 +52,12 @@
 #include <QToolButton>
 #include <QSlider>
 #include <QAbstractSpinBox>
+#include <QDoubleSpinBox>
+#include <QGroupBox>
 #include <QKeyEvent>
 #include <QButtonGroup>
+#include <QRegularExpression>
+#include <QTimer>
 #include <QToolTip>
 #include "gtkutil/combobox.h"
 
@@ -75,8 +79,10 @@
 
 #include "qe3.h"
 #include "qtmisc.h"
+#include "camwindow.h"
 #include "entity.h"
 #include "mainframe.h"
+#include "selection.h"
 #include "textureentry.h"
 #include "groupdialog.h"
 
@@ -902,11 +908,14 @@ bool g_entityInspector_windowConstructed = false;
 
 QTreeWidget* g_entityClassList;
 QPlainTextEdit* g_entityClassComment;
+QLineEdit* g_entityClassFilterEntry;
 
 QCheckBox* g_entitySpawnflagsCheck[MAX_FLAGS];
 
 QLineEdit* g_entityKeyEntry;
 QLineEdit* g_entityValueEntry;
+QLineEdit* g_entityPropertyFilterEntry;
+QLineEdit* g_entityAttributeFilterEntry;
 
 QToolButton* g_focusToggleButton;
 
@@ -926,6 +935,20 @@ QGridLayout* g_spawnflagsTable;
 QGridLayout* g_attributeBox = nullptr;
 typedef std::vector<EntityAttribute*> EntityAttributes;
 EntityAttributes g_entityAttributes;
+
+struct EntityAttributeRow
+{
+	CopiedString key;
+	QLabel* label;
+	QWidget* editor;
+};
+std::vector<EntityAttributeRow> g_entityAttributeRows;
+
+QGroupBox* g_transformGroup;
+QDoubleSpinBox* g_transformMove[3];
+QDoubleSpinBox* g_transformRotate[3];
+QDoubleSpinBox* g_transformScale[3];
+QCheckBox* g_transformUniformScale;
 }
 
 void GlobalEntityAttributes_clear(){
@@ -1099,6 +1122,210 @@ void EntityInspector_appendAttribute( const EntityClassAttributePair& attributeP
 	auto *label = new QLabel( keyname );
 	EntityAttribute_setTooltip( label, attributePair.second.m_name.c_str(), attributePair.second.m_description.c_str() );
 	DialogGrid_packRow( g_attributeBox, attribute.getWidget(), label );
+	g_entityAttributeRows.push_back( { keyname, label, attribute.getWidget() } );
+}
+
+namespace
+{
+
+QString EntityInspector_filterText( QLineEdit* entry ){
+	return entry != nullptr ? entry->text().trimmed() : QString();
+}
+
+void EntityInspector_applyClassFilter(){
+	if ( g_entityClassList == nullptr ) {
+		return;
+	}
+
+	const QString filter = EntityInspector_filterText( g_entityClassFilterEntry );
+	for ( int i = 0; i < g_entityClassList->topLevelItemCount(); ++i )
+	{
+		QTreeWidgetItem* item = g_entityClassList->topLevelItem( i );
+		item->setHidden( !( filter.isEmpty() || item->text( 0 ).contains( filter, Qt::CaseInsensitive ) ) );
+	}
+}
+
+void EntityInspector_applyPropertyFilter(){
+	if ( g_entprops_store == nullptr ) {
+		return;
+	}
+
+	const QString filter = EntityInspector_filterText( g_entityPropertyFilterEntry );
+	for ( int i = 0; i < g_entprops_store->topLevelItemCount(); ++i )
+	{
+		QTreeWidgetItem* item = g_entprops_store->topLevelItem( i );
+		const bool visible = filter.isEmpty()
+			|| item->text( 0 ).contains( filter, Qt::CaseInsensitive )
+			|| item->text( 1 ).contains( filter, Qt::CaseInsensitive );
+		item->setHidden( !visible );
+	}
+}
+
+void EntityInspector_applyAttributeFilter(){
+	const QString filter = EntityInspector_filterText( g_entityAttributeFilterEntry );
+	for ( const EntityAttributeRow& row : g_entityAttributeRows )
+	{
+		const bool visible = filter.isEmpty() || QString::fromLatin1( row.key.c_str() ).contains( filter, Qt::CaseInsensitive );
+		row.label->setVisible( visible );
+		row.editor->setVisible( visible );
+	}
+
+	if ( g_attributeBox != nullptr ) {
+		g_attributeBox->invalidate();
+	}
+}
+
+Vector3 EntityInspector_selectedScale(){
+	Vector3 scale( 1, 1, 1 );
+	if ( GlobalSelectionSystem().countSelected() != 1 ) {
+		return scale;
+	}
+
+	const char* vec = SelectedEntity_getValueForKey( "modelscale_vec" );
+	if ( !string_empty( vec ) ) {
+		DoubleVector3 parsed;
+		if ( string_parse_vector3( vec, parsed ) && parsed[0] != 0 && parsed[1] != 0 && parsed[2] != 0 ) {
+			return Vector3( parsed );
+		}
+	}
+
+	const char* uni = SelectedEntity_getValueForKey( "modelscale" );
+	if ( !string_empty( uni ) ) {
+		float parsed = 0;
+		if ( string_parse_float( uni, parsed ) && parsed != 0 ) {
+			return Vector3( parsed, parsed, parsed );
+		}
+	}
+
+	scene::Instance& inst = GlobalSelectionSystem().firstSelected();
+	const scene::Path& path = inst.path();
+	for ( std::size_t i = path.size(); i > 0; --i ) {
+		TransformNode* transformNode = Node_getTransformNode( path[i - 1].get() );
+		if ( transformNode != nullptr ) {
+			DoubleVector3 parsed = matrix4_get_scale_vec3( transformNode->localToParent() );
+			if ( parsed[0] > 0.0001 && parsed[1] > 0.0001 && parsed[2] > 0.0001 ) {
+				return Vector3( parsed );
+			}
+		}
+	}
+
+	return scale;
+}
+
+bool EntityInspector_selectionHasModelScale(){
+	if ( GlobalSelectionSystem().countSelected() != 1 ) {
+		return false;
+	}
+
+	return string_not_empty( SelectedEntity_getValueForKey( "modelscale_vec" ) )
+		|| string_not_empty( SelectedEntity_getValueForKey( "modelscale" ) );
+}
+
+void EntityInspector_syncUniformScale( QDoubleSpinBox* source ){
+	if ( g_transformUniformScale == nullptr || !g_transformUniformScale->isChecked() || source == nullptr ) {
+		return;
+	}
+
+	for ( QDoubleSpinBox* spin : g_transformScale )
+	{
+		if ( spin == nullptr || spin == source ) {
+			continue;
+		}
+		spin->blockSignals( true );
+		spin->setValue( source->value() );
+		spin->blockSignals( false );
+	}
+}
+
+void EntityInspector_refreshTransform(){
+	if ( g_transformGroup == nullptr ) {
+		return;
+	}
+
+	const bool hasSelection = GlobalSelectionSystem().countSelected() != 0;
+	g_transformGroup->setEnabled( hasSelection );
+	if ( g_transformUniformScale != nullptr ) {
+		g_transformUniformScale->setEnabled( hasSelection );
+	}
+
+	AABB bounds;
+	bool validBounds = false;
+	if ( hasSelection ) {
+		bounds = GlobalSelectionSystem().getBoundsSelected();
+		validBounds = aabb_valid( bounds );
+	}
+
+	const Vector3 location = validBounds ? bounds.origin : Vector3( 0, 0, 0 );
+	const Vector3 scale = hasSelection ? EntityInspector_selectedScale() : Vector3( 1, 1, 1 );
+	for ( int axis = 0; axis < 3; ++axis )
+	{
+		g_transformMove[axis]->blockSignals( true );
+		g_transformRotate[axis]->blockSignals( true );
+		g_transformScale[axis]->blockSignals( true );
+		g_transformMove[axis]->setValue( location[axis] );
+		g_transformRotate[axis]->setValue( 0.0 );
+		g_transformScale[axis]->setValue( scale[axis] );
+		g_transformMove[axis]->blockSignals( false );
+		g_transformRotate[axis]->blockSignals( false );
+		g_transformScale[axis]->blockSignals( false );
+	}
+}
+
+void EntityInspector_applyMove(){
+	if ( GlobalSelectionSystem().countSelected() == 0 ) {
+		return;
+	}
+
+	UndoableCommand undo( "translateSelected" );
+	Select_TranslateToPosition( Vector3( g_transformMove[0]->value(), g_transformMove[1]->value(), g_transformMove[2]->value() ) );
+	SceneChangeNotify();
+	EntityInspector_refreshTransform();
+}
+
+void EntityInspector_applyRotate(){
+	if ( GlobalSelectionSystem().countSelected() == 0 ) {
+		return;
+	}
+
+	UndoableCommand undo( "rotateSelectedEulerXYZ" );
+	Select_RotateByEulerXYZ( g_transformRotate[0]->value(), g_transformRotate[1]->value(), g_transformRotate[2]->value() );
+	SceneChangeNotify();
+	EntityInspector_refreshTransform();
+}
+
+void EntityInspector_applyScale(){
+	if ( GlobalSelectionSystem().countSelected() == 0 ) {
+		return;
+	}
+
+	const Vector3 target( g_transformScale[0]->value(), g_transformScale[1]->value(), g_transformScale[2]->value() );
+	UndoableCommand undo( "scaleSelected" );
+	if ( EntityInspector_selectionHasModelScale() ) {
+		char buffer[64];
+		if ( target.x() == target.y() && target.y() == target.z() ) {
+			std::snprintf( buffer, sizeof( buffer ), "%g", target.x() );
+			Scene_EntitySetKeyValue_Selected( "modelscale", buffer );
+			Scene_EntitySetKeyValue_Selected( "modelscale_vec", "" );
+		}
+		else{
+			std::snprintf( buffer, sizeof( buffer ), "%g %g %g", target.x(), target.y(), target.z() );
+			Scene_EntitySetKeyValue_Selected( "modelscale", "" );
+			Scene_EntitySetKeyValue_Selected( "modelscale_vec", buffer );
+		}
+		SceneChangeNotify();
+	}
+	else{
+		const Vector3 current = EntityInspector_selectedScale();
+		const float fx = current.x() > 0.0001f ? target.x() / current.x() : 1.f;
+		const float fy = current.y() > 0.0001f ? target.y() / current.y() : 1.f;
+		const float fz = current.z() > 0.0001f ? target.z() / current.z() : 1.f;
+		Select_Scale( fx, fy, fz );
+		SceneChangeNotify();
+	}
+
+	EntityInspector_refreshTransform();
+}
+
 }
 
 
@@ -1165,6 +1392,7 @@ void EntityInspector_setEntityClass( EntityClass *eclass ){
 		}
 		g_attributeBox->update(); // trigger scrollbar update
 		GlobalEntityAttributes_clear();
+		g_entityAttributeRows.clear();
 
 		for ( const EntityClassAttributePair &pair : eclass->m_attributes )
 		{
@@ -1186,6 +1414,8 @@ void EntityInspector_setEntityClass( EntityClass *eclass ){
 			}
 		}
 	}
+
+	EntityInspector_applyAttributeFilter();
 }
 
 void EntityInspector_updateSpawnflags(){
@@ -1237,11 +1467,13 @@ void EntityInspector_updateKeyValues(){
 	{
 		g_entprops_store->addTopLevelItem( new QTreeWidgetItem( { key.c_str(), value.c_str() } ) );
 	}
+	EntityInspector_applyPropertyFilter();
 
 	for ( EntityAttribute *attr : g_entityAttributes )
 	{
 		attr->update();
 	}
+	EntityInspector_refreshTransform();
 }
 
 class EntityInspectorDraw
@@ -1379,6 +1611,7 @@ g_pressedKeysFilter;
 void EntityInspector_destroyWindow(){
 	g_entityInspector_windowConstructed = false;
 	GlobalEntityAttributes_clear();
+	g_entityAttributeRows.clear();
 }
 
 QWidget* EntityInspector_constructWindow( QWidget* toplevel ){
@@ -1389,6 +1622,15 @@ QWidget* EntityInspector_constructWindow( QWidget* toplevel ){
 
 	{
 		// class list
+		auto *containerWidget = new QWidget;
+		auto *vbox = new QVBoxLayout( containerWidget );
+		vbox->setContentsMargins( 0, 0, 0, 0 );
+
+		auto *filter = g_entityClassFilterEntry = new LineEdit;
+		filter->setPlaceholderText( "Find entity class" );
+		filter->setClearButtonEnabled( true );
+		vbox->addWidget( filter );
+
 		auto *tree = g_entityClassList = new QTreeWidget;
 		tree->setColumnCount( 1 );
 		tree->setSortingEnabled( true );
@@ -1407,8 +1649,10 @@ QWidget* EntityInspector_constructWindow( QWidget* toplevel ){
 			Scene_EntitySetClassname_Selected( item->text( 0 ).toLatin1().constData() );
 		} );
 		QObject::connect( tree, &QTreeWidget::currentItemChanged, EntityClassList_selection_changed );
+		QObject::connect( filter, &QLineEdit::textChanged, []( const QString& ){ EntityInspector_applyClassFilter(); } );
 
-		splitter->addWidget( tree );
+		vbox->addWidget( tree );
+		splitter->addWidget( containerWidget );
 	}
 	{
 		auto *text = g_entityClassComment = new QPlainTextEdit;
@@ -1437,6 +1681,12 @@ QWidget* EntityInspector_constructWindow( QWidget* toplevel ){
 		}
 		{
 			// key/value list
+			auto *filter = g_entityPropertyFilterEntry = new LineEdit;
+			filter->setPlaceholderText( "Filter keys and values" );
+			filter->setClearButtonEnabled( true );
+			QObject::connect( filter, &QLineEdit::textChanged, []( const QString& ){ EntityInspector_applyPropertyFilter(); } );
+			vbox->addWidget( filter );
+
 			auto *tree = g_entprops_store = new QTreeWidget;
 			tree->setColumnCount( 2 );
 			tree->setUniformRowHeights( true ); // optimization
@@ -1550,21 +1800,89 @@ QWidget* EntityInspector_constructWindow( QWidget* toplevel ){
 		}
 	}
 	{
+		auto *group = g_transformGroup = new QGroupBox( "Transform" );
+		auto *grid = new QGridLayout( group );
+		grid->addWidget( new QLabel( "" ), 0, 0 );
+		grid->addWidget( new QLabel( "X" ), 0, 1 );
+		grid->addWidget( new QLabel( "Y" ), 0, 2 );
+		grid->addWidget( new QLabel( "Z" ), 0, 3 );
+
+		const char* rowLabels[] = { "Move To", "Rotate By", "Scale To" };
+		QDoubleSpinBox** rows[] = { g_transformMove, g_transformRotate, g_transformScale };
+		const double minimums[] = { -32768.0, -360.0, 0.001 };
+		const double maximums[] = { 32768.0, 360.0, 32768.0 };
+		const double steps[] = { 1.0, 5.0, 0.1 };
+		const int decimals[] = { 3, 1, 3 };
+		for ( int row = 0; row < 3; ++row )
+		{
+			grid->addWidget( new QLabel( rowLabels[row] ), row + 1, 0 );
+			for ( int axis = 0; axis < 3; ++axis )
+			{
+				auto* spin = rows[row][axis] = new QDoubleSpinBox( group );
+				spin->setRange( minimums[row], maximums[row] );
+				spin->setSingleStep( steps[row] );
+				spin->setDecimals( decimals[row] );
+				grid->addWidget( spin, row + 1, axis + 1 );
+			}
+		}
+
+		g_transformUniformScale = new QCheckBox( "Uniform scale", group );
+		g_transformUniformScale->setChecked( true );
+		grid->addWidget( g_transformUniformScale, 4, 0, 1, 4 );
+
+		auto *buttons = new QHBoxLayout;
+		auto *frame = new QPushButton( "Frame" );
+		auto *centerPivot = new QPushButton( "Center Pivot" );
+		auto *freeze = new QPushButton( "Freeze" );
+		buttons->addWidget( frame );
+		buttons->addWidget( centerPivot );
+		buttons->addWidget( freeze );
+		grid->addLayout( buttons, 5, 0, 1, 4 );
+
+		for ( QDoubleSpinBox* spin : g_transformMove )
+			QObject::connect( spin, &QDoubleSpinBox::editingFinished, EntityInspector_applyMove );
+		for ( QDoubleSpinBox* spin : g_transformRotate )
+			QObject::connect( spin, &QDoubleSpinBox::editingFinished, EntityInspector_applyRotate );
+		for ( QDoubleSpinBox* spin : g_transformScale )
+		{
+			QObject::connect( spin, &QDoubleSpinBox::editingFinished, EntityInspector_applyScale );
+			QObject::connect( spin, QOverload<double>::of( &QDoubleSpinBox::valueChanged ), [spin]( double ){ EntityInspector_syncUniformScale( spin ); } );
+		}
+
+		QObject::connect( frame, &QAbstractButton::clicked, GlobalCamera_FocusOnSelected );
+		QObject::connect( centerPivot, &QAbstractButton::clicked, Selection_SetPivotToSelectionCenter );
+		QObject::connect( freeze, &QAbstractButton::clicked, Selection_FreezeTransforms );
+
+		splitter->addWidget( group );
+	}
+	{
 		auto *scroll = new QScrollArea;
 		scroll->setHorizontalScrollBarPolicy( Qt::ScrollBarPolicy::ScrollBarAlwaysOff );
 		scroll->setWidgetResizable( true );
 		splitter->addWidget( scroll );
 
 		auto *containerWidget = new QWidget; // Adding a QLayout to a QScrollArea is not supported, use proxy widget
-		g_attributeBox = new QGridLayout( containerWidget );
+		auto *vbox = new QVBoxLayout( containerWidget );
+		vbox->setContentsMargins( 0, 0, 0, 0 );
+		auto *filter = g_entityAttributeFilterEntry = new LineEdit;
+		filter->setPlaceholderText( "Filter typed properties" );
+		filter->setClearButtonEnabled( true );
+		QObject::connect( filter, &QLineEdit::textChanged, []( const QString& ){ EntityInspector_applyAttributeFilter(); } );
+		vbox->addWidget( filter );
+
+		auto *attributeWidget = new QWidget;
+		g_attributeBox = new QGridLayout( attributeWidget );
 		g_attributeBox->setAlignment( Qt::AlignmentFlag::AlignTop );
 		g_attributeBox->setColumnStretch( 0, 111 );
 		g_attributeBox->setColumnStretch( 1, 333 );
+		vbox->addWidget( attributeWidget );
 		scroll->setWidget( containerWidget ); // widget's layout must be set b4 this!
 	}
 
 	g_entityInspector_windowConstructed = true;
 	EntityClassList_fill();
+	EntityInspector_applyClassFilter();
+	EntityInspector_refreshTransform();
 
 	typedef FreeCaller<void(const Selectable&), EntityInspector_selectionChanged> EntityInspectorSelectionChangedCaller;
 	GlobalSelectionSystem().addSelectionChangeCallback( EntityInspectorSelectionChangedCaller() );

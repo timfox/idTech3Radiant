@@ -383,6 +383,7 @@ namespace
 	bool Entity_isPlayerStartClass( const char* name ){
 		return classname_equal( name, "info_player_start" )
 			|| classname_equal( name, "info_player_deathmatch" )
+			|| classname_equal( name, "info_pve_spawn" )
 			|| classname_equal( name, "team_ctf_redplayer" )
 			|| classname_equal( name, "team_ctf_blueplayer" )
 			|| classname_equal( name, "team_ctf_redspawn" )
@@ -407,6 +408,21 @@ namespace
 			return AABB( origin, Vector3( 32, 32, 32 ) );
 		}
 		return AABB( origin, Vector3( 16, 16, 16 ) );
+	}
+
+	void Entity_applyDefaultKeyValues( Entity& entity, const char* name ){
+		if ( classname_equal( name, "trigger_capture_point" ) ) {
+			entity.setKeyValue( "gametype", "cp" );
+			entity.setKeyValue( "team", "neutral" );
+			entity.setKeyValue( "capture_time", "8" );
+			entity.setKeyValue( "point_name", "Alpha" );
+		}
+		else if ( classname_equal( name, "info_pve_spawn" ) ) {
+			entity.setKeyValue( "gametype", "pve" );
+			entity.setKeyValue( "spawn_group", "default" );
+			entity.setKeyValue( "spawn_count", "1" );
+			entity.setKeyValue( "spawn_class", "grunt" );
+		}
 	}
 }
 
@@ -457,6 +473,7 @@ void Entity_createFromSelection( const char* name, const Vector3& origin ){
 	scene::Instance& instance = findInstance( entitypath );
 
 	Entity* entity = Node_getEntity( node );
+	Entity_applyDefaultKeyValues( *entity, name );
 
 	if ( entityClass->fixedsize || ( isModel && !brushesSelected ) ) {
 		//Select_Delete();

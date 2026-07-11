@@ -129,6 +129,7 @@ public:
 
 	virtual void pivotChanged() const = 0;
 	virtual void setCustomTransformOrigin( const Vector3& origin, const bool set[3] ) const = 0;
+	virtual void resetCustomTransformOrigin() const = 0;
 
 	virtual const AABB& getBoundsSelected() const = 0; /* object bounds */
 };

@@ -1059,6 +1059,7 @@ private:
 	void ConstructPivot() const;
 	void ConstructPivotRotation() const;
 	void setCustomTransformOrigin( const Vector3& origin, const bool set[3] ) const override;
+	void resetCustomTransformOrigin() const override;
 	AABB getSelectionAABB() const;
 	mutable bool m_pivotChanged;
 	bool m_pivot_moving;
@@ -2004,6 +2005,34 @@ void RadiantSelectionSystem::freezeTransforms(){
 	GlobalSceneGraph().traverse( FreezeTransforms() );
 }
 
+void Selection_SetPivotToSelectionCenter(){
+	if ( GlobalSelectionSystem().countSelected() == 0 && GlobalSelectionSystem().countSelectedComponents() == 0 ) {
+		return;
+	}
+
+	const bool set[3] = { true, true, true };
+	GlobalSelectionSystem().setCustomTransformOrigin( GlobalSelectionSystem().getBoundsSelected().origin, set );
+	GlobalSelectionSystem().pivotChanged();
+}
+
+void Selection_SetPivotToWorldOrigin(){
+	if ( GlobalSelectionSystem().countSelected() == 0 && GlobalSelectionSystem().countSelectedComponents() == 0 ) {
+		return;
+	}
+
+	const bool set[3] = { true, true, true };
+	GlobalSelectionSystem().setCustomTransformOrigin( g_vector3_identity, set );
+	GlobalSelectionSystem().pivotChanged();
+}
+
+void Selection_ResetPivotToSelection(){
+	GlobalSelectionSystem().resetCustomTransformOrigin();
+}
+
+void Selection_FreezeTransforms(){
+	getSelectionSystem().freezeTransforms();
+}
+
 
 bool RadiantSelectionSystem::endMove(){
 	if( m_transformOrigin_manipulator.isSelected() ){
@@ -2263,6 +2292,11 @@ void RadiantSelectionSystem::setCustomTransformOrigin( const Vector3& origin, co
 
 		ConstructPivotRotation();
 	}
+}
+
+void RadiantSelectionSystem::resetCustomTransformOrigin() const {
+	m_pivotIsCustom = false;
+	pivotChanged();
 }
 
 AABB RadiantSelectionSystem::getSelectionAABB() const {

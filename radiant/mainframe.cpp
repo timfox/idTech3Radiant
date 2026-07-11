@@ -195,6 +195,7 @@
 #include "spreadsheet_workbench.h"
 #include "python_script_workbench.h"
 #include "aiml_workbench.h"
+#include "lua_workbench.h"
 #include "scenegraphinspector.h"
 #include "ai_assistant.h"
 
@@ -4783,6 +4784,14 @@ void Add_createInfoPlayerDeathmatch(){
 	Add_createEntity( "info_player_deathmatch" );
 }
 
+void Add_createCapturePointVolume(){
+	Add_createEntity( "trigger_capture_point" );
+}
+
+void Add_createPVESpawnPoint(){
+	Add_createEntity( "info_pve_spawn" );
+}
+
 void Add_createSpline(){
 	Add_createEntity( "misc_spline" );
 }
@@ -5086,6 +5095,18 @@ void Lua_editObjectives(){
 void Lua_editPropsExternal(){
 	Lua_openScript( g_luaScriptProps, "Lua Props", true );
 }
+void Lua_editEntitiesExternal(){
+	Lua_openScript( g_luaScriptEntities, "Lua Entities", true );
+}
+void Lua_editItemsExternal(){
+	Lua_openScript( g_luaScriptItems, "Lua Items", true );
+}
+void Lua_editMainExternal(){
+	Lua_openScript( g_luaScriptMain, "Lua Main", true );
+}
+void Lua_editObjectivesExternal(){
+	Lua_openScript( g_luaScriptObjectives, "Lua Objectives", true );
+}
 
 QAction* create_highlighted_view_menu_item( QMenu* menu, const char* mnemonic, const char* commandName ){
 	auto* commandAction = create_menu_item_with_mnemonic( menu, mnemonic, commandName );
@@ -5278,6 +5299,8 @@ void create_add_menu( QMenuBar *menubar ){
 	create_menu_item_with_mnemonic( menu, "Light", "AddLight" );
 	create_menu_item_with_mnemonic( menu, "Player Start", "AddInfoPlayerStart" );
 	create_menu_item_with_mnemonic( menu, "Player Deathmatch", "AddInfoPlayerDeathmatch" );
+	create_menu_item_with_mnemonic( menu, "Capture Point Volume", "AddCapturePointVolume" );
+	create_menu_item_with_mnemonic( menu, "PvE Spawn Point", "AddPVESpawnPoint" );
 		create_menu_item_with_mnemonic( menu, "Model", "AddMiscModel" );
 	menu->addSeparator();
 
@@ -5503,6 +5526,17 @@ void create_selection_menu( QMenuBar *menubar ){
 	create_menu_item_with_mnemonic( menu, "&Transform (Position/Rotation/Scale)", "TransformDialog" );
 	menu->addSeparator();
 	{
+		QMenu* submenu = menu->addMenu( "Pivot" );
+
+		submenu->setTearOffEnabled( g_Layout_enableDetachableMenus.m_value );
+		create_menu_item_with_mnemonic( submenu, "Center Pivot to Selection", "SelectionCenterPivot" );
+		create_menu_item_with_mnemonic( submenu, "Set Pivot to World Origin", "SelectionWorldPivot" );
+		create_menu_item_with_mnemonic( submenu, "Reset Pivot to Auto", "SelectionResetPivot" );
+		submenu->addSeparator();
+		create_menu_item_with_mnemonic( submenu, "Freeze Transforms", "FreezeTransforms" );
+	}
+	menu->addSeparator();
+	{
 		QMenu* submenu = menu->addMenu( "Repeat" );
 
 		submenu->setTearOffEnabled( g_Layout_enableDetachableMenus.m_value );
@@ -5619,6 +5653,7 @@ void create_tools_menu( QMenuBar *menubar ){
 	create_menu_item_with_mnemonic( menu, "Spreadsheet Editor", "OpenSpreadsheetWorkbench" );
 	create_menu_item_with_mnemonic( menu, "Python Script Editor", "OpenPythonScript" );
 	create_menu_item_with_mnemonic( menu, "AIML 3.0 Editor", "OpenAIMLEditor" );
+	create_menu_item_with_mnemonic( menu, "Lua Script Hub", "OpenLuaWorkbench" );
 	create_menu_item_with_mnemonic( menu, "AI Assistant", "OpenAIAssistant" );
 	menu->addSeparator();
 	create_menu_item_with_mnemonic( menu, "Q3Map2++ Help", "ToolQ3Map2Help" );
@@ -5629,6 +5664,8 @@ void create_tools_menu( QMenuBar *menubar ){
 	{
 		QMenu* submenu = menu->addMenu( "Lua" );
 		submenu->setTearOffEnabled( g_Layout_enableDetachableMenus.m_value );
+		create_menu_item_with_mnemonic( submenu, "Open Lua Script Hub", "OpenLuaWorkbench" );
+		submenu->addSeparator();
 		create_menu_item_with_mnemonic( submenu, "Edit props.lua", "LuaEditProps" );
 		create_menu_item_with_mnemonic( submenu, "Edit entities.lua", "LuaEditEntities" );
 		create_menu_item_with_mnemonic( submenu, "Edit items.lua", "LuaEditItems" );
@@ -5637,6 +5674,10 @@ void create_tools_menu( QMenuBar *menubar ){
 		create_menu_item_with_mnemonic( submenu, "Edit objectives.lua", "LuaEditObjectives" );
 		submenu->addSeparator();
 		create_menu_item_with_mnemonic( submenu, "Edit props.lua externally", "LuaEditPropsExternal" );
+		create_menu_item_with_mnemonic( submenu, "Edit entities.lua externally", "LuaEditEntitiesExternal" );
+		create_menu_item_with_mnemonic( submenu, "Edit items.lua externally", "LuaEditItemsExternal" );
+		create_menu_item_with_mnemonic( submenu, "Edit main.lua externally", "LuaEditMainExternal" );
+		create_menu_item_with_mnemonic( submenu, "Edit objectives.lua externally", "LuaEditObjectivesExternal" );
 	}
 }
 
@@ -6408,6 +6449,7 @@ void MainFrame::Create(){
 	Spreadsheet_createDock( window );
 	PythonScript_createDock( window );
 	AIMLWorkbench_createDock( window );
+	LuaWorkbench_createDock( window );
 	ScenegraphInspector_createDock( window );
 	AIAssistant_createDock( window );
 
@@ -6473,6 +6515,7 @@ void MainFrame::Shutdown(){
 	Spreadsheet_stopAndRelease();
 	PythonScript_stopAndRelease();
 	AIMLWorkbench_stopAndRelease();
+	LuaWorkbench_stopAndRelease();
 	ScenegraphInspector_destroyDock();
 	AIAssistant_destroy();
 	g_consoleDock = nullptr;

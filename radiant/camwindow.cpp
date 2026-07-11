@@ -387,8 +387,8 @@ void Camera_FreeMove( camera_t& camera, int dx, int dy ){
 	{
 		const float dtime = 0.0333333f;
 		Vector3 angles0( camera.angles );
-		const int rotateDx = camera.m_orbit ? -dx : dx;
-		const int rotateDy = camera.m_orbit ? -dy : dy;
+		const int rotateDx = dx;
+		const int rotateDy = dy;
 
 		if ( g_camwindow_globals_private.m_bCamInverseMouse ) {
 			camera.angles[CAMERA_PITCH] -= rotateDy * dtime * g_camwindow_globals_private.m_angleSpeed;
@@ -2280,7 +2280,18 @@ Vector3 Camera_getFocusPos( camera_t& camera ){
 }
 
 void GlobalCamera_FocusOnSelected(){
-	Camera_setOrigin( *g_camwnd, Camera_getFocusPos( g_camwnd->getCamera() ) );
+	if ( g_camwnd == nullptr ) {
+		return;
+	}
+
+	camera_t& camera = g_camwnd->getCamera();
+	const auto& workzone = Select_getWorkZone();
+	camera.m_orbit_center = ( workzone.d_work_min + workzone.d_work_max ) * 0.5f;
+	Camera_setOrigin( *g_camwnd, Camera_getFocusPos( camera ) );
+}
+
+void GlobalCamera_FrameSelection(){
+	GlobalCamera_FocusOnSelected();
 }
 
 void Camera_CycleBackground(){
