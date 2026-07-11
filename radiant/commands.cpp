@@ -494,6 +494,42 @@ QString commandLauncherTitle( const char* name ){
 	if( string_equal( name, "CommandLauncher" ) ){
 		return "Command Launcher";
 	}
+	if( string_equal( name, "OpenWysiwygWorkspace" ) ){
+		return "Open WYSIWYG Workspace";
+	}
+	if( string_equal( name, "ToggleExperimentalProperties" ) ){
+		return "Toggle Inspector";
+	}
+	if( string_equal( name, "ToggleExperimentalPreview" ) ){
+		return "Toggle Viewport Preview";
+	}
+	if( string_equal( name, "ToggleExperimentalAssets" ) ){
+		return "Toggle Asset Browser";
+	}
+	if( string_equal( name, "ToggleExperimentalHistory" ) ){
+		return "Toggle History";
+	}
+	if( string_equal( name, "ToggleExperimentalSync" ) ){
+		return "Toggle Live Sync";
+	}
+	if( string_equal( name, "ToggleExperimentalUSD" ) ){
+		return "Toggle Outliner";
+	}
+	if( string_equal( name, "ToggleExperimentalECS" ) ){
+		return "Toggle Entity Palette";
+	}
+	if( string_equal( name, "ImportUSDStructure" ) ){
+		return "Import USD Scene Hierarchy";
+	}
+	if( string_equal( name, "ExportToUSDA" ) ){
+		return "Export USDA Scene Hierarchy";
+	}
+	if( string_equal( name, "ImportMayaASCII" ) ){
+		return "Import Maya ASCII";
+	}
+	if( string_equal( name, "ExportToMayaASCII" ) ){
+		return "Export Maya ASCII";
+	}
 	return humanizeCommandName( name );
 }
 
@@ -587,6 +623,21 @@ QStringList commandSearchAliases( const char* name ){
 	}
 	if( string_equal( name, "CommandLauncher" ) ){
 		return { "command palette", "tool finder", "action search" };
+	}
+	if( string_equal( name, "OpenWysiwygWorkspace" ) ){
+		return { "workspace", "editor workspace", "unity layout", "unreal layout", "wysiwyg", "inspector", "outliner", "asset browser" };
+	}
+	if( string_equal( name, "ToggleExperimentalProperties" ) ){
+		return { "inspector", "details panel", "properties" };
+	}
+	if( string_equal( name, "ToggleExperimentalPreview" ) ){
+		return { "preview", "viewport preview", "material preview" };
+	}
+	if( string_equal( name, "ToggleExperimentalAssets" ) ){
+		return { "asset browser", "content browser", "assets", "materials" };
+	}
+	if( string_equal( name, "ToggleExperimentalUSD" ) ){
+		return { "outliner", "scene hierarchy", "hierarchy" };
 	}
 	if( string_equal( name, "CloneSelection" ) ){
 		return { "duplicate" };

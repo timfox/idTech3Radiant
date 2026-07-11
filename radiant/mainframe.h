@@ -308,6 +308,7 @@ void Lua_editObjectives();
 void Lua_editPropsExternal();
 void CameraBookmark_store( std::size_t index );
 void CameraBookmark_recall( std::size_t index );
+void OpenWysiwygWorkspace();
 void Experimental_togglePropertiesDock();
 void Experimental_togglePreviewDock();
 void Experimental_toggleAssetsDock();
