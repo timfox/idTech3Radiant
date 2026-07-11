@@ -841,10 +841,10 @@ void Scene_BrushResize_Cuboid( scene::Node*& node, const AABB& bounds ){
 	}
 }
 
-void Brush_ConstructPlacehoderCuboid( scene::Node& node, const AABB& bounds ){
+void Brush_ConstructPlacehoderCuboid( scene::Node& node, const AABB& bounds, const char* shader ){
 	scene::Node* brush = &GlobalBrushCreator().createBrush();
 	Node_getTraversable( node )->insert( NodeSmartReference( *brush ) );
-	Brush_ConstructCuboid( *Node_getBrush( *brush ), bounds, texdef_name_default(), TextureTransform_getDefault() );
+	Brush_ConstructCuboid( *Node_getBrush( *brush ), bounds, shader != nullptr ? shader : texdef_name_default(), TextureTransform_getDefault() );
 }
 
 bool Brush_hasShader( const Brush& brush, const char* name ){

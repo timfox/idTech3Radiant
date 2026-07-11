@@ -50,7 +50,7 @@ void Brush_ConstructCuboid( Brush& brush, const AABB& bounds, const char* shader
 const TextureProjection& TextureTransform_getDefault();
 void Scene_BrushConstructPrefab( scene::Graph& graph, EBrushPrefab type, std::size_t sides, bool option, const char* shader );
 void Scene_BrushResize_Cuboid( scene::Node*& node, const AABB& bounds );
-void Brush_ConstructPlacehoderCuboid( scene::Node& node, const AABB& bounds );
+void Brush_ConstructPlacehoderCuboid( scene::Node& node, const AABB& bounds, const char* shader = nullptr );
 void Scene_BrushSetTexdef_Selected( scene::Graph& graph, const TextureProjection& projection, bool setBasis, bool resetBasis );
 void Scene_BrushSetTexdef_Component_Selected( scene::Graph& graph, const TextureProjection& projection, bool setBasis, bool resetBasis );
 void Scene_BrushSetTexdef_Selected( scene::Graph& graph, const float* hShift, const float* vShift, const float* hScale, const float* vScale, const float* rotation );

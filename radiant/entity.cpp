@@ -378,6 +378,38 @@ AABB Doom3Light_getBounds( const AABB& workzone ){
 
 int g_iLastLightIntensity = 300;
 
+namespace
+{
+	bool Entity_isPlayerStartClass( const char* name ){
+		return classname_equal( name, "info_player_start" )
+			|| classname_equal( name, "info_player_deathmatch" )
+			|| classname_equal( name, "team_ctf_redplayer" )
+			|| classname_equal( name, "team_ctf_blueplayer" )
+			|| classname_equal( name, "team_ctf_redspawn" )
+			|| classname_equal( name, "team_ctf_bluespawn" );
+	}
+
+	const char* Entity_defaultPlaceholderShader( const char* name ){
+		if ( string_compare_nocase_n( name, "trigger_", 8 ) == 0 ) {
+			return "textures/common/editor_trigger";
+		}
+		if ( Entity_isPlayerStartClass( name ) ) {
+			return "textures/common/editor_spawn";
+		}
+		return "textures/common/editor_entity";
+	}
+
+	AABB Entity_defaultPlaceholderBounds( const char* name, const Vector3& origin ){
+		if ( Entity_isPlayerStartClass( name ) ) {
+			return aabb_for_minmax( origin + Vector3( -16, -16, 0 ), origin + Vector3( 16, 16, 72 ) );
+		}
+		if ( string_compare_nocase_n( name, "trigger_", 8 ) == 0 ) {
+			return AABB( origin, Vector3( 32, 32, 32 ) );
+		}
+		return AABB( origin, Vector3( 16, 16, 16 ) );
+	}
+}
+
 void Entity_createFromSelection( const char* name, const Vector3& origin ){
 #if 0
 	if ( string_equal_nocase( name, "worldspawn" ) ) {
@@ -413,11 +445,6 @@ void Entity_createFromSelection( const char* name, const Vector3& origin ){
 		Scene_BrushSetShader_Selected( GlobalSceneGraph(), GetCommonShader( "trigger" ).c_str() );
 	}
 
-	if ( !( entityClass->fixedsize || isModel ) && !brushesSelected ) {
-		globalErrorStream() << "failed to create a group entity - no brushes are selected\n";
-		return;
-	}
-
 	AABB workzone( aabb_for_minmax( Select_getWorkZone().d_work_min, Select_getWorkZone().d_work_max ) );
 
 
@@ -451,8 +478,14 @@ void Entity_createFromSelection( const char* name, const Vector3& origin ){
 			entity->setKeyValue( "model", entity->getKeyValue( "name" ) );
 		}
 
-		Scene_parentSelectedBrushesToEntity( GlobalSceneGraph(), node );
-		Scene_forEachChildSelectable( SelectableSetSelected( true ), instance.path() );
+		if ( brushesSelected ) {
+			Scene_parentSelectedBrushesToEntity( GlobalSceneGraph(), node );
+			Scene_forEachChildSelectable( SelectableSetSelected( true ), instance.path() );
+		}
+		else{
+			Brush_ConstructPlacehoderCuboid( node, Entity_defaultPlaceholderBounds( name, origin ), Entity_defaultPlaceholderShader( name ) );
+			Scene_forEachChildSelectable( SelectableSetSelected( true ), instance.path() );
+		}
 	}
 
 	// tweaking: when right click dropping a light entity, ask for light value in a custom dialog box

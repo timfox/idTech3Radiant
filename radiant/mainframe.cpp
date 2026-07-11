@@ -152,6 +152,7 @@
 #include "entity.h"
 #include "entityinspector.h"
 #include "eclasslib.h"
+#include "gtkutil/image.h"
 #include "entityinspector.h"
 #include "entitylist.h"
 #include "filters.h"
@@ -2805,6 +2806,29 @@ static void Experimental_refreshECSList(){
 	{
 		QListWidget* m_list;
 		QString m_cat;
+		static QIcon iconForEntityClass( const EntityClass* eclass ){
+			if ( classname_equal( eclass->name(), "light" ) || classname_equal( eclass->name(), "lightJunior" ) ) {
+				return new_local_icon( "ecs_light" );
+			}
+			if ( eclass->miscmodel_is ) {
+				return new_local_icon( "ecs_model" );
+			}
+			if ( string_compare_nocase_n( eclass->name(), "trigger_", 8 ) == 0 ) {
+				return new_local_icon( "ecs_trigger" );
+			}
+			if ( classname_equal( eclass->name(), "info_player_start" )
+			  || classname_equal( eclass->name(), "info_player_deathmatch" )
+			  || classname_equal( eclass->name(), "team_ctf_redplayer" )
+			  || classname_equal( eclass->name(), "team_ctf_blueplayer" )
+			  || classname_equal( eclass->name(), "team_ctf_redspawn" )
+			  || classname_equal( eclass->name(), "team_ctf_bluespawn" ) ) {
+				return new_local_icon( "ecs_spawn" );
+			}
+			if ( eclass->fixedsize ) {
+				return new_local_icon( "ecs_pointentity" );
+			}
+			return new_local_icon( "ecs_brushentity" );
+		}
 	public:
 		ECSCollector( QListWidget* list, const QString& cat ) : m_list( list ), m_cat( cat ){}
 		void visit( EntityClass* eclass ) override {
@@ -2814,7 +2838,7 @@ static void Experimental_refreshECSList(){
 			if ( !m_cat.isEmpty() && m_cat != "All" && QString( ECS_categoryForEntity( eclass->name() ) ) != m_cat ) {
 				return;
 			}
-			m_list->addItem( eclass->name() );
+			m_list->addItem( new QListWidgetItem( iconForEntityClass( eclass ), eclass->name() ) );
 		}
 	} collector( g_exp_ecsEntityList, cat );
 	GlobalEntityClassManager().forEach( collector );

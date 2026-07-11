@@ -53,6 +53,54 @@
 
 inline void read_aabb( AABB& aabb, const EntityClass& eclass ){
 	aabb = aabb_for_minmax( eclass.mins, eclass.maxs );
+	const bool isPlayerStart =
+		classname_equal( eclass.name(), "info_player_start" )
+		|| classname_equal( eclass.name(), "info_player_deathmatch" )
+		|| classname_equal( eclass.name(), "team_ctf_redplayer" )
+		|| classname_equal( eclass.name(), "team_ctf_blueplayer" )
+		|| classname_equal( eclass.name(), "team_ctf_redspawn" )
+		|| classname_equal( eclass.name(), "team_ctf_bluespawn" );
+	if ( isPlayerStart ) {
+		const Vector3 size = aabb.extents * 2;
+		if ( size.x() < 24 || size.y() < 24 || size.z() < 48 ) {
+			aabb = aabb_for_minmax( Vector3( -16, -16, 0 ), Vector3( 16, 16, 72 ) );
+		}
+	}
+}
+
+namespace
+{
+	class RenderableEntityLocator : public OpenGLRenderable
+	{
+		const AABB& m_aabb;
+	public:
+		RenderableEntityLocator( const AABB& aabb ) : m_aabb( aabb ){
+		}
+		void render( RenderStateFlags ) const override {
+			const Vector3 min = m_aabb.origin - m_aabb.extents;
+			const Vector3 max = m_aabb.origin + m_aabb.extents;
+			const Vector3 center = m_aabb.origin;
+
+			gl().glBegin( GL_LINES );
+
+			gl().glVertex3f( min.x(), center.y(), center.z() );
+			gl().glVertex3f( max.x(), center.y(), center.z() );
+
+			gl().glVertex3f( center.x(), min.y(), center.z() );
+			gl().glVertex3f( center.x(), max.y(), center.z() );
+
+			gl().glVertex3f( center.x(), center.y(), min.z() );
+			gl().glVertex3f( center.x(), center.y(), max.z() );
+
+			gl().glVertex3f( min.x(), min.y(), min.z() );
+			gl().glVertex3f( max.x(), max.y(), max.z() );
+
+			gl().glVertex3f( min.x(), max.y(), min.z() );
+			gl().glVertex3f( max.x(), min.y(), max.z() );
+
+			gl().glEnd();
+		}
+	};
 }
 
 
@@ -79,6 +127,7 @@ class GenericEntity :
 	RenderableArrow m_arrow;
 	RenderableSolidAABB m_aabb_solid;
 	RenderableWireframeAABB m_aabb_wire;
+	RenderableEntityLocator m_locator;
 	RenderableNamedEntity m_renderName;
 
 	Callback<void()> m_transformChanged;
@@ -132,6 +181,7 @@ public:
 		m_arrow( m_aabb_local.origin, m_angles ),
 		m_aabb_solid( m_aabb_local ),
 		m_aabb_wire( m_aabb_local ),
+		m_locator( m_aabb_local ),
 		m_renderName( m_named, g_vector3_identity ),
 		m_transformChanged( transformChanged ),
 		m_evaluateTransform( evaluateTransform ){
@@ -149,6 +199,7 @@ public:
 		m_arrow( m_aabb_local.origin, m_angles ),
 		m_aabb_solid( m_aabb_local ),
 		m_aabb_wire( m_aabb_local ),
+		m_locator( m_aabb_local ),
 		m_renderName( m_named, g_vector3_identity ),
 		m_transformChanged( transformChanged ),
 		m_evaluateTransform( evaluateTransform ){
@@ -201,9 +252,17 @@ public:
 			renderer.addRenderable( m_arrow, localToWorld );
 		}
 	}
+	void renderLocator( Renderer& renderer, const Matrix4& localToWorld ) const {
+		renderer.addRenderable( m_locator, localToWorld );
+	}
 	void renderSolid( Renderer& renderer, const VolumeTest& volume, const Matrix4& localToWorld, bool selected ) const {
 		renderer.SetState( m_entity.getEntityClass().m_state_fill, Renderer::eFullMaterials );
-		renderer.addRenderable( m_aabb_solid, localToWorld );
+		if ( selected ) {
+			renderer.addRenderable( m_aabb_solid, localToWorld );
+		}
+		renderLocator( renderer, localToWorld );
+		renderer.SetState( m_entity.getEntityClass().m_state_wire, Renderer::eWireframeOnly );
+		renderer.addRenderable( m_aabb_wire, localToWorld );
 		renderArrow( renderer, volume, localToWorld );
 		if ( g_showNames || selected ) {
 			m_renderName.render( renderer, volume, localToWorld, selected );
@@ -211,6 +270,7 @@ public:
 	}
 	void renderWireframe( Renderer& renderer, const VolumeTest& volume, const Matrix4& localToWorld, bool selected ) const {
 		renderer.SetState( m_entity.getEntityClass().m_state_wire, Renderer::eWireframeOnly );
+		renderLocator( renderer, localToWorld );
 		renderer.addRenderable( m_aabb_wire, localToWorld );
 		renderArrow( renderer, volume, localToWorld );
 		if ( selected || ( g_showNames && aabb_fits_view( m_aabb_local, volume.GetModelview(), volume.GetViewport(), g_showNamesRatio ) ) ) {
