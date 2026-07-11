@@ -1184,6 +1184,25 @@ QComboBox* g_exp_ecsCategoryCombo{};
 QListWidget* g_exp_ecsEntityList{};
 QLabel* g_exp_selectedCountLabel{};
 QLabel* g_exp_selectedComponentsLabel{};
+QLabel* g_exp_selectionTypeLabel{};
+QLabel* g_exp_selectionBoundsLabel{};
+QLabel* g_exp_selectionShaderLabel{};
+QGroupBox* g_exp_entityGroup{};
+QLabel* g_exp_entityClassLabel{};
+QLineEdit* g_exp_entityNameEdit{};
+QLineEdit* g_exp_entityTargetnameEdit{};
+QLineEdit* g_exp_entityTargetEdit{};
+QLineEdit* g_exp_entitySoundEdit{};
+QLineEdit* g_exp_entityModelEdit{};
+QGroupBox* g_exp_worldGroup{};
+QLineEdit* g_exp_worldMessageEdit{};
+QLineEdit* g_exp_worldMusicEdit{};
+QLineEdit* g_exp_worldGravityEdit{};
+QLineEdit* g_exp_worldColorEdit{};
+QDoubleSpinBox* g_exp_worldMinlight{};
+QGroupBox* g_exp_gravityGroup{};
+QLineEdit* g_exp_gravityDirectionEdit{};
+QLineEdit* g_exp_gravityMagnitudeEdit{};
 QLineEdit* g_exp_shaderEdit{};
 QLineEdit* g_exp_skyboxHDREdit{};
 QLineEdit* g_exp_pbrAlbedo{};
@@ -2353,6 +2372,195 @@ static bool Experimental_selectionHasModelScale(){
 	return !string_empty( vec ) || !string_empty( uni );
 }
 
+static QString Experimental_selectedNodeShader(){
+	if ( GlobalSelectionSystem().countSelected() != 1 ) {
+		return {};
+	}
+
+	scene::Instance& instance = GlobalSelectionSystem().firstSelected();
+	scene::Node& node = instance.path().top();
+	if ( Node_getBrush( node ) != nullptr ) {
+		return Experimental_firstBrushShader( node );
+	}
+	if ( Patch* patch = Node_getPatch( node ) ) {
+		return QString::fromLatin1( patch->GetShader() );
+	}
+	if ( Entity* entity = Node_getEntity( node ) ) {
+		const char* model = entity->getKeyValue( "model" );
+		if ( !string_empty( model ) ) {
+			return QString::fromLatin1( model );
+		}
+	}
+	return {};
+}
+
+static scene::Node* Experimental_worldspawnNode(){
+	return Map_FindWorldspawn( g_map );
+}
+
+static Entity* Experimental_worldspawnEntity(){
+	scene::Node* worldNode = Experimental_worldspawnNode();
+	return worldNode != nullptr ? Node_getEntity( *worldNode ) : nullptr;
+}
+
+static Entity* Experimental_selectedEntityForInspector(){
+	if ( GlobalSelectionSystem().countSelected() != 1 ) {
+		return nullptr;
+	}
+
+	scene::Instance& instance = GlobalSelectionSystem().firstSelected();
+	Entity* entity = Node_getEntity( instance.path().top() );
+	if ( entity == nullptr && instance.path().size() > 1 ) {
+		entity = Node_getEntity( instance.path().parent() );
+	}
+	return entity;
+}
+
+static bool Experimental_selectedEntityClassPrefix( const char* prefix ){
+	Entity* entity = Experimental_selectedEntityForInspector();
+	return entity != nullptr && string_equal_prefix_nocase( entity->getClassName(), prefix );
+}
+
+static void Experimental_setLineEditValue( QLineEdit* edit, const QString& value ){
+	if ( edit == nullptr ) {
+		return;
+	}
+	edit->blockSignals( true );
+	edit->setText( value );
+	edit->blockSignals( false );
+}
+
+static void Experimental_setSpinValue( QDoubleSpinBox* spin, double value ){
+	if ( spin == nullptr ) {
+		return;
+	}
+	spin->blockSignals( true );
+	spin->setValue( value );
+	spin->blockSignals( false );
+}
+
+static void Experimental_setSelectedEntityKeyValue( const char* key, const QString& value ){
+	Entity* entity = Experimental_selectedEntityForInspector();
+	if ( entity == nullptr ) {
+		return;
+	}
+
+	const QByteArray utf8 = value.trimmed().toUtf8();
+	const auto command = StringStream( "entitySetKeyValue -key ", Quoted( key ), " -value ", Quoted( utf8.constData() ) );
+	UndoableCommand undo( command );
+	Scene_EntitySetKeyValue_Selected( key, utf8.constData() );
+	SceneChangeNotify();
+}
+
+static void Experimental_setWorldspawnKeyValue( const char* key, const QString& value ){
+	Entity* worldspawn = Experimental_worldspawnEntity();
+	if ( worldspawn == nullptr ) {
+		return;
+	}
+
+	const QByteArray utf8 = value.trimmed().toUtf8();
+	const auto command = StringStream( "entitySetWorldspawnKeyValue -key ", Quoted( key ), " -value ", Quoted( utf8.constData() ) );
+	UndoableCommand undo( command );
+	worldspawn->setKeyValue( key, utf8.constData() );
+	SceneChangeNotify();
+}
+
+static QString Experimental_selectionTypeSummary(){
+	const std::size_t selectedCount = GlobalSelectionSystem().countSelected();
+	const std::size_t selectedComponents = GlobalSelectionSystem().countSelectedComponents();
+	if ( selectedCount == 0 ) {
+		return "Nothing selected";
+	}
+	if ( selectedComponents != 0 ) {
+		return StringStream( "Component selection (", Unsigned( selectedComponents ), ")" ).c_str();
+	}
+	if ( selectedCount != 1 ) {
+		return StringStream( "Multi-selection (", Unsigned( selectedCount ), ")" ).c_str();
+	}
+
+	scene::Instance& instance = GlobalSelectionSystem().firstSelected();
+	scene::Node& node = instance.path().top();
+	if ( Entity* entity = Node_getEntity( node ) ) {
+		return StringStream( "Entity: ", entity->getClassName() ).c_str();
+	}
+	if ( Node_getBrush( node ) != nullptr ) {
+		return "Brush";
+	}
+	if ( Node_getPatch( node ) != nullptr ) {
+		return "Patch";
+	}
+	return "Selection";
+}
+
+static QString Experimental_selectionBoundsSummary(){
+	const bool hasSelection = GlobalSelectionSystem().countSelected() != 0;
+	const AABB bounds = GlobalSelectionSystem().getBoundsSelected();
+	if ( !hasSelection || !aabb_valid( bounds ) ) {
+		return "No bounds";
+	}
+
+	const Vector3 size = bounds.extents * 2.f;
+	return QString( "%1 x %2 x %3" )
+		.arg( size.x(), 0, 'f', 1 )
+		.arg( size.y(), 0, 'f', 1 )
+		.arg( size.z(), 0, 'f', 1 );
+}
+
+static void Experimental_refreshEntityPanels(){
+	Entity* entity = Experimental_selectedEntityForInspector();
+	const bool hasEntity = entity != nullptr;
+	if ( g_exp_entityGroup != nullptr ) {
+		g_exp_entityGroup->setVisible( hasEntity );
+	}
+	if ( hasEntity ) {
+		if ( g_exp_entityClassLabel != nullptr ) {
+			g_exp_entityClassLabel->setText( entity->getClassName() );
+		}
+		Experimental_setLineEditValue( g_exp_entityNameEdit, entity->getKeyValue( "name" ) );
+		Experimental_setLineEditValue( g_exp_entityTargetnameEdit, entity->getKeyValue( "targetname" ) );
+		Experimental_setLineEditValue( g_exp_entityTargetEdit, entity->getKeyValue( "target" ) );
+		Experimental_setLineEditValue( g_exp_entitySoundEdit, entity->getKeyValue( "sound" ) );
+		Experimental_setLineEditValue( g_exp_entityModelEdit, entity->getKeyValue( "model" ) );
+	}
+
+	Entity* worldspawn = Experimental_worldspawnEntity();
+	if ( g_exp_worldGroup != nullptr ) {
+		g_exp_worldGroup->setVisible( worldspawn != nullptr );
+	}
+	if ( worldspawn != nullptr ) {
+		Experimental_setLineEditValue( g_exp_worldMessageEdit, worldspawn->getKeyValue( "message" ) );
+		Experimental_setLineEditValue( g_exp_worldMusicEdit, worldspawn->getKeyValue( "music" ) );
+		Experimental_setLineEditValue( g_exp_worldGravityEdit, worldspawn->getKeyValue( "gravity" ) );
+		Experimental_setLineEditValue( g_exp_worldColorEdit, worldspawn->getKeyValue( "_color" ) );
+		float minlight = 0;
+		string_parse_float( worldspawn->getKeyValue( "_minlight" ), minlight );
+		Experimental_setSpinValue( g_exp_worldMinlight, minlight );
+	}
+
+	const bool isGravityVolume = Experimental_selectedEntityClassPrefix( "trigger_gravity" );
+	if ( g_exp_gravityGroup != nullptr ) {
+		g_exp_gravityGroup->setVisible( isGravityVolume );
+	}
+	if ( isGravityVolume && entity != nullptr ) {
+		Experimental_setLineEditValue( g_exp_gravityDirectionEdit, entity->getKeyValue( "gravity_dir" ) );
+		Experimental_setLineEditValue( g_exp_gravityMagnitudeEdit, entity->getKeyValue( "gravity_magnitude" ) );
+	}
+}
+
+static void Experimental_pullShaderFromSelection(){
+	if ( g_exp_shaderEdit == nullptr ) {
+		return;
+	}
+
+	const QString shader = Experimental_selectedNodeShader();
+	if ( shader.isEmpty() ) {
+		Sys_Status( "Selection has no shader to pull" );
+		return;
+	}
+
+	g_exp_shaderEdit->setText( shader );
+}
+
 void Experimental_refreshTransform(){
 	const bool hasSelection = GlobalSelectionSystem().countSelected() != 0;
 	const AABB bounds = GlobalSelectionSystem().getBoundsSelected();
@@ -2382,6 +2590,17 @@ void Experimental_refreshTransform(){
 			g_exp_locY->blockSignals( false );
 			g_exp_locZ->blockSignals( false );
 		}
+		else{
+			g_exp_locX->blockSignals( true );
+			g_exp_locY->blockSignals( true );
+			g_exp_locZ->blockSignals( true );
+			g_exp_locX->setValue( 0 );
+			g_exp_locY->setValue( 0 );
+			g_exp_locZ->setValue( 0 );
+			g_exp_locX->blockSignals( false );
+			g_exp_locY->blockSignals( false );
+			g_exp_locZ->blockSignals( false );
+		}
 		if ( hasSelection ) {
 			g_exp_rotX->blockSignals( true );
 			g_exp_rotY->blockSignals( true );
@@ -2403,16 +2622,52 @@ void Experimental_refreshTransform(){
 			g_exp_scaleY->blockSignals( false );
 			g_exp_scaleZ->blockSignals( false );
 		}
+		else{
+			g_exp_rotX->blockSignals( true );
+			g_exp_rotY->blockSignals( true );
+			g_exp_rotZ->blockSignals( true );
+			g_exp_scaleX->blockSignals( true );
+			g_exp_scaleY->blockSignals( true );
+			g_exp_scaleZ->blockSignals( true );
+			g_exp_rotX->setValue( 0 );
+			g_exp_rotY->setValue( 0 );
+			g_exp_rotZ->setValue( 0 );
+			g_exp_scaleX->setValue( 1 );
+			g_exp_scaleY->setValue( 1 );
+			g_exp_scaleZ->setValue( 1 );
+			g_exp_rotX->blockSignals( false );
+			g_exp_rotY->blockSignals( false );
+			g_exp_rotZ->blockSignals( false );
+			g_exp_scaleX->blockSignals( false );
+			g_exp_scaleY->blockSignals( false );
+			g_exp_scaleZ->blockSignals( false );
+		}
 	}
 }
 
 void Experimental_refreshSelection(){
+	const bool hasSelection = GlobalSelectionSystem().countSelected() != 0;
 	if ( g_exp_selectedCountLabel != nullptr ) {
 		g_exp_selectedCountLabel->setText( StringStream( GlobalSelectionSystem().countSelected() ).c_str() );
 	}
 	if ( g_exp_selectedComponentsLabel != nullptr ) {
 		g_exp_selectedComponentsLabel->setText( StringStream( GlobalSelectionSystem().countSelectedComponents() ).c_str() );
 	}
+	if ( g_exp_selectionTypeLabel != nullptr ) {
+		g_exp_selectionTypeLabel->setText( Experimental_selectionTypeSummary() );
+	}
+	if ( g_exp_selectionBoundsLabel != nullptr ) {
+		g_exp_selectionBoundsLabel->setText( Experimental_selectionBoundsSummary() );
+	}
+	if ( g_exp_selectionShaderLabel != nullptr ) {
+		const QString shader = Experimental_selectedNodeShader();
+		g_exp_selectionShaderLabel->setText( shader.isEmpty() ? "None" : shader );
+	}
+	if ( g_exp_shaderEdit != nullptr ) {
+		g_exp_shaderEdit->setEnabled( hasSelection );
+		g_exp_shaderEdit->setPlaceholderText( hasSelection ? "textures/common/caulk" : "Select something to edit shader" );
+	}
+	Experimental_refreshEntityPanels();
 	Experimental_refreshTransform();
 }
 
@@ -2459,6 +2714,30 @@ void Experimental_toggleDock( QDockWidget* dock ){
 	if ( dock != nullptr ) {
 		dock->setVisible( !dock->isVisible() );
 	}
+}
+
+static void Experimental_showDock( QDockWidget* dock ){
+	if ( dock != nullptr ) {
+		dock->show();
+		dock->raise();
+	}
+}
+
+static void Experimental_hideDock( QDockWidget* dock ){
+	if ( dock != nullptr ) {
+		dock->hide();
+	}
+}
+
+static void OpenWysiwygWorkspace_impl(){
+	Experimental_showDock( g_exp_propertiesDock );
+	Experimental_showDock( g_exp_previewDock );
+	Experimental_showDock( g_exp_assetsDock );
+	Experimental_showDock( g_exp_usdDock );
+	Experimental_hideDock( g_exp_historyDock );
+	Experimental_hideDock( g_exp_syncDock );
+	Experimental_hideDock( g_exp_ecsDock );
+	Sys_Status( "Workspace panels ready" );
 }
 
 void Experimental_togglePropertiesDock_impl(){
@@ -2548,7 +2827,7 @@ static void Experimental_ecsAddEntity( const char* classname ){
 }
 
 void Experimental_importUSDStructure_impl(){
-	if ( !g_Layout_experimentalFeatures.m_value || g_exp_usdTree == nullptr ) {
+	if ( g_exp_usdTree == nullptr ) {
 		return;
 	}
 
@@ -3311,7 +3590,7 @@ static scene::Node& Experimental_mayaParentForGeometry( const QString& parentNam
 }
 
 void Experimental_importMayaASCII_impl(){
-	if ( !g_Layout_experimentalFeatures.m_value || !Map_Valid( g_map ) ) {
+	if ( !Map_Valid( g_map ) ) {
 		return;
 	}
 
@@ -3490,7 +3769,7 @@ void Experimental_importMayaASCII_impl(){
 }
 
 void Experimental_exportToMayaASCII_impl(){
-	if ( !g_Layout_experimentalFeatures.m_value || !Map_Valid( g_map ) ) {
+	if ( !Map_Valid( g_map ) ) {
 		return;
 	}
 
@@ -3639,7 +3918,7 @@ void Experimental_exportToMayaASCII_impl(){
 }
 
 void Experimental_exportToUSDA_impl(){
-	if ( !g_Layout_experimentalFeatures.m_value || !Map_Valid( g_map ) ) {
+	if ( !Map_Valid( g_map ) ) {
 		return;
 	}
 
@@ -3718,7 +3997,7 @@ void Experimental_exportToUSDA_impl(){
 }
 
 void Experimental_createDocks( QMainWindow* window ){
-	if ( !g_Layout_experimentalFeatures.m_value || window == nullptr ) {
+	if ( window == nullptr ) {
 		return;
 	}
 
@@ -3728,7 +4007,7 @@ void Experimental_createDocks( QMainWindow* window ){
 		g_exp_liveSyncService->setAutoSync( QSettings().value( "Properties/Experimental/LiveSyncAutoSync", true ).toBool() );
 	}
 
-	g_exp_propertiesDock = new QDockWidget( "Properties", window );
+	g_exp_propertiesDock = new QDockWidget( "Inspector", window );
 	g_exp_propertiesDock->setObjectName( "dock_experimental_properties" );
 	{
 		auto* root = new QWidget( g_exp_propertiesDock );
@@ -3736,14 +4015,101 @@ void Experimental_createDocks( QMainWindow* window ){
 		auto* form = new QFormLayout();
 		g_exp_selectedCountLabel = new QLabel( "0", root );
 		g_exp_selectedComponentsLabel = new QLabel( "0", root );
+		g_exp_selectionTypeLabel = new QLabel( "Nothing selected", root );
+		g_exp_selectionBoundsLabel = new QLabel( "No bounds", root );
+		g_exp_selectionShaderLabel = new QLabel( "None", root );
 		g_exp_shaderEdit = new QLineEdit( root );
 		auto* applyButton = new QPushButton( "Apply Shader", root );
+		auto* pullShaderButton = new QPushButton( "Use Selected", root );
+		auto* frameButton = new QPushButton( "Frame", root );
+		auto* shaderButtons = new QWidget( root );
+		auto* shaderButtonsLayout = new QHBoxLayout( shaderButtons );
+		shaderButtonsLayout->setContentsMargins( 0, 0, 0, 0 );
+		shaderButtonsLayout->addWidget( applyButton );
+		shaderButtonsLayout->addWidget( pullShaderButton );
+		shaderButtonsLayout->addWidget( frameButton );
 		form->addRow( "Selected", g_exp_selectedCountLabel );
 		form->addRow( "Selected Components", g_exp_selectedComponentsLabel );
+		form->addRow( "Type", g_exp_selectionTypeLabel );
+		form->addRow( "Bounds", g_exp_selectionBoundsLabel );
+		form->addRow( "Current Material", g_exp_selectionShaderLabel );
 		form->addRow( "Shader", g_exp_shaderEdit );
-		form->addRow( "", applyButton );
+		form->addRow( "", shaderButtons );
 		QObject::connect( applyButton, &QPushButton::clicked, [](){ Experimental_applySelectedShader(); } );
+		QObject::connect( pullShaderButton, &QPushButton::clicked, [](){ Experimental_pullShaderFromSelection(); } );
+		QObject::connect( frameButton, &QPushButton::clicked, [](){ FocusAllViews(); } );
+		QObject::connect( g_exp_shaderEdit, &QLineEdit::returnPressed, [](){ Experimental_applySelectedShader(); } );
 		vbox->addLayout( form );
+
+		g_exp_entityGroup = new QGroupBox( "Entity", root );
+		{
+			auto* entityForm = new QFormLayout( g_exp_entityGroup );
+			g_exp_entityClassLabel = new QLabel( "None", g_exp_entityGroup );
+			g_exp_entityNameEdit = new QLineEdit( g_exp_entityGroup );
+			g_exp_entityTargetnameEdit = new QLineEdit( g_exp_entityGroup );
+			g_exp_entityTargetEdit = new QLineEdit( g_exp_entityGroup );
+			g_exp_entitySoundEdit = new QLineEdit( g_exp_entityGroup );
+			g_exp_entityModelEdit = new QLineEdit( g_exp_entityGroup );
+			g_exp_entityNameEdit->setClearButtonEnabled( true );
+			g_exp_entityTargetnameEdit->setClearButtonEnabled( true );
+			g_exp_entityTargetEdit->setClearButtonEnabled( true );
+			g_exp_entitySoundEdit->setClearButtonEnabled( true );
+			g_exp_entityModelEdit->setClearButtonEnabled( true );
+			entityForm->addRow( "Classname", g_exp_entityClassLabel );
+			entityForm->addRow( "Name", g_exp_entityNameEdit );
+			entityForm->addRow( "Target Name", g_exp_entityTargetnameEdit );
+			entityForm->addRow( "Target", g_exp_entityTargetEdit );
+			entityForm->addRow( "Sound", g_exp_entitySoundEdit );
+			entityForm->addRow( "Model", g_exp_entityModelEdit );
+			QObject::connect( g_exp_entityNameEdit, &QLineEdit::editingFinished, [](){ Experimental_setSelectedEntityKeyValue( "name", g_exp_entityNameEdit->text() ); } );
+			QObject::connect( g_exp_entityTargetnameEdit, &QLineEdit::editingFinished, [](){ Experimental_setSelectedEntityKeyValue( "targetname", g_exp_entityTargetnameEdit->text() ); } );
+			QObject::connect( g_exp_entityTargetEdit, &QLineEdit::editingFinished, [](){ Experimental_setSelectedEntityKeyValue( "target", g_exp_entityTargetEdit->text() ); } );
+			QObject::connect( g_exp_entitySoundEdit, &QLineEdit::editingFinished, [](){ Experimental_setSelectedEntityKeyValue( "sound", g_exp_entitySoundEdit->text() ); } );
+			QObject::connect( g_exp_entityModelEdit, &QLineEdit::editingFinished, [](){ Experimental_setSelectedEntityKeyValue( "model", g_exp_entityModelEdit->text() ); } );
+		}
+		vbox->addWidget( g_exp_entityGroup );
+
+		g_exp_worldGroup = new QGroupBox( "World Settings", root );
+		{
+			auto* worldForm = new QFormLayout( g_exp_worldGroup );
+			g_exp_worldMessageEdit = new QLineEdit( g_exp_worldGroup );
+			g_exp_worldMusicEdit = new QLineEdit( g_exp_worldGroup );
+			g_exp_worldGravityEdit = new QLineEdit( g_exp_worldGroup );
+			g_exp_worldColorEdit = new QLineEdit( g_exp_worldGroup );
+			g_exp_worldMinlight = new QDoubleSpinBox( g_exp_worldGroup );
+			g_exp_worldMessageEdit->setClearButtonEnabled( true );
+			g_exp_worldMusicEdit->setClearButtonEnabled( true );
+			g_exp_worldGravityEdit->setClearButtonEnabled( true );
+			g_exp_worldColorEdit->setClearButtonEnabled( true );
+			g_exp_worldMinlight->setRange( 0, 1 );
+			g_exp_worldMinlight->setSingleStep( 0.05 );
+			g_exp_worldMinlight->setDecimals( 2 );
+			worldForm->addRow( "Message", g_exp_worldMessageEdit );
+			worldForm->addRow( "Music", g_exp_worldMusicEdit );
+			worldForm->addRow( "Gravity", g_exp_worldGravityEdit );
+			worldForm->addRow( "Ambient Color", g_exp_worldColorEdit );
+			worldForm->addRow( "Min Light", g_exp_worldMinlight );
+			QObject::connect( g_exp_worldMessageEdit, &QLineEdit::editingFinished, [](){ Experimental_setWorldspawnKeyValue( "message", g_exp_worldMessageEdit->text() ); } );
+			QObject::connect( g_exp_worldMusicEdit, &QLineEdit::editingFinished, [](){ Experimental_setWorldspawnKeyValue( "music", g_exp_worldMusicEdit->text() ); } );
+			QObject::connect( g_exp_worldGravityEdit, &QLineEdit::editingFinished, [](){ Experimental_setWorldspawnKeyValue( "gravity", g_exp_worldGravityEdit->text() ); } );
+			QObject::connect( g_exp_worldColorEdit, &QLineEdit::editingFinished, [](){ Experimental_setWorldspawnKeyValue( "_color", g_exp_worldColorEdit->text() ); } );
+			QObject::connect( g_exp_worldMinlight, &QDoubleSpinBox::editingFinished, [](){ Experimental_setWorldspawnKeyValue( "_minlight", QString::number( g_exp_worldMinlight->value(), 'f', 2 ) ); } );
+		}
+		vbox->addWidget( g_exp_worldGroup );
+
+		g_exp_gravityGroup = new QGroupBox( "Gravity Volume", root );
+		{
+			auto* gravityForm = new QFormLayout( g_exp_gravityGroup );
+			g_exp_gravityDirectionEdit = new QLineEdit( g_exp_gravityGroup );
+			g_exp_gravityMagnitudeEdit = new QLineEdit( g_exp_gravityGroup );
+			g_exp_gravityDirectionEdit->setClearButtonEnabled( true );
+			g_exp_gravityMagnitudeEdit->setClearButtonEnabled( true );
+			gravityForm->addRow( "Direction", g_exp_gravityDirectionEdit );
+			gravityForm->addRow( "Magnitude", g_exp_gravityMagnitudeEdit );
+			QObject::connect( g_exp_gravityDirectionEdit, &QLineEdit::editingFinished, [](){ Experimental_setSelectedEntityKeyValue( "gravity_dir", g_exp_gravityDirectionEdit->text() ); } );
+			QObject::connect( g_exp_gravityMagnitudeEdit, &QLineEdit::editingFinished, [](){ Experimental_setSelectedEntityKeyValue( "gravity_magnitude", g_exp_gravityMagnitudeEdit->text() ); } );
+		}
+		vbox->addWidget( g_exp_gravityGroup );
 
 		auto* pbrGroup = new QGroupBox( "PBR Material", root );
 		auto* pbrForm = new QFormLayout( pbrGroup );
@@ -3950,13 +4316,13 @@ void Experimental_createDocks( QMainWindow* window ){
 	}
 	window->addDockWidget( Qt::RightDockWidgetArea, g_exp_propertiesDock );
 
-	g_exp_previewDock = new QDockWidget( "Preview", window );
+	g_exp_previewDock = new QDockWidget( "Viewport Preview", window );
 	g_exp_previewDock->setObjectName( "dock_experimental_preview" );
 	g_exp_previewHost = new ExperimentalPreviewHostWidget( g_exp_previewDock );
 	g_exp_previewDock->setWidget( g_exp_previewHost );
 	window->addDockWidget( Qt::RightDockWidgetArea, g_exp_previewDock );
 
-	g_exp_assetsDock = new QDockWidget( "Asset Library", window );
+	g_exp_assetsDock = new QDockWidget( "Asset Browser", window );
 	g_exp_assetsDock->setObjectName( "dock_experimental_asset_library" );
 	{
 		auto* root = new QWidget( g_exp_assetsDock );
@@ -4075,7 +4441,7 @@ void Experimental_createDocks( QMainWindow* window ){
 	}
 	window->addDockWidget( Qt::LeftDockWidgetArea, g_exp_syncDock );
 
-	g_exp_usdDock = new QDockWidget( "Scene Hierarchy", window );
+	g_exp_usdDock = new QDockWidget( "Outliner", window );
 	g_exp_usdDock->setObjectName( "dock_experimental_usd_structure" );
 	{
 		auto* root = new QWidget( g_exp_usdDock );
@@ -4103,7 +4469,7 @@ void Experimental_createDocks( QMainWindow* window ){
 	}
 	window->addDockWidget( Qt::LeftDockWidgetArea, g_exp_usdDock );
 
-	g_exp_ecsDock = new QDockWidget( "ECS Authoring", window );
+	g_exp_ecsDock = new QDockWidget( "Entity Palette", window );
 	g_exp_ecsDock->setObjectName( "dock_experimental_ecs_authoring" );
 	{
 		auto* root = new QWidget( g_exp_ecsDock );
@@ -4144,15 +4510,16 @@ void Experimental_createDocks( QMainWindow* window ){
 	window->addDockWidget( Qt::LeftDockWidgetArea, g_exp_ecsDock );
 	Experimental_refreshECSList();
 
-	window->tabifyDockWidget( g_exp_propertiesDock, g_exp_previewDock );
-	window->tabifyDockWidget( g_exp_assetsDock, g_exp_historyDock );
+	window->splitDockWidget( g_exp_propertiesDock, g_exp_previewDock, Qt::Vertical );
+	window->splitDockWidget( g_exp_assetsDock, g_exp_usdDock, Qt::Vertical );
+	window->tabifyDockWidget( g_exp_usdDock, g_exp_historyDock );
 	window->tabifyDockWidget( g_exp_historyDock, g_exp_syncDock );
-	window->tabifyDockWidget( g_exp_syncDock, g_exp_usdDock );
-	window->tabifyDockWidget( g_exp_usdDock, g_exp_ecsDock );
+	window->tabifyDockWidget( g_exp_syncDock, g_exp_ecsDock );
 
 	Experimental_refreshSelection();
 	Experimental_refreshAssetLibrary();
 	Experimental_refreshLiveSyncUi();
+	OpenWysiwygWorkspace_impl();
 	if ( g_exp_syncAutoStart != nullptr && g_exp_syncAutoStart->isChecked() && g_exp_liveSyncService != nullptr && g_exp_syncPort != nullptr ) {
 		g_exp_liveSyncService->start( static_cast<quint16>( g_exp_syncPort->value() ) );
 	}
@@ -4176,6 +4543,25 @@ void Experimental_destroyDocks(){
 	g_exp_ecsEntityList = nullptr;
 	g_exp_selectedCountLabel = nullptr;
 	g_exp_selectedComponentsLabel = nullptr;
+	g_exp_selectionTypeLabel = nullptr;
+	g_exp_selectionBoundsLabel = nullptr;
+	g_exp_selectionShaderLabel = nullptr;
+	g_exp_entityGroup = nullptr;
+	g_exp_entityClassLabel = nullptr;
+	g_exp_entityNameEdit = nullptr;
+	g_exp_entityTargetnameEdit = nullptr;
+	g_exp_entityTargetEdit = nullptr;
+	g_exp_entitySoundEdit = nullptr;
+	g_exp_entityModelEdit = nullptr;
+	g_exp_worldGroup = nullptr;
+	g_exp_worldMessageEdit = nullptr;
+	g_exp_worldMusicEdit = nullptr;
+	g_exp_worldGravityEdit = nullptr;
+	g_exp_worldColorEdit = nullptr;
+	g_exp_worldMinlight = nullptr;
+	g_exp_gravityGroup = nullptr;
+	g_exp_gravityDirectionEdit = nullptr;
+	g_exp_gravityMagnitudeEdit = nullptr;
 	g_exp_shaderEdit = nullptr;
 	g_exp_pbrAlbedo = nullptr;
 	g_exp_pbrNormal = nullptr;
@@ -4332,6 +4718,7 @@ void create_edit_menu( QMenuBar *menubar ){
 	create_menu_item_with_mnemonic( menu, "Select Connected Entities", "SelectConnectedEntities" );
 
 	menu->addSeparator();
+	create_menu_item_with_mnemonic( menu, "Command &Launcher", "CommandLauncher" );
 	create_menu_item_with_mnemonic( menu, "&Shortcuts", "Shortcuts" );
 	create_menu_item_with_mnemonic( menu, "Pre&ferences", "Preferences" );
 }
@@ -4622,6 +5009,10 @@ void Lua_editEntities(){
 void Lua_editItems(){
 	Lua_openScript( g_luaScriptItems, "Lua Items", false );
 }
+void OpenWysiwygWorkspace(){
+	OpenWysiwygWorkspace_impl();
+}
+
 void Experimental_togglePropertiesDock(){
 	Experimental_togglePropertiesDock_impl();
 }
@@ -4893,16 +5284,15 @@ void create_view_menu( QMenuBar *menubar, MainFrame::EViewStyle style ){
 	create_menu_item_with_mnemonic( menu, "&Surface Inspector", "SurfaceInspector" );
 	create_menu_item_with_mnemonic( menu, "Entity List", "ToggleEntityList" );
 	create_menu_item_with_mnemonic( menu, "Scenegraph Inspector", "ToggleScenegraphInspector" );
-	if ( g_Layout_experimentalFeatures.m_value ) {
-		menu->addSeparator();
-		create_highlighted_view_menu_item( menu, "[Properties]", "ToggleExperimentalProperties" );
-		create_highlighted_view_menu_item( menu, "[Preview]", "ToggleExperimentalPreview" );
-		create_highlighted_view_menu_item( menu, "[Asset Library]", "ToggleExperimentalAssets" );
-		create_highlighted_view_menu_item( menu, "[History]", "ToggleExperimentalHistory" );
-		create_highlighted_view_menu_item( menu, "[Live Sync]", "ToggleExperimentalSync" );
-			create_highlighted_view_menu_item( menu, "[Scene Hierarchy]", "ToggleExperimentalUSD" );
-		create_highlighted_view_menu_item( menu, "[ECS Authoring]", "ToggleExperimentalECS" );
-	}
+	menu->addSeparator();
+	create_menu_item_with_mnemonic( menu, "Open WYSIWYG Workspace", "OpenWysiwygWorkspace" );
+	create_menu_item_with_mnemonic( menu, "Inspector", "ToggleExperimentalProperties" );
+	create_menu_item_with_mnemonic( menu, "Viewport Preview", "ToggleExperimentalPreview" );
+	create_menu_item_with_mnemonic( menu, "Asset Browser", "ToggleExperimentalAssets" );
+	create_menu_item_with_mnemonic( menu, "Outliner", "ToggleExperimentalUSD" );
+	create_menu_item_with_mnemonic( menu, "History", "ToggleExperimentalHistory" );
+	create_menu_item_with_mnemonic( menu, "Live Sync", "ToggleExperimentalSync" );
+	create_menu_item_with_mnemonic( menu, "Entity Palette", "ToggleExperimentalECS" );
 
 	menu->addSeparator();
 	{
@@ -4952,7 +5342,7 @@ void create_view_menu( QMenuBar *menubar, MainFrame::EViewStyle style ){
 			submenu->addSeparator();
 		}
 		else{
-			create_menu_item_with_mnemonic( submenu, "Center on Selected", "NextView" );
+			create_menu_item_with_mnemonic( submenu, "Center on Selected", "CenterXYView" );
 		}
 
 		create_menu_item_with_mnemonic( submenu, "Focus on Selected", "XYFocusOnSelected" );
@@ -5141,12 +5531,10 @@ void create_misc_menu( QMenuBar *menubar ){
 	create_menu_item_with_mnemonic( menu, "Find brush", "FindBrush" );
 	create_menu_item_with_mnemonic( menu, "Map Info", "MapInfo" );
 	create_menu_item_with_mnemonic( menu, "&Refresh models", "RefreshReferences" );
-		if ( g_Layout_experimentalFeatures.m_value ) {
-			create_menu_item_with_mnemonic( menu, "Import USD structure", "ImportUSDStructure" );
-			create_menu_item_with_mnemonic( menu, "Export to USDA", "ExportToUSDA" );
-			create_menu_item_with_mnemonic( menu, "Import Maya ASCII", "ImportMayaASCII" );
-			create_menu_item_with_mnemonic( menu, "Export to Maya ASCII", "ExportToMayaASCII" );
-		}
+	create_menu_item_with_mnemonic( menu, "Import USD structure", "ImportUSDStructure" );
+	create_menu_item_with_mnemonic( menu, "Export to USDA", "ExportToUSDA" );
+	create_menu_item_with_mnemonic( menu, "Import Maya ASCII", "ImportMayaASCII" );
+	create_menu_item_with_mnemonic( menu, "Export to Maya ASCII", "ExportToMayaASCII" );
 	create_menu_item_with_mnemonic( menu, "Set 2D &Background image", makeCallbackF( WXY_SetBackgroundImage ) );
 	create_menu_item_with_mnemonic( menu, "Fullscreen", "Fullscreen" );
 	create_menu_item_with_mnemonic( menu, "Maximize view", "MaximizeView" );

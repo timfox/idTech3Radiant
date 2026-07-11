@@ -22,6 +22,7 @@
 #include "map.h"
 
 #include <cstdio>
+#include <cstdlib>
 
 #include "debugging/debugging.h"
 
@@ -2469,7 +2470,14 @@ public:
 	}
 	void realise() override{
 		if ( --m_unrealised == 0 ) {
-			if ( !string_empty( GameToolsPath_get() ) ) {
+			if ( const char* mapsrcOverride = std::getenv( "RADIANT_MAPSRC_PATH" ); mapsrcOverride != nullptr && mapsrcOverride[0] != '\0' ) {
+				g_mapsPath = StringStream( PathCleaned( mapsrcOverride ) );
+				if( !path_is_absolute( g_mapsPath.c_str() ) ){
+					g_mapsPath = StringStream( PathCleaned( StringStream( AppPath_get(), g_mapsPath.c_str() ).c_str() ) );
+				}
+				globalOutputStream() << "Using mapsrc override: " << g_mapsPath << '\n';
+			}
+			else if ( !string_empty( GameToolsPath_get() ) ) {
 				g_mapsPath = StringStream( GameToolsPath_get(), "content/mapsrc/" );
 			}
 			else{

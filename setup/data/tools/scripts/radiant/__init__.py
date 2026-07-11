@@ -54,3 +54,40 @@ def current_map() -> str:
 def current_map_path() -> str:
     """Full path to the currently loaded map file."""
     return _env_path("RADIANT_CURRENT_MAP_PATH", "")
+
+
+def idproj_path() -> str:
+    """Path to game.idproj in the current mod (s&box .sbproj analogue)."""
+    explicit = _env_path("RADIANT_IDPROJ_PATH", "")
+    if explicit:
+        return explicit
+    gp = game_path()
+    if gp:
+        candidate = os.path.join(gp, "game.idproj")
+        if os.path.isfile(candidate):
+            return candidate
+    return ""
+
+
+def load_idproj() -> dict:
+    """Load game.idproj JSON from mod root; returns {} if missing."""
+    path = idproj_path()
+    if not path or not os.path.isfile(path):
+        return {}
+    try:
+        import json
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def idproj_ident(default: str = "") -> str:
+    data = load_idproj()
+    return str(data.get("Ident", default or os.path.basename(game_path() or "")))
+
+
+def startup_map() -> str:
+    data = load_idproj()
+    meta = data.get("Metadata") or {}
+    return str(meta.get("StartupMap", ""))
