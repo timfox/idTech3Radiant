@@ -1668,8 +1668,9 @@ void Shaders_Load(){
 			}
 
 			GlobalFileSystem().forEachArchive( makeCallbackF( ShaderList_addFromArchive ), false, true );
-			// Always include toolsskybox.shader so textures/common/toolsskybox appears in texture browser
+			// Always include tool shaders that provide editor-only helper materials.
 			ShaderList_addShaderFile( "toolsskybox.shader" );
+			ShaderList_addShaderFile( "editor_defaults.shader" );
 			if( !l_shaderfiles.empty() ){
 				DumpUnreferencedShaders();
 			}

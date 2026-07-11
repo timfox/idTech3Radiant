@@ -1621,6 +1621,9 @@ static QJsonObject Experimental_buildSceneSummary(){
 	sceneSummary.insert( "entities", static_cast<int>( g_entityCount.get() ) );
 	sceneSummary.insert( "previewBackendRequested", Experimental_requestedPreviewBackend() );
 	sceneSummary.insert( "previewBackendActive", g_exp_activePreviewBackend );
+	if ( !Map_Valid( g_map ) ) {
+		return sceneSummary;
+	}
 	if ( Layer* currentLayer = GlobalSceneGraph().currentLayer() ) {
 		sceneSummary.insert( "currentLayer", QString::fromLatin1( currentLayer->m_name.c_str() ) );
 	}
@@ -2396,6 +2399,9 @@ static QString Experimental_selectedNodeShader(){
 }
 
 static scene::Node* Experimental_worldspawnNode(){
+	if ( !Map_Valid( g_map ) ) {
+		return nullptr;
+	}
 	return Map_FindWorldspawn( g_map );
 }
 
