@@ -153,7 +153,7 @@ public:
 extern MainFrame* g_pParentWnd;
 
 QWidget* MainFrame_getWindow();
-
+void Add_createEntity( const char* classname );
 
 template<typename Value>
 class LatchedValue;

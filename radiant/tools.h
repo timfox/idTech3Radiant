@@ -25,5 +25,19 @@ extern int g_defaultStartupToolPref;
 
 void Tools_registerCommands();
 
+void SelectPrimitiveMode();
+void SelectVertexMode();
+void SelectEdgeMode();
+void SelectFaceMode();
+
+void DragMode();
+void TranslateMode();
+void RotateMode();
+void ScaleMode();
+void SkewMode();
+void ClipperMode();
+void BuildMode();
+void UVMode();
+
 void SelectionSystem_DefaultMode();
 void ComponentModeChanged();

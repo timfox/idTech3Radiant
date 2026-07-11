@@ -83,6 +83,7 @@
 #include "entity.h"
 #include "mainframe.h"
 #include "selection.h"
+#include "tools.h"
 #include "textureentry.h"
 #include "groupdialog.h"
 
@@ -949,6 +950,8 @@ QDoubleSpinBox* g_transformMove[3];
 QDoubleSpinBox* g_transformRotate[3];
 QDoubleSpinBox* g_transformScale[3];
 QCheckBox* g_transformUniformScale;
+QAbstractButton* g_toolButtons[7];
+QAbstractButton* g_componentButtons[4];
 }
 
 void GlobalEntityAttributes_clear(){
@@ -1268,6 +1271,42 @@ void EntityInspector_refreshTransform(){
 		g_transformMove[axis]->blockSignals( false );
 		g_transformRotate[axis]->blockSignals( false );
 		g_transformScale[axis]->blockSignals( false );
+	}
+
+	const SelectionSystem::EManipulatorMode manipulatorMode = GlobalSelectionSystem().ManipulatorMode();
+	const SelectionSystem::EMode selectionMode = GlobalSelectionSystem().Mode();
+	const SelectionSystem::EComponentMode componentMode = GlobalSelectionSystem().ComponentMode();
+
+	const SelectionSystem::EManipulatorMode toolModes[] = {
+		SelectionSystem::eDrag,
+		SelectionSystem::eTranslate,
+		SelectionSystem::eRotate,
+		SelectionSystem::eScale,
+		SelectionSystem::eClip,
+		SelectionSystem::eBuild,
+		SelectionSystem::eUV,
+	};
+	for ( int i = 0; i < 7; ++i )
+	{
+		if ( g_toolButtons[i] != nullptr ) {
+			g_toolButtons[i]->blockSignals( true );
+			g_toolButtons[i]->setChecked( manipulatorMode == toolModes[i] );
+			g_toolButtons[i]->blockSignals( false );
+		}
+	}
+
+	const bool primitiveActive = selectionMode == SelectionSystem::ePrimitive;
+	const bool vertexActive = selectionMode == SelectionSystem::eComponent && componentMode == SelectionSystem::eVertex;
+	const bool edgeActive = selectionMode == SelectionSystem::eComponent && componentMode == SelectionSystem::eEdge;
+	const bool faceActive = selectionMode == SelectionSystem::eComponent && componentMode == SelectionSystem::eFace;
+	const bool componentStates[] = { primitiveActive, vertexActive, edgeActive, faceActive };
+	for ( int i = 0; i < 4; ++i )
+	{
+		if ( g_componentButtons[i] != nullptr ) {
+			g_componentButtons[i]->blockSignals( true );
+			g_componentButtons[i]->setChecked( componentStates[i] );
+			g_componentButtons[i]->blockSignals( false );
+		}
 	}
 }
 
@@ -1798,6 +1837,86 @@ QWidget* EntityInspector_constructWindow( QWidget* toplevel ){
 				QObject::connect( b, &QAbstractButton::clicked, []( bool checked ){ if( checked ) FocusAllViews(); } );
 			}
 		}
+	}
+	{
+		auto *group = new QGroupBox( "Modes" );
+		auto *vbox = new QVBoxLayout( group );
+		vbox->setContentsMargins( 6, 6, 6, 6 );
+
+		auto *toolLabel = new QLabel( "Tools" );
+		vbox->addWidget( toolLabel );
+
+		auto *toolLayout = new QHBoxLayout;
+		toolLayout->setContentsMargins( 0, 0, 0, 0 );
+		toolLayout->setSpacing( 4 );
+		auto *toolGroup = new QButtonGroup( group );
+		toolGroup->setExclusive( true );
+		struct ToolButtonSpec
+		{
+			const char* label;
+			void ( *callback )();
+		};
+		const ToolButtonSpec toolSpecs[] = {
+			{ "Drag", DragMode },
+			{ "Move", TranslateMode },
+			{ "Rotate", RotateMode },
+			{ "Scale", ScaleMode },
+			{ "Clip", ClipperMode },
+			{ "Build", BuildMode },
+			{ "UV", UVMode },
+		};
+		for ( int i = 0; i < 7; ++i )
+		{
+			auto *button = new QToolButton( group );
+			button->setText( toolSpecs[i].label );
+			button->setCheckable( true );
+			button->setToolButtonStyle( Qt::ToolButtonStyle::ToolButtonTextOnly );
+			toolGroup->addButton( button );
+			toolLayout->addWidget( button );
+			g_toolButtons[i] = button;
+			QObject::connect( button, &QAbstractButton::clicked, [callback = toolSpecs[i].callback](){
+				callback();
+				EntityInspector_refreshTransform();
+			} );
+		}
+		vbox->addLayout( toolLayout );
+
+		auto *componentLabel = new QLabel( "Selection" );
+		vbox->addWidget( componentLabel );
+
+		auto *componentLayout = new QHBoxLayout;
+		componentLayout->setContentsMargins( 0, 0, 0, 0 );
+		componentLayout->setSpacing( 4 );
+		auto *componentGroup = new QButtonGroup( group );
+		componentGroup->setExclusive( true );
+		struct ComponentButtonSpec
+		{
+			const char* label;
+			void ( *callback )();
+		};
+		const ComponentButtonSpec componentSpecs[] = {
+			{ "Object", SelectPrimitiveMode },
+			{ "Vertex", SelectVertexMode },
+			{ "Edge", SelectEdgeMode },
+			{ "Face", SelectFaceMode },
+		};
+		for ( int i = 0; i < 4; ++i )
+		{
+			auto *button = new QToolButton( group );
+			button->setText( componentSpecs[i].label );
+			button->setCheckable( true );
+			button->setToolButtonStyle( Qt::ToolButtonStyle::ToolButtonTextOnly );
+			componentGroup->addButton( button );
+			componentLayout->addWidget( button );
+			g_componentButtons[i] = button;
+			QObject::connect( button, &QAbstractButton::clicked, [callback = componentSpecs[i].callback](){
+				callback();
+				EntityInspector_refreshTransform();
+			} );
+		}
+		vbox->addLayout( componentLayout );
+
+		splitter->addWidget( group );
 	}
 	{
 		auto *group = g_transformGroup = new QGroupBox( "Transform" );

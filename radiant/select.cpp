@@ -998,6 +998,43 @@ void HideSelected(){
 	g_hidden_item.update();
 }
 
+class HideUnselectedWalker : public scene::Graph::Walker
+{
+public:
+	bool pre( const scene::Path& path, scene::Instance& instance ) const override {
+		scene::Node& node = path.top().get();
+		if ( !node.isRoot() ) {
+			hide_node( node, !( Instance_isSelected( instance ) || instance.childSelected() ) );
+		}
+		return true;
+	}
+	void post( const scene::Path& path, scene::Instance& instance ) const override {
+		if( Node_isEntity( path.top().get() ) ) {
+			if( scene::Traversable* traversable = Node_getTraversable( path.top().get() ) ) {
+				if( Traversable_any_of_children( traversable, []( const scene::Node& node ){
+					return !node.excluded( scene::Node::eHidden ) && !node.isRoot();
+				} ) ) {
+					hide_node( path.top(), false );
+				}
+			}
+		}
+	}
+};
+
+void Select_HideUnselected(){
+	GlobalSceneGraph().traverse( HideUnselectedWalker() );
+	if( scene::Node* w = Map_FindWorldspawn( g_map ) )
+		hide_node( *w, false );
+	SceneChangeNotify();
+	g_nodes_be_hidden = true;
+	g_hidden_item.update();
+}
+
+void Select_IsolateSelection(){
+	Select_ShowAllHidden();
+	Select_HideUnselected();
+}
+
 
 class HideAllWalker : public scene::Graph::Walker
 {
@@ -1987,6 +2024,8 @@ void Select_registerCommands(){
 	GlobalCommands_insert( "ShowHidden", makeCallbackF( Select_ShowAllHidden ), QKeySequence( "Shift+H" ) );
 	GlobalCommands_insert( "ShowHiddenAlt", makeCallbackF( Select_ShowAllHidden ), QKeySequence( "Ctrl+Shift+H" ) );
 	GlobalToggles_insert( "HideSelected", makeCallbackF( HideSelected ), ToggleItem::AddCallbackCaller( g_hidden_item ), QKeySequence( "Ctrl+H" ) );
+	GlobalCommands_insert( "HideUnselected", makeCallbackF( Select_HideUnselected ) );
+	GlobalCommands_insert( "IsolateSelection", makeCallbackF( Select_IsolateSelection ) );
 
 	GlobalCommands_insert( "MirrorSelectionX", makeCallbackF( Selection_Flipx ) );
 	GlobalCommands_insert( "RotateSelectionX", makeCallbackF( Selection_Rotatex ) );

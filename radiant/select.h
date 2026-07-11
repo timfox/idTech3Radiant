@@ -49,6 +49,9 @@ void Select_ProjectTexture( const class TextureProjection& projection, const Vec
 void Select_FitTexture( float horizontal = 1, float vertical = 1, bool only_dimension = false );
 void FindReplaceTextures( const char* pFind, const char* pReplace, bool bSelected );
 
+void HideSelected();
+void Select_HideUnselected();
+void Select_IsolateSelection();
 void Select_ShowAllHidden();
 void Select_registerCommands();
 

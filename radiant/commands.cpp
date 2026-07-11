@@ -128,6 +128,7 @@ const KeyEvent& GlobalKeyEvents_find( const char* name ){
 
 
 #include "mainframe.h"
+#include "eclasslib.h"
 
 #include "stream/textfilestream.h"
 #include "stream/stringstream.h"
@@ -455,6 +456,8 @@ struct CommandLauncherEntry
 	QString id;
 	QString title;
 	QString subtitle;
+	QString category;
+	QString detail;
 	QString search;
 	int type{};
 	int score{};
@@ -864,6 +867,116 @@ QStringList commandSearchAliases( const char* name ){
 	return {};
 }
 
+QString launcherCategoryForCommand( const char* name, int type ){
+	if( type == 2 ){
+		return "Toggle";
+	}
+	if( string_equal( name, "CommandLauncher" ) || string_equal( name, "Shortcuts" ) || string_equal( name, "Preferences" ) ){
+		return "Editor";
+	}
+	if( string_equal( name, "OpenWysiwygWorkspace" )
+	 || string_equal( name, "LayoutRegular" )
+	 || string_equal( name, "LayoutRegularLeft" )
+	 || string_equal( name, "LayoutHammerFourPane" )
+	 || string_equal( name, "LayoutFloating" )
+	 || string_equal( name, "LayoutSaveWorkspace" ) ){
+		return "Workspace";
+	}
+	if( string_equal( name, "AddEntityByName" )
+	 || string_equal( name, "AddLight" )
+	 || string_equal( name, "AddInfoPlayerStart" )
+	 || string_equal( name, "AddInfoPlayerDeathmatch" )
+	 || string_equal( name, "AddCapturePointVolume" )
+	 || string_equal( name, "AddPVESpawnPoint" )
+	 || string_equal( name, "AddMiscModel" )
+	 || string_equal( name, "AddSpline" ) ){
+		return "Create";
+	}
+	if( string_equal( name, "SelectionCenterPivot" )
+	 || string_equal( name, "SelectionWorldPivot" )
+	 || string_equal( name, "SelectionResetPivot" )
+	 || string_equal( name, "FreezeTransforms" )
+	 || string_equal( name, "TransformDialog" ) ){
+		return "Transform";
+	}
+	if( string_equal( name, "HideSelected" )
+	 || string_equal( name, "HideUnselected" )
+	 || string_equal( name, "IsolateSelection" )
+	 || string_equal( name, "ShowHidden" )
+	 || string_equal( name, "ShowHiddenAlt" ) ){
+		return "Visibility";
+	}
+	if( string_equal( name, "MakeHollow" )
+	 || string_equal( name, "BrushExpand" )
+	 || string_equal( name, "BrushShrink" )
+	 || string_equal( name, "CSGroom" )
+	 || string_equal( name, "CSGTool" )
+	 || string_equal( name, "CSGSubtract" ) ){
+		return "Brush";
+	}
+	if( string_equal( name, "ToggleClipper" )
+	 || string_equal( name, "ClipperClip" )
+	 || string_equal( name, "ClipperSplit" )
+	 || string_equal( name, "ClipperFlip" ) ){
+		return "Clip";
+	}
+	if( string_equal( name, "OpenAIMLEditor" )
+	 || string_equal( name, "OpenLuaWorkbench" )
+	 || string_equal( name, "OpenPythonScript" )
+	 || string_equal( name, "OpenSpreadsheetWorkbench" )
+	 || string_equal( name, "OpenAudioWorkbench" )
+	 || string_equal( name, "OpenCinematicPlayer" ) ){
+		return "Workbench";
+	}
+	if( string_equal( name, "NavMesh_Rebuild" ) || string_equal( name, "NavMeshOverlay" ) ){
+		return "NavMesh";
+	}
+	return "Command";
+}
+
+QString launcherDescriptionForCommand( const char* name ){
+	if( string_equal( name, "MakeHollow" ) ){
+		return "Turn the selected brush into a room with wall thickness.";
+	}
+	if( string_equal( name, "CSGTool" ) ){
+		return "Open the shell and thickness tool for hollowing and offsets.";
+	}
+	if( string_equal( name, "CommandLauncher" ) ){
+		return "Search editor actions, toggles, and entity classes from one place.";
+	}
+	if( string_equal( name, "AddEntityByName" ) ){
+		return "Browse and create any entity class.";
+	}
+	if( string_equal( name, "SelectionCenterPivot" ) ){
+		return "Move the transform pivot to the center of the current selection.";
+	}
+	if( string_equal( name, "FreezeTransforms" ) ){
+		return "Bake the current transform back into the selection.";
+	}
+	if( string_equal( name, "HideUnselected" ) ){
+		return "Hide everything except the current selection.";
+	}
+	if( string_equal( name, "IsolateSelection" ) ){
+		return "Reveal only the current selection and hide the rest.";
+	}
+	if( string_equal( name, "OpenWysiwygWorkspace" ) ){
+		return "Open the editing workspace with the modern dock layout.";
+	}
+	if( string_equal( name, "OpenLuaWorkbench" ) ){
+		return "Open the script hub for gameplay Lua files.";
+	}
+	if( string_equal( name, "OpenAIMLEditor" ) ){
+		return "Open the AIML workspace for dialogue and behavior authoring.";
+	}
+	if( string_equal( name, "AddCapturePointVolume" ) ){
+		return "Create a gameplay volume for capture-point objectives.";
+	}
+	if( string_equal( name, "AddPVESpawnPoint" ) ){
+		return "Create an AI or PvE spawn point entity.";
+	}
+	return {};
+}
+
 int computeLauncherScore( const QString& query, const QString& searchText, const QString& title, const QString& id ){
 	if( query.isEmpty() ){
 		return 1;
@@ -918,7 +1031,7 @@ void GlobalToggles_foreach( Functor&& functor ){
 
 std::vector<CommandLauncherEntry> collectLauncherEntries(){
 	std::vector<CommandLauncherEntry> entries;
-	entries.reserve( g_commands.size() + g_toggles.size() );
+	entries.reserve( g_commands.size() + g_toggles.size() + 256 );
 
 	GlobalCommands_foreach( [&]( const char* name, const Command& command ){
 		if( string_equal( name, "Shortcuts" ) ){
@@ -928,7 +1041,9 @@ std::vector<CommandLauncherEntry> collectLauncherEntries(){
 		entry.id = name;
 		entry.title = commandLauncherTitle( name );
 		entry.subtitle = command.m_accelerator.toString();
-		entry.search = normalizeText( entry.title + ' ' + entry.id + ' ' + commandSearchAliases( name ).join( ' ' ) );
+		entry.category = launcherCategoryForCommand( name, 1 );
+		entry.detail = launcherDescriptionForCommand( name );
+		entry.search = normalizeText( entry.title + ' ' + entry.id + ' ' + entry.category + ' ' + entry.detail + ' ' + commandSearchAliases( name ).join( ' ' ) );
 		entry.type = 1;
 		entries.emplace_back( std::move( entry ) );
 	} );
@@ -938,10 +1053,53 @@ std::vector<CommandLauncherEntry> collectLauncherEntries(){
 		entry.id = name;
 		entry.title = commandLauncherTitle( name );
 		entry.subtitle = toggle.m_command.m_accelerator.toString();
-		entry.search = normalizeText( entry.title + ' ' + entry.id + ' ' + commandSearchAliases( name ).join( ' ' ) );
+		entry.category = launcherCategoryForCommand( name, 2 );
+		entry.detail = launcherDescriptionForCommand( name );
+		entry.search = normalizeText( entry.title + ' ' + entry.id + ' ' + entry.category + ' ' + entry.detail + ' ' + commandSearchAliases( name ).join( ' ' ) );
 		entry.type = 2;
 		entries.emplace_back( std::move( entry ) );
 	} );
+
+	class LauncherEntityClassCollector final : public EntityClassVisitor
+	{
+		std::vector<CommandLauncherEntry>& m_entries;
+	public:
+		LauncherEntityClassCollector( std::vector<CommandLauncherEntry>& entries ) : m_entries( entries ){
+		}
+		void visit( EntityClass* eclass ) override {
+			CommandLauncherEntry entry;
+			entry.id = eclass->name();
+			entry.title = QString( "Create %1" ).arg( eclass->name() );
+			entry.category = eclass->fixedsize ? "Point Entity" : "Brush Entity";
+			entry.detail = QString::fromLatin1( eclass->comments() ).simplified();
+			if( entry.detail.isEmpty() ){
+				entry.detail = eclass->fixedsize
+					? "Create a point entity at the camera position or from the current selection."
+					: "Create a brush entity from the current selection.";
+			}
+			entry.subtitle = entry.category;
+			entry.search = normalizeText(
+				entry.title + ' '
+				+ entry.id + ' '
+				+ humanizeCommandName( eclass->name() ) + ' '
+				+ entry.category + ' '
+				+ entry.detail
+			);
+			if( string_equal_prefix_nocase( eclass->name(), "info_player_" ) ){
+				entry.search += " spawn point player start";
+			}
+			if( string_equal_prefix_nocase( eclass->name(), "trigger_" ) ){
+				entry.search += " volume trigger region";
+			}
+			if( string_equal_prefix_nocase( eclass->name(), "func_" ) ){
+				entry.search += " brush entity solid volume";
+			}
+			entry.type = 3;
+			m_entries.emplace_back( std::move( entry ) );
+		}
+	};
+	LauncherEntityClassCollector collector( entries );
+	GlobalEntityClassManager().forEach( collector );
 
 	return entries;
 }
@@ -952,6 +1110,9 @@ void executeLauncherEntry( const CommandLauncherEntry& entry ){
 	}
 	else if( entry.type == 2 ){
 		GlobalToggles_find( entry.id.toLatin1().constData() ).m_command.m_callback();
+	}
+	else if( entry.type == 3 ){
+		Add_createEntity( entry.id.toLatin1().constData() );
 	}
 }
 
@@ -974,13 +1135,32 @@ void refillLauncherList( QListWidget& list, const std::vector<CommandLauncherEnt
 
 	list.clear();
 	for( const CommandLauncherEntry& entry : matches ){
-		auto *item = new QListWidgetItem( entry.title, &list );
+		auto *item = new QListWidgetItem( &list );
 		item->setData( Qt::UserRole, entry.id );
 		item->setData( Qt::UserRole + 1, entry.type );
-		item->setToolTip( entry.subtitle.isEmpty() ? entry.id : QString( "%1\n%2" ).arg( entry.id, entry.subtitle ) );
-		if( !entry.subtitle.isEmpty() ){
-			item->setText( QString( "%1    %2" ).arg( entry.title, entry.subtitle ) );
+		QStringList secondary;
+		if( !entry.category.isEmpty() ){
+			secondary.push_back( entry.category );
 		}
+		if( !entry.subtitle.isEmpty() ){
+			secondary.push_back( entry.subtitle );
+		}
+		const QString secondaryLine = secondary.join( "  •  " );
+		const QString detailLine = entry.detail.isEmpty() ? QString() : entry.detail;
+		QStringList lines;
+		lines.push_back( entry.title );
+		if( !secondaryLine.isEmpty() ){
+			lines.push_back( secondaryLine );
+		}
+		if( !detailLine.isEmpty() ){
+			lines.push_back( detailLine );
+		}
+		item->setText( lines.join( '\n' ) );
+		item->setToolTip( QString( "%1\n%2\n%3" ).arg(
+			entry.id,
+			secondaryLine.isEmpty() ? QString( "Action" ) : secondaryLine,
+			detailLine.isEmpty() ? QString( "Press Enter to run." ) : detailLine
+		) );
 	}
 
 	if( list.count() > 0 ){
@@ -997,14 +1177,13 @@ void DoCommandLauncher(){
 	auto *layout = new QVBoxLayout( &dialog );
 	auto *searchLine = new QLineEdit( &dialog );
 	searchLine->setClearButtonEnabled( true );
-	searchLine->setPlaceholderText( "Type a tool or action name" );
+	searchLine->setPlaceholderText( "Type a tool, action, or entity class" );
 	layout->addWidget( searchLine );
 
-	auto *hintLabel = new QLabel( "Enter runs the selected action. Search matches command names, tool phrases, and shortcuts.", &dialog );
+	auto *hintLabel = new QLabel( "Enter runs the selected result. Search matches actions, fuzzy tool phrases, shortcuts, and entity classes.", &dialog );
 	layout->addWidget( hintLabel );
 
 	auto *list = new QListWidget( &dialog );
-	list->setUniformItemSizes( true );
 	list->setAlternatingRowColors( true );
 	layout->addWidget( list );
 
