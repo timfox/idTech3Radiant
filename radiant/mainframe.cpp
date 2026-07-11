@@ -1185,11 +1185,15 @@ QDockWidget* g_exp_ecsDock{};
 QDockWidget* g_exp_syncDock{};
 QComboBox* g_exp_ecsCategoryCombo{};
 QListWidget* g_exp_ecsEntityList{};
+QLineEdit* g_exp_ecsSearchEdit{};
+QTextBrowser* g_exp_ecsDetails{};
 QLabel* g_exp_selectedCountLabel{};
 QLabel* g_exp_selectedComponentsLabel{};
 QLabel* g_exp_selectionTypeLabel{};
 QLabel* g_exp_selectionBoundsLabel{};
 QLabel* g_exp_selectionShaderLabel{};
+QLabel* g_exp_viewportStatusLabel{};
+QComboBox* g_exp_gridSizeCombo{};
 QGroupBox* g_exp_entityGroup{};
 QLabel* g_exp_entityClassLabel{};
 QLineEdit* g_exp_entityNameEdit{};
@@ -1223,7 +1227,10 @@ QDoubleSpinBox* g_exp_scaleX{};
 QDoubleSpinBox* g_exp_scaleY{};
 QDoubleSpinBox* g_exp_scaleZ{};
 QCheckBox* g_exp_uniformScale{};
+QLineEdit* g_exp_assetsSearchEdit{};
+QLabel* g_exp_assetsStatsLabel{};
 QListWidget* g_exp_assetsList{};
+QTextBrowser* g_exp_assetsDetails{};
 QListWidget* g_exp_historyList{};
 QTreeWidget* g_exp_usdTree{};
 QLabel* g_exp_syncStateLabel{};
@@ -1235,6 +1242,7 @@ QCheckBox* g_exp_syncAutoSync{};
 QListWidget* g_exp_syncLog{};
 std::size_t g_exp_historyCounter{};
 bool g_exp_undoTrackerAttached{};
+bool g_exp_gridCallbackAttached{};
 QString g_exp_activePreviewBackend = "OpenGL";
 QString g_exp_lastRuntimeEvent = "No runtime messages yet";
 
@@ -1246,6 +1254,7 @@ ExperimentalLiveSyncService* g_exp_liveSyncService{};
 static void Experimental_refreshLiveSyncUi();
 static void Experimental_appendLiveSyncLog( const QString& message );
 static void Experimental_liveSyncPreviewBackendChanged();
+static void Experimental_refreshViewportQuickActions();
 static QJsonArray Experimental_buildCameraBookmarksArray();
 static void Experimental_restoreCameraBookmarks( const QJsonValue& value );
 
@@ -2676,6 +2685,7 @@ void Experimental_refreshSelection(){
 		g_exp_shaderEdit->setEnabled( hasSelection );
 		g_exp_shaderEdit->setPlaceholderText( hasSelection ? "textures/common/caulk" : "Select something to edit shader" );
 	}
+	Experimental_refreshViewportQuickActions();
 	Experimental_refreshEntityPanels();
 	Experimental_refreshTransform();
 }
@@ -2701,11 +2711,134 @@ void Experimental_applySelectedShader(){
 	UpdateAllWindows();
 }
 
+static void Experimental_triggerCommand( const char* name ){
+	GlobalCommands_find( name ).m_callback();
+}
+
+static void Experimental_triggerToggle( const char* name ){
+	GlobalToggles_find( name ).m_command.m_callback();
+}
+
+static QString Experimental_gridSizeLabel( float size ){
+	const int rounded = static_cast<int>( std::round( size ) );
+	if ( std::fabs( size - rounded ) < 0.0001f ) {
+		return QString::number( rounded );
+	}
+	if ( size < 1.f ) {
+		return QString::number( size, 'f', 3 ).replace( QRegularExpression( "0+$" ), "" ).replace( QRegularExpression( "\\.$" ), "" );
+	}
+	return QString::number( size, 'f', 2 ).replace( QRegularExpression( "0+$" ), "" ).replace( QRegularExpression( "\\.$" ), "" );
+}
+
+static void Experimental_refreshViewportQuickActions(){
+	if ( g_exp_viewportStatusLabel != nullptr ) {
+		g_exp_viewportStatusLabel->setText(
+			StringStream(
+				"Grid ", Experimental_gridSizeLabel( GetGridSize() ).toUtf8().constData(),
+				GetSnapGridSize() > 0 ? " | Snap On" : " | Snap Off",
+				" | Far Clip ", GridStatus_getFarClipDistance()
+			).c_str()
+		);
+	}
+	if ( g_exp_gridSizeCombo != nullptr ) {
+		const QSignalBlocker blocker( g_exp_gridSizeCombo );
+		for ( int i = 0; i < g_exp_gridSizeCombo->count(); ++i )
+		{
+			if ( std::fabs( g_exp_gridSizeCombo->itemData( i, Qt::UserRole ).toFloat() - GetGridSize() ) < 0.0001f ) {
+				g_exp_gridSizeCombo->setCurrentIndex( i );
+				break;
+			}
+		}
+	}
+}
+
+static void Experimental_applyGridSizeSelection(){
+	if ( g_exp_gridSizeCombo == nullptr ) {
+		return;
+	}
+	const QByteArray command = g_exp_gridSizeCombo->currentData( Qt::UserRole + 1 ).toByteArray();
+	if ( !command.isEmpty() ) {
+		Experimental_triggerCommand( command.constData() );
+	}
+	Experimental_refreshViewportQuickActions();
+}
+
+static QString Experimental_selectedAssetShader(){
+	if ( g_exp_assetsList == nullptr || g_exp_assetsList->currentItem() == nullptr ) {
+		return QString();
+	}
+	return g_exp_assetsList->currentItem()->data( Qt::UserRole ).toString();
+}
+
+static void Experimental_syncShaderFieldFromAssetSelection(){
+	if ( g_exp_shaderEdit == nullptr ) {
+		return;
+	}
+
+	const QString shader = Experimental_selectedAssetShader();
+	if ( shader.isEmpty() ) {
+		return;
+	}
+
+	g_exp_shaderEdit->setText( shader );
+}
+
+static void Experimental_applyAssetSelection(){
+	const QString shader = Experimental_selectedAssetShader();
+	if ( shader.isEmpty() || g_exp_shaderEdit == nullptr ) {
+		return;
+	}
+
+	g_exp_shaderEdit->setText( shader );
+	Experimental_applySelectedShader();
+}
+
+static void Experimental_revealAssetSelection(){
+	const QString shader = Experimental_selectedAssetShader();
+	if ( shader.isEmpty() ) {
+		return;
+	}
+
+	const QByteArray shaderName = shader.toLatin1();
+	TextureBrowser_ShowDirectoryOfShader( shaderName.constData() );
+	TextureBrowser_SetSelectedShader( shaderName.constData() );
+}
+
+static void Experimental_refreshAssetDetails(){
+	if ( g_exp_assetsDetails == nullptr ) {
+		return;
+	}
+
+	const QString shader = Experimental_selectedAssetShader();
+	if ( shader.isEmpty() ) {
+		g_exp_assetsDetails->setHtml(
+			"<b>No asset selected</b><br/>"
+			"Search the shader library, select a material, then apply it to the current selection."
+		);
+		return;
+	}
+
+	const int slash = shader.lastIndexOf( '/' );
+	const QString folder = slash >= 0 ? shader.left( slash ) : "root";
+	const QString leaf = slash >= 0 ? shader.mid( slash + 1 ) : shader;
+	g_exp_assetsDetails->setHtml(
+		QString(
+			"<b>%1</b><br/>"
+			"<b>Folder:</b> %2<br/>"
+			"<b>Shader:</b> %3<br/><br/>"
+			"Double-click to apply it to the current selection, or reveal it in the texture browser."
+		)
+		.arg( leaf.toHtmlEscaped(), folder.toHtmlEscaped(), shader.toHtmlEscaped() )
+	);
+}
+
 struct ExperimentalShaderNameVisitor
 {
+	QStringList* names;
+
 	void operator()( const char* name ) const {
-		if ( g_exp_assetsList != nullptr ) {
-			g_exp_assetsList->addItem( name );
+		if ( names != nullptr ) {
+			names->append( QString::fromLatin1( name ) );
 		}
 	}
 };
@@ -2714,9 +2847,45 @@ void Experimental_refreshAssetLibrary(){
 	if ( g_exp_assetsList == nullptr ) {
 		return;
 	}
+
+	const QString previousSelection = Experimental_selectedAssetShader();
+	const QString filter = g_exp_assetsSearchEdit != nullptr
+		? g_exp_assetsSearchEdit->text().trimmed()
+		: QString();
+	QStringList shaderNames;
+	GlobalShaderSystem().foreachShaderName( makeCallback( ExperimentalShaderNameVisitor{ &shaderNames } ) );
+	std::sort( shaderNames.begin(), shaderNames.end(), []( const QString& left, const QString& right ){
+		return left.compare( right, Qt::CaseInsensitive ) < 0;
+	} );
+
 	g_exp_assetsList->clear();
-	GlobalShaderSystem().foreachShaderName( makeCallback( ExperimentalShaderNameVisitor() ) );
-	g_exp_assetsList->sortItems();
+	int filteredCount = 0;
+	for ( const QString& shader : shaderNames )
+	{
+		if ( !filter.isEmpty() && !shader.contains( filter, Qt::CaseInsensitive ) ) {
+			continue;
+		}
+
+		auto* item = new QListWidgetItem( shader, g_exp_assetsList );
+		item->setData( Qt::UserRole, shader );
+		++filteredCount;
+	}
+
+	if ( !previousSelection.isEmpty() ) {
+		const auto matches = g_exp_assetsList->findItems( previousSelection, Qt::MatchExactly );
+		if ( !matches.isEmpty() ) {
+			g_exp_assetsList->setCurrentItem( matches.front() );
+		}
+	}
+	if ( g_exp_assetsList->currentItem() == nullptr && g_exp_assetsList->count() > 0 ) {
+		g_exp_assetsList->setCurrentRow( 0 );
+	}
+	if ( g_exp_assetsStatsLabel != nullptr ) {
+		g_exp_assetsStatsLabel->setText(
+			QString( "%1 shown / %2 shaders" ).arg( filteredCount ).arg( shaderNames.count() )
+		);
+	}
+	Experimental_refreshAssetDetails();
 }
 
 void Experimental_toggleDock( QDockWidget* dock ){
@@ -2773,34 +2942,81 @@ void Experimental_toggleECSDock_impl(){
 }
 
 static bool ECS_isAdvancedEntity( const char* name ){
-	return string_equal_prefix_nocase( name, "env_" )
-	    || string_equal_prefix_nocase( name, "prop_" )
-	    || string_equal_prefix_nocase( name, "trigger_gravity" )
-	    || string_equal_prefix_nocase( name, "env_spawn" )
-	    || string_equal_prefix_nocase( name, "trigger_level_stream" )
-	    || string_equal_prefix_nocase( name, "info_vehicle" )
-	    || string_equal_prefix_nocase( name, "func_vehicle" )
-	    || string_equal_nocase( name, "misc_spline" );
+	return !string_equal_nocase( name, "worldspawn" )
+	    && ( string_equal_nocase( name, "light" )
+	      || string_equal_nocase( name, "lightJunior" )
+	      || string_equal_prefix_nocase( name, "info_" )
+	      || string_equal_prefix_nocase( name, "trigger_" )
+	      || string_equal_prefix_nocase( name, "func_" )
+	      || string_equal_prefix_nocase( name, "env_" )
+	      || string_equal_prefix_nocase( name, "prop_" )
+	      || string_equal_prefix_nocase( name, "target_" )
+	      || string_equal_prefix_nocase( name, "path_" )
+	      || string_equal_prefix_nocase( name, "item_" )
+	      || string_equal_prefix_nocase( name, "weapon_" )
+	      || string_equal_prefix_nocase( name, "team_" )
+	      || string_equal_prefix_nocase( name, "misc_" )
+	      || string_equal_prefix_nocase( name, "npc_" )
+	      || string_equal_prefix_nocase( name, "ai_" )
+	      || string_equal_prefix_nocase( name, "script_" ) );
 }
 
 static const char* ECS_categoryForEntity( const char* name ){
-	if ( string_equal_prefix_nocase( name, "env_fire" ) || string_equal_prefix_nocase( name, "env_water" ) || string_equal_prefix_nocase( name, "env_spill" ) )
-		return "Fire & Environment";
-	if ( string_equal_prefix_nocase( name, "env_fan" ) )
-		return "Wind & Physics";
-	if ( string_equal_prefix_nocase( name, "prop_" ) )
-		return "Props & Physics";
-	if ( string_equal_prefix_nocase( name, "trigger_gravity" ) )
-		return "Gravity & Space";
-	if ( string_equal_prefix_nocase( name, "env_spawn" ) )
-		return "Spawn & Streaming";
-	if ( string_equal_prefix_nocase( name, "trigger_level" ) )
-		return "Level Streaming";
-	if ( string_equal_prefix_nocase( name, "info_vehicle" ) || string_equal_prefix_nocase( name, "func_vehicle" ) )
+	if ( string_equal_nocase( name, "light" ) || string_equal_nocase( name, "lightJunior" ) )
+		return "Lights";
+	if ( string_equal_prefix_nocase( name, "info_player" ) || string_equal_prefix_nocase( name, "team_" ) )
+		return "Player Starts";
+	if ( string_equal_prefix_nocase( name, "trigger_" ) )
+		return "Triggers & Volumes";
+	if ( string_equal_prefix_nocase( name, "func_vehicle" ) || string_equal_prefix_nocase( name, "info_vehicle" ) )
 		return "Vehicles";
-	if ( string_equal_nocase( name, "misc_spline" ) )
-		return "Splines";
-	return "Other";
+	if ( string_equal_prefix_nocase( name, "func_" ) )
+		return "Brush Entities";
+	if ( string_equal_prefix_nocase( name, "env_" ) )
+		return "Environment";
+	if ( string_equal_prefix_nocase( name, "prop_" ) || string_equal_prefix_nocase( name, "misc_" ) )
+		return "Props & Models";
+	if ( string_equal_prefix_nocase( name, "target_" ) || string_equal_prefix_nocase( name, "script_" ) )
+		return "Targets & Logic";
+	if ( string_equal_prefix_nocase( name, "path_" ) || string_equal_nocase( name, "misc_spline" ) )
+		return "Splines & Paths";
+	if ( string_equal_prefix_nocase( name, "npc_" ) || string_equal_prefix_nocase( name, "ai_" ) || string_equal_prefix_nocase( name, "env_spawn" ) )
+		return "AI & Spawns";
+	if ( string_equal_prefix_nocase( name, "item_" ) || string_equal_prefix_nocase( name, "weapon_" ) )
+		return "Items & Pickups";
+	if ( string_equal_prefix_nocase( name, "info_" ) )
+		return "Info & Gameplay";
+	return "Other / Misc";
+}
+
+static QString ECS_detailsForEntity( const EntityClass* eclass ){
+	if ( eclass == nullptr ) {
+		return {};
+	}
+	QStringList lines;
+	lines.push_back( StringStream( "<h3>", eclass->name(), "</h3>" ).c_str() );
+	lines.push_back( StringStream( "<p><b>Category:</b> ", ECS_categoryForEntity( eclass->name() ), "<br><b>Type:</b> ", eclass->fixedsize ? "Point Entity" : "Brush Entity", "</p>" ).c_str() );
+	if ( string_not_empty( eclass->modelpath() ) ) {
+		lines.push_back( StringStream( "<p><b>Model:</b> <code>", eclass->modelpath(), "</code></p>" ).c_str() );
+	}
+	const QString comments = QString::fromLatin1( eclass->comments() ).trimmed().toHtmlEscaped().replace( "\n", "<br>" );
+	lines.push_back( comments.isEmpty()
+		? "<p>No entity description is available for this class.</p>"
+		: StringStream( "<p>", comments.toUtf8().constData(), "</p>" ).c_str() );
+	return lines.join( "" );
+}
+
+static void Experimental_refreshECSDetails(){
+	if ( g_exp_ecsDetails == nullptr ) {
+		return;
+	}
+	QListWidgetItem* item = g_exp_ecsEntityList != nullptr ? g_exp_ecsEntityList->currentItem() : nullptr;
+	if ( item == nullptr ) {
+		g_exp_ecsDetails->setHtml( "<p>Select an entity to see its description and placement type.</p>" );
+		return;
+	}
+	EntityClass* eclass = GlobalEntityClassManager().findOrInsert( item->data( Qt::UserRole ).toString().toLatin1().constData(), true );
+	g_exp_ecsDetails->setHtml( ECS_detailsForEntity( eclass ) );
 }
 
 static void Experimental_refreshECSList(){
@@ -2808,12 +3024,15 @@ static void Experimental_refreshECSList(){
 		return;
 	}
 	const QString cat = g_exp_ecsCategoryCombo->currentText();
+	const QString filter = g_exp_ecsSearchEdit != nullptr ? g_exp_ecsSearchEdit->text().trimmed() : QString();
+	const QString selectedClassname = g_exp_ecsEntityList->currentItem() != nullptr ? g_exp_ecsEntityList->currentItem()->data( Qt::UserRole ).toString() : QString();
 	g_exp_ecsEntityList->clear();
 
 	class ECSCollector final : public EntityClassVisitor
 	{
 		QListWidget* m_list;
 		QString m_cat;
+		QString m_filter;
 		static QIcon iconForEntityClass( const EntityClass* eclass ){
 			if ( classname_equal( eclass->name(), "light" ) || classname_equal( eclass->name(), "lightJunior" ) ) {
 				return new_local_icon( "ecs_light" );
@@ -2838,19 +3057,38 @@ static void Experimental_refreshECSList(){
 			return new_local_icon( "ecs_brushentity" );
 		}
 	public:
-		ECSCollector( QListWidget* list, const QString& cat ) : m_list( list ), m_cat( cat ){}
+		ECSCollector( QListWidget* list, const QString& cat, const QString& filter ) : m_list( list ), m_cat( cat ), m_filter( filter ){}
 		void visit( EntityClass* eclass ) override {
 			if ( !ECS_isAdvancedEntity( eclass->name() ) ) {
 				return;
 			}
-			if ( !m_cat.isEmpty() && m_cat != "All" && QString( ECS_categoryForEntity( eclass->name() ) ) != m_cat ) {
+			const QString category = ECS_categoryForEntity( eclass->name() );
+			if ( !m_cat.isEmpty() && m_cat != "All" && category != m_cat ) {
 				return;
 			}
-			m_list->addItem( new QListWidgetItem( iconForEntityClass( eclass ), eclass->name() ) );
+			const QString searchText = StringStream( eclass->name(), " ", category.toUtf8().constData(), " ", eclass->comments(), " ", eclass->modelpath() ).c_str();
+			if ( !m_filter.isEmpty() && !searchText.contains( m_filter, Qt::CaseInsensitive ) ) {
+				return;
+			}
+			auto* item = new QListWidgetItem( iconForEntityClass( eclass ), eclass->name() );
+			item->setData( Qt::UserRole, eclass->name() );
+			item->setToolTip( StringStream( category.toUtf8().constData(), "\n", eclass->comments() ).c_str() );
+			m_list->addItem( item );
 		}
-	} collector( g_exp_ecsEntityList, cat );
+	} collector( g_exp_ecsEntityList, cat, filter );
 	GlobalEntityClassManager().forEach( collector );
 	g_exp_ecsEntityList->sortItems();
+	for ( int i = 0; i < g_exp_ecsEntityList->count(); ++i )
+	{
+		if ( g_exp_ecsEntityList->item( i )->data( Qt::UserRole ).toString() == selectedClassname ) {
+			g_exp_ecsEntityList->setCurrentRow( i );
+			break;
+		}
+	}
+	if ( g_exp_ecsEntityList->currentRow() < 0 && g_exp_ecsEntityList->count() > 0 ) {
+		g_exp_ecsEntityList->setCurrentRow( 0 );
+	}
+	Experimental_refreshECSDetails();
 }
 
 static void Experimental_ecsAddEntity( const char* classname ){
@@ -4073,6 +4311,81 @@ void Experimental_createDocks( QMainWindow* window ){
 		QObject::connect( g_exp_shaderEdit, &QLineEdit::returnPressed, [](){ Experimental_applySelectedShader(); } );
 		vbox->addLayout( form );
 
+		auto* quickActionsGroup = new QGroupBox( "Quick Actions", root );
+		{
+			auto* quickGrid = new QGridLayout( quickActionsGroup );
+			auto* frameSelectionButton = new QPushButton( "Frame", quickActionsGroup );
+			auto* duplicateButton = new QPushButton( "Duplicate", quickActionsGroup );
+			auto* snapButton = new QPushButton( "Snap To Grid", quickActionsGroup );
+			auto* hideButton = new QPushButton( "Hide Selected", quickActionsGroup );
+			auto* isolateButton = new QPushButton( "Isolate", quickActionsGroup );
+			auto* showHiddenButton = new QPushButton( "Show Hidden", quickActionsGroup );
+			auto* moveToCameraButton = new QPushButton( "Move To Camera", quickActionsGroup );
+			auto* pasteToCameraButton = new QPushButton( "Paste To Camera", quickActionsGroup );
+			auto* hollowButton = new QPushButton( "Make Hollow", quickActionsGroup );
+			quickGrid->addWidget( frameSelectionButton, 0, 0 );
+			quickGrid->addWidget( duplicateButton, 0, 1 );
+			quickGrid->addWidget( snapButton, 0, 2 );
+			quickGrid->addWidget( hideButton, 1, 0 );
+			quickGrid->addWidget( isolateButton, 1, 1 );
+			quickGrid->addWidget( showHiddenButton, 1, 2 );
+			quickGrid->addWidget( moveToCameraButton, 2, 0 );
+			quickGrid->addWidget( pasteToCameraButton, 2, 1 );
+			quickGrid->addWidget( hollowButton, 2, 2 );
+			QObject::connect( frameSelectionButton, &QPushButton::clicked, [](){ Experimental_triggerCommand( "FrameSelection" ); } );
+			QObject::connect( duplicateButton, &QPushButton::clicked, [](){ Experimental_triggerCommand( "CloneSelection" ); } );
+			QObject::connect( snapButton, &QPushButton::clicked, [](){ Experimental_triggerCommand( "SnapToGrid" ); } );
+			QObject::connect( hideButton, &QPushButton::clicked, [](){ Experimental_triggerToggle( "HideSelected" ); } );
+			QObject::connect( isolateButton, &QPushButton::clicked, [](){ Experimental_triggerCommand( "IsolateSelection" ); } );
+			QObject::connect( showHiddenButton, &QPushButton::clicked, [](){ Experimental_triggerCommand( "ShowHidden" ); } );
+			QObject::connect( moveToCameraButton, &QPushButton::clicked, [](){ Experimental_triggerCommand( "MoveToCamera" ); } );
+			QObject::connect( pasteToCameraButton, &QPushButton::clicked, [](){ Experimental_triggerCommand( "PasteToCamera" ); } );
+			QObject::connect( hollowButton, &QPushButton::clicked, [](){ Experimental_triggerCommand( "MakeHollow" ); } );
+		}
+		vbox->addWidget( quickActionsGroup );
+
+		auto* viewportGroup = new QGroupBox( "Viewport", root );
+		{
+			auto* viewportForm = new QFormLayout( viewportGroup );
+			g_exp_viewportStatusLabel = new QLabel( "Grid 16 | Snap On | Far Clip 4096", viewportGroup );
+			g_exp_gridSizeCombo = new QComboBox( viewportGroup );
+			const struct { float value; const char* command; } gridOptions[] = {
+				{ 0.125f, "SetGrid0.125" }, { 0.25f, "SetGrid0.25" }, { 0.5f, "SetGrid0.5" },
+				{ 1.f, "SetGrid1" }, { 2.f, "SetGrid2" }, { 4.f, "SetGrid4" }, { 8.f, "SetGrid8" },
+				{ 16.f, "SetGrid16" }, { 32.f, "SetGrid32" }, { 64.f, "SetGrid64" }, { 128.f, "SetGrid128" },
+				{ 256.f, "SetGrid256" }, { 512.f, "SetGrid512" }, { 1024.f, "SetGrid1024" }
+			};
+			for ( const auto& option : gridOptions )
+			{
+				g_exp_gridSizeCombo->addItem( Experimental_gridSizeLabel( option.value ) );
+				g_exp_gridSizeCombo->setItemData( g_exp_gridSizeCombo->count() - 1, option.value, Qt::UserRole );
+				g_exp_gridSizeCombo->setItemData( g_exp_gridSizeCombo->count() - 1, option.command, Qt::UserRole + 1 );
+			}
+			auto* viewportButtons = new QWidget( viewportGroup );
+			auto* viewportButtonsLayout = new QGridLayout( viewportButtons );
+			viewportButtonsLayout->setContentsMargins( 0, 0, 0, 0 );
+			auto* snapToggleButton = new QPushButton( "Toggle Snap", viewportButtons );
+			auto* gridToggleButton = new QPushButton( "Show/Hide Grid", viewportButtons );
+			auto* farClipButton = new QPushButton( "Far Clip", viewportButtons );
+			auto* camSpeedUpButton = new QPushButton( "Camera +", viewportButtons );
+			auto* camSpeedDownButton = new QPushButton( "Camera -", viewportButtons );
+			viewportButtonsLayout->addWidget( snapToggleButton, 0, 0 );
+			viewportButtonsLayout->addWidget( gridToggleButton, 0, 1 );
+			viewportButtonsLayout->addWidget( farClipButton, 1, 0 );
+			viewportButtonsLayout->addWidget( camSpeedUpButton, 1, 1 );
+			viewportButtonsLayout->addWidget( camSpeedDownButton, 1, 2 );
+			viewportForm->addRow( "Status", g_exp_viewportStatusLabel );
+			viewportForm->addRow( "Grid Size", g_exp_gridSizeCombo );
+			viewportForm->addRow( "", viewportButtons );
+			QObject::connect( g_exp_gridSizeCombo, QOverload<int>::of( &QComboBox::currentIndexChanged ), []( int ){ Experimental_applyGridSizeSelection(); } );
+			QObject::connect( snapToggleButton, &QPushButton::clicked, [](){ Experimental_triggerCommand( "ToggleGridSnap" ); Experimental_refreshViewportQuickActions(); } );
+			QObject::connect( gridToggleButton, &QPushButton::clicked, [](){ Experimental_triggerToggle( "ToggleGrid" ); Experimental_refreshViewportQuickActions(); } );
+			QObject::connect( farClipButton, &QPushButton::clicked, [](){ Experimental_triggerToggle( "ToggleCubicClip" ); Experimental_refreshViewportQuickActions(); } );
+			QObject::connect( camSpeedUpButton, &QPushButton::clicked, [](){ Experimental_triggerCommand( "CameraSpeedInc" ); } );
+			QObject::connect( camSpeedDownButton, &QPushButton::clicked, [](){ Experimental_triggerCommand( "CameraSpeedDec" ); } );
+		}
+		vbox->addWidget( viewportGroup );
+
 		g_exp_entityGroup = new QGroupBox( "Entity", root );
 		{
 			auto* entityForm = new QFormLayout( g_exp_entityGroup );
@@ -4359,19 +4672,41 @@ void Experimental_createDocks( QMainWindow* window ){
 	{
 		auto* root = new QWidget( g_exp_assetsDock );
 		auto* vbox = new QVBoxLayout( root );
+		auto* actionsRow = new QHBoxLayout;
+		g_exp_assetsSearchEdit = new QLineEdit( root );
+		g_exp_assetsSearchEdit->setPlaceholderText( "Search shaders, tools, trim, caulk..." );
+		g_exp_assetsStatsLabel = new QLabel( "0 shaders", root );
 		g_exp_assetsList = new QListWidget( root );
 		g_exp_assetsList->setViewMode( QListView::IconMode );
 		g_exp_assetsList->setUniformItemSizes( true );
 		g_exp_assetsList->setResizeMode( QListView::Adjust );
 		g_exp_assetsList->setDragEnabled( true );
+		g_exp_assetsList->setSelectionMode( QAbstractItemView::SingleSelection );
+		g_exp_assetsDetails = new QTextBrowser( root );
+		g_exp_assetsDetails->setMinimumHeight( 120 );
+		auto* applyButton = new QPushButton( "Apply", root );
+		auto* syncButton = new QPushButton( "Use In Shader Field", root );
+		auto* revealButton = new QPushButton( "Reveal In Browser", root );
 		auto* refreshButton = new QPushButton( "Refresh Assets", root );
+		actionsRow->addWidget( applyButton );
+		actionsRow->addWidget( syncButton );
+		actionsRow->addWidget( revealButton );
+		vbox->addWidget( g_exp_assetsSearchEdit );
+		vbox->addWidget( g_exp_assetsStatsLabel );
 		vbox->addWidget( g_exp_assetsList );
+		vbox->addLayout( actionsRow );
+		vbox->addWidget( g_exp_assetsDetails );
 		vbox->addWidget( refreshButton );
+		QObject::connect( g_exp_assetsSearchEdit, &QLineEdit::textChanged, [](){ Experimental_refreshAssetLibrary(); } );
+		QObject::connect( g_exp_assetsList, &QListWidget::itemSelectionChanged, [](){ Experimental_refreshAssetDetails(); } );
+		QObject::connect( applyButton, &QPushButton::clicked, [](){ Experimental_applyAssetSelection(); } );
+		QObject::connect( syncButton, &QPushButton::clicked, [](){ Experimental_syncShaderFieldFromAssetSelection(); } );
+		QObject::connect( revealButton, &QPushButton::clicked, [](){ Experimental_revealAssetSelection(); } );
 		QObject::connect( refreshButton, &QPushButton::clicked, [](){ Experimental_refreshAssetLibrary(); } );
 		QObject::connect( g_exp_assetsList, &QListWidget::itemDoubleClicked, []( QListWidgetItem* item ){
-			if ( item != nullptr && g_exp_shaderEdit != nullptr ) {
-				g_exp_shaderEdit->setText( item->text() );
-				Experimental_applySelectedShader();
+			if ( item != nullptr ) {
+				g_exp_assetsList->setCurrentItem( item );
+				Experimental_applyAssetSelection();
 			}
 		} );
 		g_exp_assetsDock->setWidget( root );
@@ -4509,34 +4844,49 @@ void Experimental_createDocks( QMainWindow* window ){
 		g_exp_ecsCategoryCombo = new QComboBox( root );
 		g_exp_ecsCategoryCombo->addItems( QStringList()
 			<< "All"
-			<< "Fire & Environment"
-			<< "Wind & Physics"
-			<< "Props & Physics"
-			<< "Gravity & Space"
-			<< "Spawn & Streaming"
-			<< "Level Streaming"
+			<< "Lights"
+			<< "Player Starts"
+			<< "Triggers & Volumes"
+			<< "Brush Entities"
+			<< "Environment"
+			<< "Props & Models"
+			<< "Targets & Logic"
+			<< "AI & Spawns"
+			<< "Items & Pickups"
+			<< "Info & Gameplay"
 			<< "Vehicles"
-			<< "Splines"
-			<< "Other" );
+			<< "Splines & Paths"
+			<< "Other / Misc" );
 		QObject::connect( g_exp_ecsCategoryCombo, QOverload<int>::of( &QComboBox::currentIndexChanged ), []( int ){ Experimental_refreshECSList(); } );
+		g_exp_ecsSearchEdit = new QLineEdit( root );
+		g_exp_ecsSearchEdit->setPlaceholderText( "Search entity classes" );
+		QObject::connect( g_exp_ecsSearchEdit, &QLineEdit::textChanged, []( const QString& ){ Experimental_refreshECSList(); } );
 		g_exp_ecsEntityList = new QListWidget( root );
+		g_exp_ecsEntityList->setAlternatingRowColors( true );
+		g_exp_ecsDetails = new QTextBrowser( root );
+		g_exp_ecsDetails->setOpenExternalLinks( false );
 		auto* addButton = new QPushButton( "Add Entity at Camera", root );
 		vbox->addWidget( new QLabel( "Category", root ) );
 		vbox->addWidget( g_exp_ecsCategoryCombo );
+		vbox->addWidget( new QLabel( "Search", root ) );
+		vbox->addWidget( g_exp_ecsSearchEdit );
 		vbox->addWidget( new QLabel( "Entities", root ) );
 		vbox->addWidget( g_exp_ecsEntityList );
+		vbox->addWidget( new QLabel( "Details", root ) );
+		vbox->addWidget( g_exp_ecsDetails, 1 );
 		vbox->addWidget( addButton );
 		QObject::connect( addButton, &QPushButton::clicked, [](){
 			QListWidgetItem* item = g_exp_ecsEntityList != nullptr ? g_exp_ecsEntityList->currentItem() : nullptr;
 			if ( item != nullptr ) {
-				Experimental_ecsAddEntity( item->text().toLatin1().constData() );
+				Experimental_ecsAddEntity( item->data( Qt::UserRole ).toString().toLatin1().constData() );
 			}
 		} );
 		QObject::connect( g_exp_ecsEntityList, &QListWidget::itemDoubleClicked, []( QListWidgetItem* item ){
 			if ( item != nullptr ) {
-				Experimental_ecsAddEntity( item->text().toLatin1().constData() );
+				Experimental_ecsAddEntity( item->data( Qt::UserRole ).toString().toLatin1().constData() );
 			}
 		} );
+		QObject::connect( g_exp_ecsEntityList, &QListWidget::currentItemChanged, []( QListWidgetItem*, QListWidgetItem* ){ Experimental_refreshECSDetails(); } );
 		g_exp_ecsDock->setWidget( root );
 	}
 	window->addDockWidget( Qt::LeftDockWidgetArea, g_exp_ecsDock );
@@ -4554,6 +4904,10 @@ void Experimental_createDocks( QMainWindow* window ){
 	OpenWysiwygWorkspace_impl();
 	if ( g_exp_syncAutoStart != nullptr && g_exp_syncAutoStart->isChecked() && g_exp_liveSyncService != nullptr && g_exp_syncPort != nullptr ) {
 		g_exp_liveSyncService->start( static_cast<quint16>( g_exp_syncPort->value() ) );
+	}
+	if ( !g_exp_gridCallbackAttached ) {
+		AddGridChangeCallback( FreeCaller<void(), Experimental_refreshViewportQuickActions>() );
+		g_exp_gridCallbackAttached = true;
 	}
 }
 
@@ -4573,11 +4927,15 @@ void Experimental_destroyDocks(){
 	g_exp_previewHost = nullptr;
 	g_exp_ecsCategoryCombo = nullptr;
 	g_exp_ecsEntityList = nullptr;
+	g_exp_ecsSearchEdit = nullptr;
+	g_exp_ecsDetails = nullptr;
 	g_exp_selectedCountLabel = nullptr;
 	g_exp_selectedComponentsLabel = nullptr;
 	g_exp_selectionTypeLabel = nullptr;
 	g_exp_selectionBoundsLabel = nullptr;
 	g_exp_selectionShaderLabel = nullptr;
+	g_exp_viewportStatusLabel = nullptr;
+	g_exp_gridSizeCombo = nullptr;
 	g_exp_entityGroup = nullptr;
 	g_exp_entityClassLabel = nullptr;
 	g_exp_entityNameEdit = nullptr;
@@ -4609,7 +4967,10 @@ void Experimental_destroyDocks(){
 	g_exp_scaleX = nullptr;
 	g_exp_scaleY = nullptr;
 	g_exp_scaleZ = nullptr;
+	g_exp_assetsSearchEdit = nullptr;
+	g_exp_assetsStatsLabel = nullptr;
 	g_exp_assetsList = nullptr;
+	g_exp_assetsDetails = nullptr;
 	g_exp_historyList = nullptr;
 	g_exp_usdTree = nullptr;
 	g_exp_syncStateLabel = nullptr;

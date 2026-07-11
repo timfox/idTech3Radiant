@@ -20,6 +20,7 @@
 #include <QSettings>
 #include <QSplitter>
 #include <QDir>
+#include <QDirIterator>
 #include <QMessageBox>
 #include <QScrollBar>
 #include <QRegularExpression>
@@ -31,6 +32,7 @@
 #include <QHash>
 #include <QSyntaxHighlighter>
 #include <QTextCharFormat>
+#include <QTabWidget>
 
 namespace
 {
@@ -101,8 +103,11 @@ QDockWidget* g_aimlDock{};
 QPlainTextEdit* g_aimlEditor{};
 QListWidget* g_aimlCategoryList{};
 QLineEdit* g_aimlCategoryFilter{};
+QListWidget* g_aimlFileList{};
+QLineEdit* g_aimlFileFilter{};
 QLineEdit* g_aimlTestInput{};
 QPlainTextEdit* g_aimlPreview{};
+QListWidget* g_aimlFlowList{};
 QLabel* g_aimlStatusLabel{};
 AIMLHighlighter* g_aimlHighlighter{};
 QString g_aimlCurrentPath;
@@ -114,6 +119,10 @@ struct AIMLCategoryEntry
 	QString that;
 	QString topic;
 	QString templatePreview;
+	QString normalizedPattern;
+	QStringList sraiTargets;
+	QStringList setNames;
+	QStringList getNames;
 	int line = 1;
 };
 
@@ -146,6 +155,13 @@ QString AIMLWorkbench_defaultDirectory(){
 	return QDir( QString::fromLatin1( GlobalRadiant().getAppPath() ) ).filePath( "scripts" );
 }
 
+QString AIMLWorkbench_documentDirectory(){
+	if ( !g_aimlCurrentPath.isEmpty() ) {
+		return QFileInfo( g_aimlCurrentPath ).absolutePath();
+	}
+	return AIMLWorkbench_defaultDirectory();
+}
+
 void AIMLWorkbench_setLastDirectory( const QString& path ){
 	if ( path.isEmpty() ) {
 		return;
@@ -154,6 +170,37 @@ void AIMLWorkbench_setLastDirectory( const QString& path ){
 	const QString directory = info.isDir() ? info.absoluteFilePath() : info.absolutePath();
 	if ( !directory.isEmpty() ) {
 		AIMLWorkbench_setSetting( "LastDirectory", directory );
+	}
+}
+
+void AIMLWorkbench_refreshFileList(){
+	if ( g_aimlFileList == nullptr ) {
+		return;
+	}
+
+	const QString rootPath = AIMLWorkbench_documentDirectory();
+	const QString filter = g_aimlFileFilter != nullptr ? g_aimlFileFilter->text().trimmed() : QString();
+	const QString currentPath = QFileInfo( g_aimlCurrentPath ).absoluteFilePath();
+
+	g_aimlFileList->clear();
+	if ( rootPath.isEmpty() || !QFileInfo::exists( rootPath ) ) {
+		return;
+	}
+
+	QDirIterator it( rootPath, QStringList() << "*.aiml" << "*.xml", QDir::Files, QDirIterator::Subdirectories );
+	while ( it.hasNext() )
+	{
+		const QString path = it.next();
+		const QString relative = QDir( rootPath ).relativeFilePath( path );
+		if ( !filter.isEmpty() && !relative.contains( filter, Qt::CaseInsensitive ) ) {
+			continue;
+		}
+		auto* item = new QListWidgetItem( relative, g_aimlFileList );
+		item->setData( Qt::UserRole, path );
+		item->setToolTip( path );
+		if ( QFileInfo( path ).absoluteFilePath() == currentPath ) {
+			g_aimlFileList->setCurrentItem( item );
+		}
 	}
 }
 
@@ -196,6 +243,36 @@ QString AIMLWorkbench_simplifyText( QString text, int maxLength = 72 ){
 		text = text.left( maxLength - 3 ) + "...";
 	}
 	return text;
+}
+
+QStringList AIMLWorkbench_extractTagValues( const QString& text, const char* tagName ){
+	QStringList values;
+	const QRegularExpression rx(
+		StringStream( "<", tagName, ">\\s*([^<]+)\\s*</", tagName, ">" ).c_str(),
+		QRegularExpression::CaseInsensitiveOption );
+	for ( auto it = rx.globalMatch( text ); it.hasNext(); ) {
+		const auto match = it.next();
+		const QString value = match.captured( 1 ).simplified();
+		if ( !value.isEmpty() ) {
+			values.push_back( value );
+		}
+	}
+	return values;
+}
+
+QStringList AIMLWorkbench_extractAttributeValues( const QString& text, const char* tagName, const char* attrName ){
+	QStringList values;
+	const QRegularExpression rx(
+		StringStream( "<", tagName, "[^>]*\\b", attrName, "\\s*=\\s*\"([^\"]+)\"" ).c_str(),
+		QRegularExpression::CaseInsensitiveOption );
+	for ( auto it = rx.globalMatch( text ); it.hasNext(); ) {
+		const auto match = it.next();
+		const QString value = match.captured( 1 ).simplified();
+		if ( !value.isEmpty() ) {
+			values.push_back( value );
+		}
+	}
+	return values;
 }
 
 void AIMLWorkbench_updateDockTitle(){
@@ -259,6 +336,8 @@ QVector<AIMLCategoryEntry> AIMLWorkbench_collectCategories( const QString& text 
 	QString templateText;
 	int patternLine = 1;
 	QString currentTopic;
+	QString categoryXml;
+	int categoryDepth = 0;
 
 	while ( !xml.atEnd() )
 	{
@@ -275,6 +354,8 @@ QVector<AIMLCategoryEntry> AIMLWorkbench_collectCategories( const QString& text 
 				templateText.clear();
 				topicText = currentTopic;
 				patternLine = int( xml.lineNumber() );
+				categoryXml.clear();
+				categoryDepth = 1;
 			}
 			else if ( inCategory && name.compare( QStringLiteral( "pattern" ), Qt::CaseInsensitive ) == 0 ) {
 				inPattern = true;
@@ -285,6 +366,15 @@ QVector<AIMLCategoryEntry> AIMLWorkbench_collectCategories( const QString& text 
 			}
 			else if ( inCategory && name.compare( QStringLiteral( "template" ), Qt::CaseInsensitive ) == 0 ) {
 				inTemplate = true;
+			}
+			if ( inCategory && !( name.compare( QStringLiteral( "category" ), Qt::CaseInsensitive ) == 0 ) ) {
+				++categoryDepth;
+			}
+			if ( inCategory ) {
+				categoryXml += '<' + name.toString();
+				for ( const auto& attr : xml.attributes() )
+					categoryXml += StringStream( " ", attr.name().toString().toUtf8().constData(), "=\"", AIMLWorkbench_escapeXml( attr.value().toString() ).toUtf8().constData(), "\"" ).c_str();
+				categoryXml += '>';
 			}
 		}
 		else if ( xml.isCharacters() ) {
@@ -297,9 +387,15 @@ QVector<AIMLCategoryEntry> AIMLWorkbench_collectCategories( const QString& text 
 			if ( inTemplate ) {
 				templateText += xml.text().toString();
 			}
+			if ( inCategory ) {
+				categoryXml += AIMLWorkbench_escapeXml( xml.text().toString() );
+			}
 		}
 		else if ( xml.isEndElement() ) {
 			const QStringView name = xml.name();
+			if ( inCategory ) {
+				categoryXml += StringStream( "</", name.toString().toUtf8().constData(), ">" ).c_str();
+			}
 			if ( name.compare( QStringLiteral( "pattern" ), Qt::CaseInsensitive ) == 0 ) {
 				inPattern = false;
 			}
@@ -318,12 +414,20 @@ QVector<AIMLCategoryEntry> AIMLWorkbench_collectCategories( const QString& text 
 					entry.that = thatText.simplified();
 					entry.topic = topicText.simplified();
 					entry.templatePreview = AIMLWorkbench_simplifyText( templateText );
+					entry.normalizedPattern = AIMLWorkbench_normalizePattern( entry.pattern );
+					entry.sraiTargets = AIMLWorkbench_extractTagValues( categoryXml, "srai" );
+					entry.setNames = AIMLWorkbench_extractAttributeValues( categoryXml, "set", "name" );
+					entry.getNames = AIMLWorkbench_extractAttributeValues( categoryXml, "get", "name" );
 					entry.line = patternLine;
 					out.push_back( entry );
 				}
+				categoryDepth = 0;
 			}
 			else if ( name.compare( QStringLiteral( "topic" ), Qt::CaseInsensitive ) == 0 ) {
 				currentTopic.clear();
+			}
+			if ( inCategory && categoryDepth > 0 ) {
+				--categoryDepth;
 			}
 		}
 	}
@@ -345,12 +449,66 @@ QVector<AIMLCategoryEntry> AIMLWorkbench_collectCategories( const QString& text 
 					++line;
 			AIMLCategoryEntry entry;
 			entry.pattern = pattern;
+			entry.normalizedPattern = AIMLWorkbench_normalizePattern( entry.pattern );
 			entry.line = line;
 			out.push_back( entry );
 		}
 	}
 
 	return out;
+}
+
+void AIMLWorkbench_refreshFlowList(){
+	if ( g_aimlFlowList == nullptr ) {
+		return;
+	}
+
+	g_aimlFlowList->clear();
+	QHash<QString, int> byPattern;
+	for ( const AIMLCategoryEntry& entry : g_aimlCategories )
+	{
+		if ( !entry.normalizedPattern.isEmpty() ) {
+			byPattern.insert( entry.normalizedPattern, entry.line );
+		}
+	}
+
+	for ( const AIMLCategoryEntry& entry : g_aimlCategories )
+	{
+		QStringList parts;
+		parts.push_back( entry.pattern );
+		if ( !entry.topic.isEmpty() ) {
+			parts.push_back( StringStream( "topic:", entry.topic.toUtf8().constData() ).c_str() );
+		}
+		if ( !entry.that.isEmpty() ) {
+			parts.push_back( StringStream( "that:", entry.that.toUtf8().constData() ).c_str() );
+		}
+		if ( !entry.sraiTargets.isEmpty() ) {
+			parts.push_back( StringStream( "srai:", entry.sraiTargets.join( ", " ).toUtf8().constData() ).c_str() );
+		}
+		if ( !entry.setNames.isEmpty() ) {
+			parts.push_back( StringStream( "set:", entry.setNames.join( ", " ).toUtf8().constData() ).c_str() );
+		}
+		if ( !entry.getNames.isEmpty() ) {
+			parts.push_back( StringStream( "get:", entry.getNames.join( ", " ).toUtf8().constData() ).c_str() );
+		}
+
+		auto* item = new QListWidgetItem( parts.join( "\n" ), g_aimlFlowList );
+		item->setData( Qt::UserRole, entry.line );
+
+		QStringList toolTip;
+		toolTip.push_back( StringStream( "Line ", entry.line ).c_str() );
+		for ( const QString& target : entry.sraiTargets )
+		{
+			const QString normalized = AIMLWorkbench_normalizePattern( target );
+			if ( byPattern.contains( normalized ) ) {
+				toolTip.push_back( StringStream( "srai -> ", target.toUtf8().constData(), " (line ", byPattern.value( normalized ), ")" ).c_str() );
+			}
+			else{
+				toolTip.push_back( StringStream( "srai -> ", target.toUtf8().constData(), " (unresolved)" ).c_str() );
+			}
+		}
+		item->setToolTip( toolTip.join( "\n" ) );
+	}
 }
 
 QHash<QString, int> AIMLWorkbench_collectDuplicatePatterns( const QVector<AIMLCategoryEntry>& categories ){
@@ -424,6 +582,7 @@ void AIMLWorkbench_refreshCategoryList(){
 		if ( entry.pattern.contains( '*' ) || entry.pattern.contains( '_' ) )
 			++wildcardCount;
 	AIMLWorkbench_setStatus( StringStream( "Ready - ", g_aimlCategories.size(), " categor", g_aimlCategories.size() == 1 ? "y" : "ies", ", ", duplicateCount, " duplicate pattern", duplicateCount == 1 ? "" : "s", ", ", wildcardCount, " wildcard rule", wildcardCount == 1 ? "" : "s" ).c_str() );
+	AIMLWorkbench_refreshFlowList();
 }
 
 bool AIMLWorkbench_validateDocument( QString* errorOut = nullptr, int* errorLineOut = nullptr ){
@@ -583,14 +742,38 @@ void AIMLWorkbench_validateAndReport(){
 void AIMLWorkbench_refreshDiagnostics(){
 	QString error;
 	int line = 1;
+	int sraiCount = 0;
+	int stateTouchCount = 0;
+	QHash<QString, int> byPattern;
+	for ( const AIMLCategoryEntry& entry : g_aimlCategories )
+	{
+		if ( !entry.normalizedPattern.isEmpty() ) {
+			byPattern.insert( entry.normalizedPattern, entry.line );
+		}
+		sraiCount += entry.sraiTargets.size();
+		stateTouchCount += entry.setNames.size() + entry.getNames.size();
+	}
+	int unresolvedSrai = 0;
+	for ( const AIMLCategoryEntry& entry : g_aimlCategories )
+		for ( const QString& target : entry.sraiTargets )
+			if ( !byPattern.contains( AIMLWorkbench_normalizePattern( target ) ) )
+				++unresolvedSrai;
+
 	if ( AIMLWorkbench_validateDocument( &error, &line ) ) {
 		AIMLWorkbench_setPreview( StringStream(
 			"AIML 3.0 document looks valid.\n\nCategories: ", g_aimlCategories.size(),
+			"\nSRAI links: ", sraiCount,
+			"\nState reads/writes: ", stateTouchCount,
+			unresolvedSrai > 0 ? "\nUnresolved SRAI links: " : "",
+			unresolvedSrai > 0 ? StringStream( unresolvedSrai ).c_str() : "",
 			"\nTry the test box to preview pattern resolution." ).c_str() );
 	}
 	else{
 		AIMLWorkbench_setPreview( StringStream(
 			"Validation issue at line ", line, ":\n", error.toUtf8().constData(),
+			"\n\nSRAI links: ", sraiCount,
+			"\nState reads/writes: ", stateTouchCount,
+			"\nUnresolved SRAI links: ", unresolvedSrai,
 			"\n\nDouble-click a category or run Validate for a focused warning." ).c_str() );
 	}
 }
@@ -708,6 +891,7 @@ void AIMLWorkbench_openFile(){
 	AIMLWorkbench_setText( text );
 	AIMLWorkbench_setStatus( StringStream( "Opened ", QFileInfo( path ).fileName().toUtf8().constData() ).c_str() );
 	AIMLWorkbench_updateDockTitle();
+	AIMLWorkbench_refreshFileList();
 }
 
 void AIMLWorkbench_formatDocument(){
@@ -799,6 +983,49 @@ R"(
 )" );
 }
 
+void AIMLWorkbench_insertLearn(){
+	AIMLWorkbench_insertSnippet(
+R"(<learn>
+  <category>
+    <pattern>NEWLY LEARNED PATTERN</pattern>
+    <template>Newly learned response.</template>
+  </category>
+</learn>)" );
+}
+
+void AIMLWorkbench_insertLoop(){
+	AIMLWorkbench_insertSnippet(
+R"(<loop>
+  <condition name="conversation_step">
+    <li value="1">Continue the scripted exchange.</li>
+    <li>Stop looping.</li>
+  </condition>
+</loop>)" );
+}
+
+void AIMLWorkbench_insertMap(){
+	AIMLWorkbench_insertSnippet(
+R"(<map name="synonyms">
+  <li><key>HELLO</key><value>HI</value></li>
+  <li><key>BYE</key><value>GOODBYE</value></li>
+</map>)" );
+}
+
+void AIMLWorkbench_insertBot(){
+	AIMLWorkbench_insertSnippet(
+R"(<template>
+  My name is <bot name="name"/> and my role is <bot name="role"/>.
+</template>)" );
+}
+
+void AIMLWorkbench_insertGetSet(){
+	AIMLWorkbench_insertSnippet(
+R"(<template>
+  <think><set name="topic">mapping</set></think>
+  Current topic is <get name="topic"/>.
+</template>)" );
+}
+
 void AIMLWorkbench_createCategoryFromTestInput(){
 	if ( g_aimlTestInput == nullptr ) {
 		return;
@@ -882,6 +1109,35 @@ void AIMLWorkbench_openCategoryFromList( QListWidgetItem* item ){
 	AIMLWorkbench_gotoLine( item->data( Qt::UserRole ).toInt() );
 }
 
+void AIMLWorkbench_openFileFromList( QListWidgetItem* item ){
+	if ( item == nullptr ) {
+		return;
+	}
+	if ( !AIMLWorkbench_promptSaveIfDirty( "Open AIML Document" ) ) {
+		return;
+	}
+
+	const QString path = item->data( Qt::UserRole ).toString();
+	QFile file( path );
+	if ( !file.open( QIODevice::ReadOnly | QIODevice::Text ) ) {
+		QMessageBox::warning( MainFrame_getWindow(), "Open AIML", StringStream( "Could not open file:\n", path.toUtf8().constData() ).c_str() );
+		return;
+	}
+
+	QTextStream in( &file );
+	in.setCodec( "UTF-8" );
+	const QString text = in.readAll();
+	file.close();
+
+	g_aimlCurrentPath = QFileInfo( path ).absoluteFilePath();
+	AIMLWorkbench_setLastDirectory( g_aimlCurrentPath );
+	AIMLWorkbench_setSetting( "LastFile", g_aimlCurrentPath );
+	AIMLWorkbench_setText( text );
+	AIMLWorkbench_setStatus( StringStream( "Opened ", QFileInfo( path ).fileName().toUtf8().constData() ).c_str() );
+	AIMLWorkbench_updateDockTitle();
+	AIMLWorkbench_refreshFileList();
+}
+
 }
 
 void AIMLWorkbench_open(){
@@ -929,6 +1185,11 @@ void AIMLWorkbench_createDock( QMainWindow* window ){
 	auto* thinkButton = new QPushButton( "Think/Set", root );
 	auto* topicButton = new QPushButton( "Topic", root );
 	auto* thatButton = new QPushButton( "That", root );
+	auto* learnButton = new QPushButton( "Learn", root );
+	auto* loopButton = new QPushButton( "Loop", root );
+	auto* mapButton = new QPushButton( "Map", root );
+	auto* botButton = new QPushButton( "Bot", root );
+	auto* getSetButton = new QPushButton( "Get/Set", root );
 	auto* fromTestButton = new QPushButton( "From Test", root );
 	snippetBar->addWidget( new QLabel( "Insert", root ) );
 	snippetBar->addWidget( categoryButton );
@@ -938,6 +1199,11 @@ void AIMLWorkbench_createDock( QMainWindow* window ){
 	snippetBar->addWidget( thinkButton );
 	snippetBar->addWidget( topicButton );
 	snippetBar->addWidget( thatButton );
+	snippetBar->addWidget( learnButton );
+	snippetBar->addWidget( loopButton );
+	snippetBar->addWidget( mapButton );
+	snippetBar->addWidget( botButton );
+	snippetBar->addWidget( getSetButton );
 	snippetBar->addWidget( fromTestButton );
 	snippetBar->addStretch();
 	layout->addLayout( snippetBar );
@@ -956,13 +1222,20 @@ void AIMLWorkbench_createDock( QMainWindow* window ){
 	auto* navPanel = new QWidget( splitter );
 	auto* navLayout = new QVBoxLayout( navPanel );
 	navLayout->setContentsMargins( 0, 0, 0, 0 );
+	navLayout->addWidget( new QLabel( "Files", navPanel ) );
+	g_aimlFileFilter = new QLineEdit( navPanel );
+	g_aimlFileFilter->setPlaceholderText( "Filter files" );
+	navLayout->addWidget( g_aimlFileFilter );
+	g_aimlFileList = new QListWidget( navPanel );
+	g_aimlFileList->setAlternatingRowColors( true );
+	navLayout->addWidget( g_aimlFileList, 1 );
 	navLayout->addWidget( new QLabel( "Categories", navPanel ) );
 	g_aimlCategoryFilter = new QLineEdit( navPanel );
 	g_aimlCategoryFilter->setPlaceholderText( "Filter patterns" );
 	navLayout->addWidget( g_aimlCategoryFilter );
 	g_aimlCategoryList = new QListWidget( navPanel );
 	g_aimlCategoryList->setAlternatingRowColors( true );
-	navLayout->addWidget( g_aimlCategoryList, 1 );
+	navLayout->addWidget( g_aimlCategoryList, 2 );
 	splitter->addWidget( navPanel );
 
 	g_aimlEditor = new QPlainTextEdit( splitter );
@@ -975,11 +1248,15 @@ void AIMLWorkbench_createDock( QMainWindow* window ){
 	auto* previewPanel = new QWidget( splitter );
 	auto* previewLayout = new QVBoxLayout( previewPanel );
 	previewLayout->setContentsMargins( 0, 0, 0, 0 );
-	previewLayout->addWidget( new QLabel( "Preview", previewPanel ) );
-	g_aimlPreview = new QPlainTextEdit( previewPanel );
+	auto* insightTabs = new QTabWidget( previewPanel );
+	g_aimlPreview = new QPlainTextEdit( insightTabs );
 	g_aimlPreview->setReadOnly( true );
 	g_aimlPreview->setPlaceholderText( "Pattern test results and validation notes appear here." );
-	previewLayout->addWidget( g_aimlPreview, 1 );
+	insightTabs->addTab( g_aimlPreview, "Preview" );
+	g_aimlFlowList = new QListWidget( insightTabs );
+	g_aimlFlowList->setAlternatingRowColors( true );
+	insightTabs->addTab( g_aimlFlowList, "Flow Map" );
+	previewLayout->addWidget( insightTabs, 1 );
 	splitter->addWidget( previewPanel );
 	splitter->setSizes( { 220, 700, 260 } );
 	layout->addWidget( splitter, 1 );
@@ -1000,12 +1277,22 @@ void AIMLWorkbench_createDock( QMainWindow* window ){
 	QObject::connect( thinkButton, &QPushButton::clicked, AIMLWorkbench_insertThink );
 	QObject::connect( topicButton, &QPushButton::clicked, AIMLWorkbench_insertTopic );
 	QObject::connect( thatButton, &QPushButton::clicked, AIMLWorkbench_insertThat );
+	QObject::connect( learnButton, &QPushButton::clicked, AIMLWorkbench_insertLearn );
+	QObject::connect( loopButton, &QPushButton::clicked, AIMLWorkbench_insertLoop );
+	QObject::connect( mapButton, &QPushButton::clicked, AIMLWorkbench_insertMap );
+	QObject::connect( botButton, &QPushButton::clicked, AIMLWorkbench_insertBot );
+	QObject::connect( getSetButton, &QPushButton::clicked, AIMLWorkbench_insertGetSet );
 	QObject::connect( fromTestButton, &QPushButton::clicked, AIMLWorkbench_createCategoryFromTestInput );
 	QObject::connect( testButton, &QPushButton::clicked, AIMLWorkbench_runTestInput );
 	QObject::connect( g_aimlTestInput, &QLineEdit::returnPressed, AIMLWorkbench_runTestInput );
+	QObject::connect( g_aimlFileFilter, &QLineEdit::textChanged, [](){ AIMLWorkbench_refreshFileList(); } );
+	QObject::connect( g_aimlFileList, &QListWidget::itemActivated, AIMLWorkbench_openFileFromList );
+	QObject::connect( g_aimlFileList, &QListWidget::itemClicked, AIMLWorkbench_openFileFromList );
 	QObject::connect( g_aimlCategoryFilter, &QLineEdit::textChanged, [](){ AIMLWorkbench_refreshCategoryList(); } );
 	QObject::connect( g_aimlCategoryList, &QListWidget::itemActivated, AIMLWorkbench_openCategoryFromList );
 	QObject::connect( g_aimlCategoryList, &QListWidget::itemClicked, AIMLWorkbench_openCategoryFromList );
+	QObject::connect( g_aimlFlowList, &QListWidget::itemActivated, AIMLWorkbench_openCategoryFromList );
+	QObject::connect( g_aimlFlowList, &QListWidget::itemClicked, AIMLWorkbench_openCategoryFromList );
 	QObject::connect( g_aimlEditor, &QPlainTextEdit::textChanged, [](){
 		AIMLWorkbench_markDirty();
 		AIMLWorkbench_refreshCategoryList();
@@ -1026,6 +1313,7 @@ void AIMLWorkbench_createDock( QMainWindow* window ){
 			AIMLWorkbench_setText( in.readAll() );
 			file.close();
 			AIMLWorkbench_setStatus( StringStream( "Loaded ", QFileInfo( lastFile ).fileName().toUtf8().constData() ).c_str() );
+			AIMLWorkbench_refreshFileList();
 		}
 		else{
 			AIMLWorkbench_newDocument();
@@ -1034,6 +1322,7 @@ void AIMLWorkbench_createDock( QMainWindow* window ){
 	else{
 		AIMLWorkbench_newDocument();
 	}
+	AIMLWorkbench_refreshFileList();
 }
 
 void AIMLWorkbench_stopAndRelease(){
@@ -1044,8 +1333,11 @@ void AIMLWorkbench_stopAndRelease(){
 	g_aimlEditor = nullptr;
 	g_aimlCategoryList = nullptr;
 	g_aimlCategoryFilter = nullptr;
+	g_aimlFileList = nullptr;
+	g_aimlFileFilter = nullptr;
 	g_aimlTestInput = nullptr;
 	g_aimlPreview = nullptr;
+	g_aimlFlowList = nullptr;
 	g_aimlStatusLabel = nullptr;
 	g_aimlHighlighter = nullptr;
 	g_aimlCurrentPath.clear();
