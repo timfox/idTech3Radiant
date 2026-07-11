@@ -969,6 +969,7 @@ $(INSTALLDIR)/radiant.$(EXE): \
 	radiant/layerswindow.o \
 	radiant/mainframe.o \
 	radiant/mainframe_commands.o \
+	radiant/cli.o \
 	radiant/main.o \
 	radiant/map.o \
 	radiant/navmesh.o \
@@ -1163,8 +1164,10 @@ $(INSTALLDIR)/modules/imagepng.$(DLL): \
 
 $(INSTALLDIR)/modules/mapq3.$(DLL): CPPFLAGS_EXTRA := -Ilibs -Iinclude
 $(INSTALLDIR)/modules/mapq3.$(DLL): \
+	plugins/mapq3/maparse.o \
 	plugins/mapq3/parse.o \
 	plugins/mapq3/plugin.o \
+	plugins/mapq3/usdparse.o \
 	plugins/mapq3/write.o \
 
 $(INSTALLDIR)/modules/mapxml.$(DLL): LIBS_EXTRA := $(LIBS_XML) $(LIBS_GLIB)
@@ -1182,6 +1185,7 @@ endif
 $(INSTALLDIR)/modules/assmodel.$(DLL): LIBS_EXTRA := $(LIBS_ASSIMP)
 $(INSTALLDIR)/modules/assmodel.$(DLL): CPPFLAGS_EXTRA := -Ilibs -Iinclude $(CPPFLAGS_ASSIMP) $(CPPFLAGS_QTGUI)
 $(INSTALLDIR)/modules/assmodel.$(DLL): \
+	plugins/assmodel/mayaascii.o \
 	plugins/assmodel/mdlimage.o \
 	plugins/assmodel/model.o \
 	plugins/assmodel/plugin.o \

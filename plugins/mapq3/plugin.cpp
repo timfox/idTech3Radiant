@@ -36,6 +36,8 @@
 #include "modulesystem/singletonmodule.h"
 
 #include "parse.h"
+#include "maparse.h"
+#include "usdparse.h"
 #include "write.h"
 
 
@@ -236,6 +238,9 @@ public:
 	MapQ3API(){
 		GlobalFiletypesModule::getTable().addType( Type::Name, Name, filetype_t( "quake3 maps", "*.map", true, true, true ) );
 		GlobalFiletypesModule::getTable().addType( Type::Name, Name, filetype_t( "quake3 region", "*.reg", true, true, true ) );
+		GlobalFiletypesModule::getTable().addType( Type::Name, Name, filetype_t( "maya ascii scene", "*.ma", true, true, false ) );
+		GlobalFiletypesModule::getTable().addType( Type::Name, Name, filetype_t( "USD ascii scene", "*.usda", true, true, false ) );
+		GlobalFiletypesModule::getTable().addType( Type::Name, Name, filetype_t( "USD scene", "*.usd", true, true, false ) );
 		GlobalFiletypesModule::getTable().addType( Type::Name, Name, filetype_t( "quake3 compiled maps", "*.bsp", false, true, false ) );
 	}
 	MapFormat* getTable(){
@@ -291,10 +296,103 @@ public:
 	}
 
 	void readGraph( scene::Node& root, TextInputStream& inputStream, EntityCreator& entityTable ) const override {
-		Tokeniser& tokeniser = GlobalScripLibModule::getTable().m_pfnNewMapTokeniser( inputStream );
-		m_formatDetected = false;
-		Map_Read( root, tokeniser, entityTable, *this );
-		tokeniser.release();
+		char peekBuf[256];
+		std::size_t peekLen = inputStream.read( peekBuf, sizeof( peekBuf ) - 1 );
+		peekBuf[peekLen] = '\0';
+
+		bool isMaya = ( strstr( peekBuf, "//Maya" ) != nullptr
+		             || strstr( peekBuf, "requires maya" ) != nullptr
+		             || strstr( peekBuf, "createNode" ) != nullptr );
+
+		bool isUsd = ( strstr( peekBuf, "#usda" ) != nullptr
+		            || strstr( peekBuf, "def Xform" ) != nullptr
+		            || strstr( peekBuf, "def Mesh" ) != nullptr
+		            || strstr( peekBuf, "def Scope" ) != nullptr );
+
+		if ( isUsd ) {
+			std::string content( peekBuf, peekLen );
+			char buf[65536];
+			for (;;){
+				std::size_t n = inputStream.read( buf, sizeof( buf ) );
+				if ( n == 0 ) break;
+				content.append( buf, n );
+			}
+
+			class MemTextInputStream2 : public TextInputStream {
+				const char* m_data;
+				std::size_t m_size;
+				std::size_t m_pos;
+			public:
+				MemTextInputStream2( const char* data, std::size_t size ) : m_data( data ), m_size( size ), m_pos( 0 ){}
+				std::size_t read( char* buffer, std::size_t length ) override {
+					std::size_t avail = m_size - m_pos;
+					std::size_t toRead = ( length < avail ) ? length : avail;
+					memcpy( buffer, m_data + m_pos, toRead );
+					m_pos += toRead;
+					return toRead;
+				}
+			} memStream( content.c_str(), content.size() );
+
+			UsdAscii_Read( root, memStream, entityTable );
+		}
+		else if ( isMaya ) {
+			std::string content( peekBuf, peekLen );
+			char buf[65536];
+			for (;;){
+				std::size_t n = inputStream.read( buf, sizeof( buf ) );
+				if ( n == 0 ) break;
+				content.append( buf, n );
+			}
+
+			class MemTextInputStream : public TextInputStream {
+				const char* m_data;
+				std::size_t m_size;
+				std::size_t m_pos;
+			public:
+				MemTextInputStream( const char* data, std::size_t size ) : m_data( data ), m_size( size ), m_pos( 0 ){}
+				std::size_t read( char* buffer, std::size_t length ) override {
+					std::size_t avail = m_size - m_pos;
+					std::size_t toRead = ( length < avail ) ? length : avail;
+					memcpy( buffer, m_data + m_pos, toRead );
+					m_pos += toRead;
+					return toRead;
+				}
+			} memStream( content.c_str(), content.size() );
+
+			MayaAscii_Read( root, memStream, entityTable );
+		}
+		else {
+			class PrependTextInputStream : public TextInputStream {
+				const char* m_prefix;
+				std::size_t m_prefixLen;
+				std::size_t m_prefixPos;
+				TextInputStream& m_source;
+			public:
+				PrependTextInputStream( const char* prefix, std::size_t len, TextInputStream& source )
+					: m_prefix( prefix ), m_prefixLen( len ), m_prefixPos( 0 ), m_source( source ){}
+				std::size_t read( char* buffer, std::size_t length ) override {
+					std::size_t total = 0;
+					if ( m_prefixPos < m_prefixLen ){
+						std::size_t avail = m_prefixLen - m_prefixPos;
+						std::size_t n = ( length < avail ) ? length : avail;
+						memcpy( buffer, m_prefix + m_prefixPos, n );
+						m_prefixPos += n;
+						total += n;
+						length -= n;
+						buffer += n;
+					}
+					if ( length > 0 ){
+						total += m_source.read( buffer, length );
+					}
+					return total;
+				}
+			} prependStream( peekBuf, peekLen, inputStream );
+
+			Tokeniser& tokeniser = GlobalScripLibModule::getTable().m_pfnNewMapTokeniser( prependStream );
+			m_formatDetected = false;
+			Map_Read( root, tokeniser, entityTable, *this );
+			tokeniser.release();
+		}
 	}
 	void writeGraph( scene::Node& root, GraphTraversalFunc traverse, TextOutputStream& outputStream ) const override {
 		TokenWriter& writer = GlobalScripLibModule::getTable().m_pfnNewSimpleTokenWriter( outputStream );
@@ -641,7 +739,6 @@ public:
 typedef SingletonModule<MapVMFAPI, MapDependencies> MapVMFModule;
 
 MapVMFModule g_MapVMFModule;
-
 
 
 extern "C" void RADIANT_DLLEXPORT Radiant_RegisterModules( ModuleServer& server ){

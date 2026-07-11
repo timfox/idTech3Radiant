@@ -1294,6 +1294,7 @@ public:
 		default:
 			__builtin_unreachable();
 		}
+		return PatchEdgeIter( *this, eRowForward );
 	}
 };
 

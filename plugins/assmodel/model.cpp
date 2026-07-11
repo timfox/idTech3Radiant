@@ -46,6 +46,7 @@
 #include ASSIMP_INCLUDE(assimp/mesh.h)
 #include "os/path.h"
 #include "stream/stringstream.h"
+#include "mayaascii.h"
 
 class VectorLightList final : public LightList
 {
@@ -95,6 +96,15 @@ public:
 	}
 	PicoSurface( const AssScene scene, const aiMesh* mesh ){
 		CopyPicoSurface( scene, mesh );
+		CaptureShader();
+	}
+	PicoSurface( const MayaMesh& maya ){
+		m_shader = maya.shader.c_str();
+		m_vertices.resize( maya.vertices.size() );
+		std::copy( maya.vertices.begin(), maya.vertices.end(), m_vertices.begin() );
+		m_indices.resize( maya.indices.size() );
+		std::copy( maya.indices.begin(), maya.indices.end(), m_indices.begin() );
+		UpdateAABB();
 		CaptureShader();
 	}
 	~PicoSurface(){
@@ -380,6 +390,14 @@ public:
 		m_aabb_local = AABB();
 		CopyPicoModel( scene, scene.m_scene->mRootNode );
 	}
+	PicoModel( const std::vector<MayaMesh>& meshes ){
+		m_aabb_local = AABB();
+		for ( const auto& mesh : meshes ) {
+			auto *surface = new PicoSurface( mesh );
+			aabb_extend_by_aabb_safe( m_aabb_local, surface->localAABB() );
+			m_surfaces.push_back( surface );
+		}
+	}
 	~PicoModel(){
 		for ( auto *surf : m_surfaces )
 			delete surf;
@@ -637,6 +655,8 @@ public:
 	}
 	PicoModelNode( const AssScene scene ) : m_node( this, this, StaticTypeCasts::instance().get(), nullptr ), m_picomodel( scene ){
 	}
+	PicoModelNode( const std::vector<MayaMesh>& meshes ) : m_node( this, this, StaticTypeCasts::instance().get(), nullptr ), m_picomodel( meshes ){
+	}
 
 	void release() override {
 		delete this;
@@ -693,4 +713,16 @@ scene::Node& loadPicoModel( Assimp::Importer& importer, ArchiveFile& file ){
 	else{
 		return ( new PicoModelNode() )->node();
 	}
+}
+
+scene::Node& loadMayaAsciiModel( ArchiveFile& file ){
+	const std::size_t size = file.size();
+	std::vector<char> buffer( size );
+	file.getInputStream().read( reinterpret_cast<InputStream::byte_type*>( buffer.data() ), size );
+
+	std::vector<MayaMesh> meshes;
+	if ( parseMayaAscii( buffer.data(), size, meshes ) ) {
+		return ( new PicoModelNode( meshes ) )->node();
+	}
+	return ( new PicoModelNode() )->node();
 }

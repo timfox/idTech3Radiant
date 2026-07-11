@@ -487,6 +487,7 @@ namespace
 			m_ignoreSlider = true;
 			m_slider->setValue( sliderValue );
 			m_ignoreSlider = false;
+			applyValue( value );
 		}
 
 		double parseKeyValue() const {

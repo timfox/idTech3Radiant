@@ -1549,7 +1549,8 @@ EMessageBoxReturn BuildMenuDialog_construct( ProjectList& projectList ){
 						XMLStreamWriter writer( stream ); // destructor dumps to stream
 						tool.exportXML( writer );
 					}
-					item->setData( Qt::ItemDataRole::UserRole, strchr( stream, '>' ) + 1 ); // skip xml header
+					const char* gt = strchr( stream, '>' );
+				item->setData( Qt::ItemDataRole::UserRole, gt != nullptr ? gt + 1 : stream.c_str() );
 				}
 				table->insertRow( table->rowCount() );
 				table->setItem( table->rowCount() - 1, 0, new QTableWidgetItem( LAST_ITER_STRING ) );
@@ -1807,7 +1808,7 @@ namespace
 
 CopiedString g_buildMenu;
 
-const char* g_buildMenuFullPah(){
+const char* g_buildMenuFullPath(){
 	if( path_is_absolute( g_buildMenu.c_str() ) )
 		return g_buildMenu.c_str();
 
@@ -1824,10 +1825,10 @@ void LoadBuildMenu(){
 		return build_commands_parse( filename ) || build_commands_parse_compat( filename );
 	};
 
-	if ( g_buildMenu.empty() || !tryParse( g_buildMenuFullPah() ) ) {
+	if ( g_buildMenu.empty() || !tryParse( g_buildMenuFullPath() ) ) {
 		if( !string_equal_nocase( g_buildMenu.c_str(), "build_menu.xml" ) ){
 			g_buildMenu = "build_menu.xml";
-			if( tryParse( g_buildMenuFullPah() ) )
+			if( tryParse( g_buildMenuFullPath() ) )
 				return;
 		}
 		{
@@ -1866,7 +1867,7 @@ void LoadBuildMenu(){
 void SaveBuildMenu(){
 	if ( g_build_changed ) {
 		g_build_changed = false;
-		build_commands_write( g_buildMenuFullPah() );
+		build_commands_write( g_buildMenuFullPath() );
 	}
 }
 

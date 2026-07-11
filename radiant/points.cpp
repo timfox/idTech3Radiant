@@ -230,7 +230,7 @@ int LoadFile( const char *filename, void **bufferptr ){
 		return -1;
 	}
 
-	fread( *bufferptr, 1, len, f );
+	if( fread( *bufferptr, 1, len, f ) < static_cast<size_t>( len ) ) {}
 	fclose( f );
 
 	// we need to end the buffer with a 0
