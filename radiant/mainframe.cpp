@@ -1182,6 +1182,22 @@ QLabel* g_exp_selectedComponentsLabel{};
 QLabel* g_exp_selectionTypeLabel{};
 QLabel* g_exp_selectionBoundsLabel{};
 QLabel* g_exp_selectionShaderLabel{};
+QGroupBox* g_exp_entityGroup{};
+QLabel* g_exp_entityClassLabel{};
+QLineEdit* g_exp_entityNameEdit{};
+QLineEdit* g_exp_entityTargetnameEdit{};
+QLineEdit* g_exp_entityTargetEdit{};
+QLineEdit* g_exp_entitySoundEdit{};
+QLineEdit* g_exp_entityModelEdit{};
+QGroupBox* g_exp_worldGroup{};
+QLineEdit* g_exp_worldMessageEdit{};
+QLineEdit* g_exp_worldMusicEdit{};
+QLineEdit* g_exp_worldGravityEdit{};
+QLineEdit* g_exp_worldColorEdit{};
+QDoubleSpinBox* g_exp_worldMinlight{};
+QGroupBox* g_exp_gravityGroup{};
+QLineEdit* g_exp_gravityDirectionEdit{};
+QLineEdit* g_exp_gravityMagnitudeEdit{};
 QLineEdit* g_exp_shaderEdit{};
 QLineEdit* g_exp_skyboxHDREdit{};
 QLineEdit* g_exp_pbrAlbedo{};
@@ -2373,6 +2389,77 @@ static QString Experimental_selectedNodeShader(){
 	return {};
 }
 
+static scene::Node* Experimental_worldspawnNode(){
+	return Map_FindWorldspawn( g_map );
+}
+
+static Entity* Experimental_worldspawnEntity(){
+	scene::Node* worldNode = Experimental_worldspawnNode();
+	return worldNode != nullptr ? Node_getEntity( *worldNode ) : nullptr;
+}
+
+static Entity* Experimental_selectedEntityForInspector(){
+	if ( GlobalSelectionSystem().countSelected() != 1 ) {
+		return nullptr;
+	}
+
+	scene::Instance& instance = GlobalSelectionSystem().firstSelected();
+	Entity* entity = Node_getEntity( instance.path().top() );
+	if ( entity == nullptr && instance.path().size() > 1 ) {
+		entity = Node_getEntity( instance.path().parent() );
+	}
+	return entity;
+}
+
+static bool Experimental_selectedEntityClassPrefix( const char* prefix ){
+	Entity* entity = Experimental_selectedEntityForInspector();
+	return entity != nullptr && string_equal_prefix_nocase( entity->getClassName(), prefix );
+}
+
+static void Experimental_setLineEditValue( QLineEdit* edit, const QString& value ){
+	if ( edit == nullptr ) {
+		return;
+	}
+	edit->blockSignals( true );
+	edit->setText( value );
+	edit->blockSignals( false );
+}
+
+static void Experimental_setSpinValue( QDoubleSpinBox* spin, double value ){
+	if ( spin == nullptr ) {
+		return;
+	}
+	spin->blockSignals( true );
+	spin->setValue( value );
+	spin->blockSignals( false );
+}
+
+static void Experimental_setSelectedEntityKeyValue( const char* key, const QString& value ){
+	Entity* entity = Experimental_selectedEntityForInspector();
+	if ( entity == nullptr ) {
+		return;
+	}
+
+	const QByteArray utf8 = value.trimmed().toUtf8();
+	const auto command = StringStream( "entitySetKeyValue -key ", Quoted( key ), " -value ", Quoted( utf8.constData() ) );
+	UndoableCommand undo( command );
+	Scene_EntitySetKeyValue_Selected( key, utf8.constData() );
+	SceneChangeNotify();
+}
+
+static void Experimental_setWorldspawnKeyValue( const char* key, const QString& value ){
+	Entity* worldspawn = Experimental_worldspawnEntity();
+	if ( worldspawn == nullptr ) {
+		return;
+	}
+
+	const QByteArray utf8 = value.trimmed().toUtf8();
+	const auto command = StringStream( "entitySetWorldspawnKeyValue -key ", Quoted( key ), " -value ", Quoted( utf8.constData() ) );
+	UndoableCommand undo( command );
+	worldspawn->setKeyValue( key, utf8.constData() );
+	SceneChangeNotify();
+}
+
 static QString Experimental_selectionTypeSummary(){
 	const std::size_t selectedCount = GlobalSelectionSystem().countSelected();
 	const std::size_t selectedComponents = GlobalSelectionSystem().countSelectedComponents();
@@ -2412,6 +2499,47 @@ static QString Experimental_selectionBoundsSummary(){
 		.arg( size.x(), 0, 'f', 1 )
 		.arg( size.y(), 0, 'f', 1 )
 		.arg( size.z(), 0, 'f', 1 );
+}
+
+static void Experimental_refreshEntityPanels(){
+	Entity* entity = Experimental_selectedEntityForInspector();
+	const bool hasEntity = entity != nullptr;
+	if ( g_exp_entityGroup != nullptr ) {
+		g_exp_entityGroup->setVisible( hasEntity );
+	}
+	if ( hasEntity ) {
+		if ( g_exp_entityClassLabel != nullptr ) {
+			g_exp_entityClassLabel->setText( entity->getClassName() );
+		}
+		Experimental_setLineEditValue( g_exp_entityNameEdit, entity->getKeyValue( "name" ) );
+		Experimental_setLineEditValue( g_exp_entityTargetnameEdit, entity->getKeyValue( "targetname" ) );
+		Experimental_setLineEditValue( g_exp_entityTargetEdit, entity->getKeyValue( "target" ) );
+		Experimental_setLineEditValue( g_exp_entitySoundEdit, entity->getKeyValue( "sound" ) );
+		Experimental_setLineEditValue( g_exp_entityModelEdit, entity->getKeyValue( "model" ) );
+	}
+
+	Entity* worldspawn = Experimental_worldspawnEntity();
+	if ( g_exp_worldGroup != nullptr ) {
+		g_exp_worldGroup->setVisible( worldspawn != nullptr );
+	}
+	if ( worldspawn != nullptr ) {
+		Experimental_setLineEditValue( g_exp_worldMessageEdit, worldspawn->getKeyValue( "message" ) );
+		Experimental_setLineEditValue( g_exp_worldMusicEdit, worldspawn->getKeyValue( "music" ) );
+		Experimental_setLineEditValue( g_exp_worldGravityEdit, worldspawn->getKeyValue( "gravity" ) );
+		Experimental_setLineEditValue( g_exp_worldColorEdit, worldspawn->getKeyValue( "_color" ) );
+		float minlight = 0;
+		string_parse_float( worldspawn->getKeyValue( "_minlight" ), minlight );
+		Experimental_setSpinValue( g_exp_worldMinlight, minlight );
+	}
+
+	const bool isGravityVolume = Experimental_selectedEntityClassPrefix( "trigger_gravity" );
+	if ( g_exp_gravityGroup != nullptr ) {
+		g_exp_gravityGroup->setVisible( isGravityVolume );
+	}
+	if ( isGravityVolume && entity != nullptr ) {
+		Experimental_setLineEditValue( g_exp_gravityDirectionEdit, entity->getKeyValue( "gravity_dir" ) );
+		Experimental_setLineEditValue( g_exp_gravityMagnitudeEdit, entity->getKeyValue( "gravity_magnitude" ) );
+	}
 }
 
 static void Experimental_pullShaderFromSelection(){
@@ -2534,6 +2662,7 @@ void Experimental_refreshSelection(){
 		g_exp_shaderEdit->setEnabled( hasSelection );
 		g_exp_shaderEdit->setPlaceholderText( hasSelection ? "textures/common/caulk" : "Select something to edit shader" );
 	}
+	Experimental_refreshEntityPanels();
 	Experimental_refreshTransform();
 }
 
@@ -3907,6 +4036,76 @@ void Experimental_createDocks( QMainWindow* window ){
 		QObject::connect( g_exp_shaderEdit, &QLineEdit::returnPressed, [](){ Experimental_applySelectedShader(); } );
 		vbox->addLayout( form );
 
+		g_exp_entityGroup = new QGroupBox( "Entity", root );
+		{
+			auto* entityForm = new QFormLayout( g_exp_entityGroup );
+			g_exp_entityClassLabel = new QLabel( "None", g_exp_entityGroup );
+			g_exp_entityNameEdit = new QLineEdit( g_exp_entityGroup );
+			g_exp_entityTargetnameEdit = new QLineEdit( g_exp_entityGroup );
+			g_exp_entityTargetEdit = new QLineEdit( g_exp_entityGroup );
+			g_exp_entitySoundEdit = new QLineEdit( g_exp_entityGroup );
+			g_exp_entityModelEdit = new QLineEdit( g_exp_entityGroup );
+			g_exp_entityNameEdit->setClearButtonEnabled( true );
+			g_exp_entityTargetnameEdit->setClearButtonEnabled( true );
+			g_exp_entityTargetEdit->setClearButtonEnabled( true );
+			g_exp_entitySoundEdit->setClearButtonEnabled( true );
+			g_exp_entityModelEdit->setClearButtonEnabled( true );
+			entityForm->addRow( "Classname", g_exp_entityClassLabel );
+			entityForm->addRow( "Name", g_exp_entityNameEdit );
+			entityForm->addRow( "Target Name", g_exp_entityTargetnameEdit );
+			entityForm->addRow( "Target", g_exp_entityTargetEdit );
+			entityForm->addRow( "Sound", g_exp_entitySoundEdit );
+			entityForm->addRow( "Model", g_exp_entityModelEdit );
+			QObject::connect( g_exp_entityNameEdit, &QLineEdit::editingFinished, [](){ Experimental_setSelectedEntityKeyValue( "name", g_exp_entityNameEdit->text() ); } );
+			QObject::connect( g_exp_entityTargetnameEdit, &QLineEdit::editingFinished, [](){ Experimental_setSelectedEntityKeyValue( "targetname", g_exp_entityTargetnameEdit->text() ); } );
+			QObject::connect( g_exp_entityTargetEdit, &QLineEdit::editingFinished, [](){ Experimental_setSelectedEntityKeyValue( "target", g_exp_entityTargetEdit->text() ); } );
+			QObject::connect( g_exp_entitySoundEdit, &QLineEdit::editingFinished, [](){ Experimental_setSelectedEntityKeyValue( "sound", g_exp_entitySoundEdit->text() ); } );
+			QObject::connect( g_exp_entityModelEdit, &QLineEdit::editingFinished, [](){ Experimental_setSelectedEntityKeyValue( "model", g_exp_entityModelEdit->text() ); } );
+		}
+		vbox->addWidget( g_exp_entityGroup );
+
+		g_exp_worldGroup = new QGroupBox( "World Settings", root );
+		{
+			auto* worldForm = new QFormLayout( g_exp_worldGroup );
+			g_exp_worldMessageEdit = new QLineEdit( g_exp_worldGroup );
+			g_exp_worldMusicEdit = new QLineEdit( g_exp_worldGroup );
+			g_exp_worldGravityEdit = new QLineEdit( g_exp_worldGroup );
+			g_exp_worldColorEdit = new QLineEdit( g_exp_worldGroup );
+			g_exp_worldMinlight = new QDoubleSpinBox( g_exp_worldGroup );
+			g_exp_worldMessageEdit->setClearButtonEnabled( true );
+			g_exp_worldMusicEdit->setClearButtonEnabled( true );
+			g_exp_worldGravityEdit->setClearButtonEnabled( true );
+			g_exp_worldColorEdit->setClearButtonEnabled( true );
+			g_exp_worldMinlight->setRange( 0, 1 );
+			g_exp_worldMinlight->setSingleStep( 0.05 );
+			g_exp_worldMinlight->setDecimals( 2 );
+			worldForm->addRow( "Message", g_exp_worldMessageEdit );
+			worldForm->addRow( "Music", g_exp_worldMusicEdit );
+			worldForm->addRow( "Gravity", g_exp_worldGravityEdit );
+			worldForm->addRow( "Ambient Color", g_exp_worldColorEdit );
+			worldForm->addRow( "Min Light", g_exp_worldMinlight );
+			QObject::connect( g_exp_worldMessageEdit, &QLineEdit::editingFinished, [](){ Experimental_setWorldspawnKeyValue( "message", g_exp_worldMessageEdit->text() ); } );
+			QObject::connect( g_exp_worldMusicEdit, &QLineEdit::editingFinished, [](){ Experimental_setWorldspawnKeyValue( "music", g_exp_worldMusicEdit->text() ); } );
+			QObject::connect( g_exp_worldGravityEdit, &QLineEdit::editingFinished, [](){ Experimental_setWorldspawnKeyValue( "gravity", g_exp_worldGravityEdit->text() ); } );
+			QObject::connect( g_exp_worldColorEdit, &QLineEdit::editingFinished, [](){ Experimental_setWorldspawnKeyValue( "_color", g_exp_worldColorEdit->text() ); } );
+			QObject::connect( g_exp_worldMinlight, &QDoubleSpinBox::editingFinished, [](){ Experimental_setWorldspawnKeyValue( "_minlight", QString::number( g_exp_worldMinlight->value(), 'f', 2 ) ); } );
+		}
+		vbox->addWidget( g_exp_worldGroup );
+
+		g_exp_gravityGroup = new QGroupBox( "Gravity Volume", root );
+		{
+			auto* gravityForm = new QFormLayout( g_exp_gravityGroup );
+			g_exp_gravityDirectionEdit = new QLineEdit( g_exp_gravityGroup );
+			g_exp_gravityMagnitudeEdit = new QLineEdit( g_exp_gravityGroup );
+			g_exp_gravityDirectionEdit->setClearButtonEnabled( true );
+			g_exp_gravityMagnitudeEdit->setClearButtonEnabled( true );
+			gravityForm->addRow( "Direction", g_exp_gravityDirectionEdit );
+			gravityForm->addRow( "Magnitude", g_exp_gravityMagnitudeEdit );
+			QObject::connect( g_exp_gravityDirectionEdit, &QLineEdit::editingFinished, [](){ Experimental_setSelectedEntityKeyValue( "gravity_dir", g_exp_gravityDirectionEdit->text() ); } );
+			QObject::connect( g_exp_gravityMagnitudeEdit, &QLineEdit::editingFinished, [](){ Experimental_setSelectedEntityKeyValue( "gravity_magnitude", g_exp_gravityMagnitudeEdit->text() ); } );
+		}
+		vbox->addWidget( g_exp_gravityGroup );
+
 		auto* pbrGroup = new QGroupBox( "PBR Material", root );
 		auto* pbrForm = new QFormLayout( pbrGroup );
 		g_exp_pbrAlbedo = new QLineEdit( root );
@@ -4342,6 +4541,22 @@ void Experimental_destroyDocks(){
 	g_exp_selectionTypeLabel = nullptr;
 	g_exp_selectionBoundsLabel = nullptr;
 	g_exp_selectionShaderLabel = nullptr;
+	g_exp_entityGroup = nullptr;
+	g_exp_entityClassLabel = nullptr;
+	g_exp_entityNameEdit = nullptr;
+	g_exp_entityTargetnameEdit = nullptr;
+	g_exp_entityTargetEdit = nullptr;
+	g_exp_entitySoundEdit = nullptr;
+	g_exp_entityModelEdit = nullptr;
+	g_exp_worldGroup = nullptr;
+	g_exp_worldMessageEdit = nullptr;
+	g_exp_worldMusicEdit = nullptr;
+	g_exp_worldGravityEdit = nullptr;
+	g_exp_worldColorEdit = nullptr;
+	g_exp_worldMinlight = nullptr;
+	g_exp_gravityGroup = nullptr;
+	g_exp_gravityDirectionEdit = nullptr;
+	g_exp_gravityMagnitudeEdit = nullptr;
 	g_exp_shaderEdit = nullptr;
 	g_exp_pbrAlbedo = nullptr;
 	g_exp_pbrNormal = nullptr;
