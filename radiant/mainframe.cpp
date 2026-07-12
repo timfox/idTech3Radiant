@@ -1197,6 +1197,8 @@ QLabel* g_exp_selectedComponentsLabel{};
 QLabel* g_exp_selectionTypeLabel{};
 QLabel* g_exp_selectionBoundsLabel{};
 QLabel* g_exp_selectionShaderLabel{};
+QLabel* g_exp_selectionModeLabel{};
+QLabel* g_exp_manipulatorModeLabel{};
 QLabel* g_exp_viewportStatusLabel{};
 QComboBox* g_exp_gridSizeCombo{};
 QGroupBox* g_exp_entityGroup{};
@@ -1215,6 +1217,11 @@ QDoubleSpinBox* g_exp_worldMinlight{};
 QGroupBox* g_exp_gravityGroup{};
 QLineEdit* g_exp_gravityDirectionEdit{};
 QLineEdit* g_exp_gravityMagnitudeEdit{};
+QGroupBox* g_exp_physicsGroup{};
+QDoubleSpinBox* g_exp_physicsSize{};
+QDoubleSpinBox* g_exp_physicsMass{};
+QSpinBox* g_exp_physicsMaterial{};
+QDoubleSpinBox* g_exp_physicsHeight{};
 QLineEdit* g_exp_shaderEdit{};
 QLineEdit* g_exp_skyboxHDREdit{};
 QLineEdit* g_exp_pbrAlbedo{};
@@ -2476,6 +2483,24 @@ static void Experimental_setSpinValue( QDoubleSpinBox* spin, double value ){
 	spin->blockSignals( false );
 }
 
+static void Experimental_setSpinValue( QSpinBox* spin, int value ){
+	if ( spin == nullptr ) {
+		return;
+	}
+	spin->blockSignals( true );
+	spin->setValue( value );
+	spin->blockSignals( false );
+}
+
+static bool Experimental_selectedEntityIsPhysics(){
+	return Experimental_selectedEntityClassPrefix( "misc_phys_" );
+}
+
+static bool Experimental_selectedEntityClassnameEquals( const char* classname ){
+	Entity* entity = Experimental_selectedEntityForInspector();
+	return entity != nullptr && classname_equal( entity->getClassName(), classname );
+}
+
 static void Experimental_setSelectedEntityKeyValue( const char* key, const QString& value ){
 	Entity* entity = Experimental_selectedEntityForInspector();
 	if ( entity == nullptr ) {
@@ -2581,6 +2606,42 @@ static void Experimental_refreshEntityPanels(){
 	if ( isGravityVolume && entity != nullptr ) {
 		Experimental_setLineEditValue( g_exp_gravityDirectionEdit, entity->getKeyValue( "gravity_dir" ) );
 		Experimental_setLineEditValue( g_exp_gravityMagnitudeEdit, entity->getKeyValue( "gravity_magnitude" ) );
+	}
+
+	const bool isPhysicsEntity = Experimental_selectedEntityIsPhysics();
+	if ( g_exp_physicsGroup != nullptr ) {
+		g_exp_physicsGroup->setVisible( isPhysicsEntity );
+	}
+	if ( isPhysicsEntity && entity != nullptr ) {
+		const bool usesSize = !Experimental_selectedEntityClassnameEquals( "misc_phys_ragdoll" );
+		const bool usesMass = Experimental_selectedEntityClassnameEquals( "misc_phys_box" )
+			|| Experimental_selectedEntityClassnameEquals( "misc_phys_sphere" )
+			|| Experimental_selectedEntityClassnameEquals( "misc_phys_slider" )
+			|| Experimental_selectedEntityClassnameEquals( "misc_phys_ragdoll" );
+		const bool usesHeight = Experimental_selectedEntityClassnameEquals( "misc_phys_slider" );
+
+		float size = 0;
+		float mass = 0;
+		float height = 0;
+		string_parse_float( entity->getKeyValue( "_size" ), size );
+		string_parse_float( entity->getKeyValue( "mass" ), mass );
+		string_parse_float( entity->getKeyValue( "height" ), height );
+
+		if ( g_exp_physicsSize != nullptr ) {
+			g_exp_physicsSize->setEnabled( usesSize );
+			Experimental_setSpinValue( g_exp_physicsSize, size > 0 ? size : 64 );
+		}
+		if ( g_exp_physicsMass != nullptr ) {
+			g_exp_physicsMass->setEnabled( usesMass );
+			Experimental_setSpinValue( g_exp_physicsMass, mass > 0 ? mass : 20 );
+		}
+		if ( g_exp_physicsMaterial != nullptr ) {
+			Experimental_setSpinValue( g_exp_physicsMaterial, atoi( entity->getKeyValue( "material" ) ) );
+		}
+		if ( g_exp_physicsHeight != nullptr ) {
+			g_exp_physicsHeight->setEnabled( usesHeight );
+			Experimental_setSpinValue( g_exp_physicsHeight, height > 0 ? height : 96 );
+		}
 	}
 }
 
@@ -2695,6 +2756,15 @@ void Experimental_refreshSelection(){
 	}
 	if ( g_exp_selectionBoundsLabel != nullptr ) {
 		g_exp_selectionBoundsLabel->setText( Experimental_selectionBoundsSummary() );
+	}
+	if ( g_exp_selectionModeLabel != nullptr ) {
+		g_exp_selectionModeLabel->setText( StringStream(
+			Experimental_selectionModeName( GlobalSelectionSystem().Mode() ),
+			" / ",
+			Experimental_componentModeName( GlobalSelectionSystem().ComponentMode() ) ).c_str() );
+	}
+	if ( g_exp_manipulatorModeLabel != nullptr ) {
+		g_exp_manipulatorModeLabel->setText( Experimental_manipulatorModeName( GlobalSelectionSystem().ManipulatorMode() ) );
 	}
 	if ( g_exp_selectionShaderLabel != nullptr ) {
 		const QString shader = Experimental_selectedNodeShader();
@@ -4933,6 +5003,8 @@ void Experimental_createDocks( QMainWindow* window ){
 		g_exp_selectionTypeLabel = new QLabel( "Nothing selected", root );
 		g_exp_selectionBoundsLabel = new QLabel( "No bounds", root );
 		g_exp_selectionShaderLabel = new QLabel( "None", root );
+		g_exp_selectionModeLabel = new QLabel( "entity / default", root );
+		g_exp_manipulatorModeLabel = new QLabel( "translate", root );
 		g_exp_shaderEdit = new QLineEdit( root );
 		auto* applyButton = new QPushButton( "Apply Shader", root );
 		auto* pullShaderButton = new QPushButton( "Use Selected", root );
@@ -4947,6 +5019,8 @@ void Experimental_createDocks( QMainWindow* window ){
 		form->addRow( "Selected Components", g_exp_selectedComponentsLabel );
 		form->addRow( "Type", g_exp_selectionTypeLabel );
 		form->addRow( "Bounds", g_exp_selectionBoundsLabel );
+		form->addRow( "Selection Mode", g_exp_selectionModeLabel );
+		form->addRow( "Manipulator", g_exp_manipulatorModeLabel );
 		form->addRow( "Current Material", g_exp_selectionShaderLabel );
 		form->addRow( "Shader", g_exp_shaderEdit );
 		form->addRow( "", shaderButtons );
@@ -4988,6 +5062,36 @@ void Experimental_createDocks( QMainWindow* window ){
 			QObject::connect( hollowButton, &QPushButton::clicked, [](){ Experimental_triggerCommand( "MakeHollow" ); } );
 		}
 		vbox->addWidget( quickActionsGroup );
+
+		auto* toolActionsGroup = new QGroupBox( "Tools & Pivot", root );
+		{
+			auto* toolGrid = new QGridLayout( toolActionsGroup );
+			auto* translateButton = new QPushButton( "Translate", toolActionsGroup );
+			auto* rotateButton = new QPushButton( "Rotate", toolActionsGroup );
+			auto* scaleButton = new QPushButton( "Scale", toolActionsGroup );
+			auto* clipperButton = new QPushButton( "Clipper", toolActionsGroup );
+			auto* centerPivotButton = new QPushButton( "Center Pivot", toolActionsGroup );
+			auto* worldPivotButton = new QPushButton( "World Pivot", toolActionsGroup );
+			auto* resetPivotButton = new QPushButton( "Reset Pivot", toolActionsGroup );
+			auto* freezeTransformsButton = new QPushButton( "Freeze", toolActionsGroup );
+			toolGrid->addWidget( translateButton, 0, 0 );
+			toolGrid->addWidget( rotateButton, 0, 1 );
+			toolGrid->addWidget( scaleButton, 0, 2 );
+			toolGrid->addWidget( clipperButton, 0, 3 );
+			toolGrid->addWidget( centerPivotButton, 1, 0 );
+			toolGrid->addWidget( worldPivotButton, 1, 1 );
+			toolGrid->addWidget( resetPivotButton, 1, 2 );
+			toolGrid->addWidget( freezeTransformsButton, 1, 3 );
+			QObject::connect( translateButton, &QPushButton::clicked, [](){ Experimental_triggerToggle( "MouseTranslate" ); Experimental_refreshSelection(); } );
+			QObject::connect( rotateButton, &QPushButton::clicked, [](){ Experimental_triggerToggle( "MouseRotate" ); Experimental_refreshSelection(); } );
+			QObject::connect( scaleButton, &QPushButton::clicked, [](){ Experimental_triggerToggle( "MouseScale" ); Experimental_refreshSelection(); } );
+			QObject::connect( clipperButton, &QPushButton::clicked, [](){ Experimental_triggerToggle( "ToggleClipper" ); Experimental_refreshSelection(); } );
+			QObject::connect( centerPivotButton, &QPushButton::clicked, [](){ Experimental_triggerCommand( "SelectionCenterPivot" ); Experimental_refreshSelection(); } );
+			QObject::connect( worldPivotButton, &QPushButton::clicked, [](){ Experimental_triggerCommand( "SelectionWorldPivot" ); Experimental_refreshSelection(); } );
+			QObject::connect( resetPivotButton, &QPushButton::clicked, [](){ Experimental_triggerCommand( "SelectionResetPivot" ); Experimental_refreshSelection(); } );
+			QObject::connect( freezeTransformsButton, &QPushButton::clicked, [](){ Experimental_triggerCommand( "FreezeTransforms" ); Experimental_refreshSelection(); } );
+		}
+		vbox->addWidget( toolActionsGroup );
 
 		auto* viewportGroup = new QGroupBox( "Viewport", root );
 		{
@@ -5100,6 +5204,53 @@ void Experimental_createDocks( QMainWindow* window ){
 			QObject::connect( g_exp_gravityMagnitudeEdit, &QLineEdit::editingFinished, [](){ Experimental_setSelectedEntityKeyValue( "gravity_magnitude", g_exp_gravityMagnitudeEdit->text() ); } );
 		}
 		vbox->addWidget( g_exp_gravityGroup );
+
+		g_exp_physicsGroup = new QGroupBox( "Physics", root );
+		{
+			auto* physicsForm = new QFormLayout( g_exp_physicsGroup );
+			g_exp_physicsSize = new QDoubleSpinBox( g_exp_physicsGroup );
+			g_exp_physicsMass = new QDoubleSpinBox( g_exp_physicsGroup );
+			g_exp_physicsMaterial = new QSpinBox( g_exp_physicsGroup );
+			g_exp_physicsHeight = new QDoubleSpinBox( g_exp_physicsGroup );
+			g_exp_physicsSize->setRange( 1, 8192 );
+			g_exp_physicsSize->setDecimals( 1 );
+			g_exp_physicsSize->setSingleStep( 8 );
+			g_exp_physicsMass->setRange( 0, 100000 );
+			g_exp_physicsMass->setDecimals( 1 );
+			g_exp_physicsMass->setSingleStep( 1 );
+			g_exp_physicsMaterial->setRange( 0, 9999 );
+			g_exp_physicsHeight->setRange( 0, 8192 );
+			g_exp_physicsHeight->setDecimals( 1 );
+			g_exp_physicsHeight->setSingleStep( 8 );
+			auto* physicsHint = new QLabel( "Authors engine-backed rigid bodies, sensors, and sliders.", g_exp_physicsGroup );
+			physicsHint->setWordWrap( true );
+			physicsForm->addRow( physicsHint );
+			physicsForm->addRow( "Size", g_exp_physicsSize );
+			physicsForm->addRow( "Mass", g_exp_physicsMass );
+			physicsForm->addRow( "Material Id", g_exp_physicsMaterial );
+			physicsForm->addRow( "Slider Height", g_exp_physicsHeight );
+			QObject::connect( g_exp_physicsSize, &QDoubleSpinBox::editingFinished, [](){
+				if ( g_exp_physicsSize != nullptr && g_exp_physicsSize->isEnabled() ) {
+					Experimental_setSelectedEntityKeyValue( "_size", QString::number( g_exp_physicsSize->value(), 'f', 1 ) );
+				}
+			} );
+			QObject::connect( g_exp_physicsMass, &QDoubleSpinBox::editingFinished, [](){
+				if ( g_exp_physicsMass != nullptr && g_exp_physicsMass->isEnabled() ) {
+					Experimental_setSelectedEntityKeyValue( "mass", QString::number( g_exp_physicsMass->value(), 'f', 1 ) );
+				}
+			} );
+			QObject::connect( g_exp_physicsMaterial, &QSpinBox::editingFinished, [](){
+				if ( g_exp_physicsMaterial != nullptr ) {
+					Experimental_setSelectedEntityKeyValue( "material", QString::number( g_exp_physicsMaterial->value() ) );
+				}
+			} );
+			QObject::connect( g_exp_physicsHeight, &QDoubleSpinBox::editingFinished, [](){
+				if ( g_exp_physicsHeight != nullptr && g_exp_physicsHeight->isEnabled() ) {
+					Experimental_setSelectedEntityKeyValue( "height", QString::number( g_exp_physicsHeight->value(), 'f', 1 ) );
+				}
+			} );
+		}
+		vbox->addWidget( g_exp_physicsGroup );
 
 		auto* pbrGroup = new QGroupBox( "PBR Material", root );
 		auto* pbrForm = new QFormLayout( pbrGroup );
@@ -5758,6 +5909,8 @@ void Experimental_destroyDocks(){
 	g_exp_selectionTypeLabel = nullptr;
 	g_exp_selectionBoundsLabel = nullptr;
 	g_exp_selectionShaderLabel = nullptr;
+	g_exp_selectionModeLabel = nullptr;
+	g_exp_manipulatorModeLabel = nullptr;
 	g_exp_viewportStatusLabel = nullptr;
 	g_exp_gridSizeCombo = nullptr;
 	g_exp_entityGroup = nullptr;
@@ -5776,6 +5929,11 @@ void Experimental_destroyDocks(){
 	g_exp_gravityGroup = nullptr;
 	g_exp_gravityDirectionEdit = nullptr;
 	g_exp_gravityMagnitudeEdit = nullptr;
+	g_exp_physicsGroup = nullptr;
+	g_exp_physicsSize = nullptr;
+	g_exp_physicsMass = nullptr;
+	g_exp_physicsMaterial = nullptr;
+	g_exp_physicsHeight = nullptr;
 	g_exp_shaderEdit = nullptr;
 	g_exp_pbrAlbedo = nullptr;
 	g_exp_pbrNormal = nullptr;
