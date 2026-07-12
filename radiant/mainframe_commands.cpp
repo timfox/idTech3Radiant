@@ -149,6 +149,8 @@ void MainFrame_registerCommands(){
 	Grid_registerCommands();
 	GlobalCommands_insert( "NavMesh_Rebuild", makeCallbackF( NavMesh_rebuild ), QKeySequence( "Ctrl+Shift+N" ) );
 	GlobalToggles_insert( "NavMeshOverlay", makeCallbackF( ShowNavMeshToggle ), BoolExportCaller( g_navmeshOverlayEnabled ), QKeySequence( "Ctrl+Shift+M" ) );
+	GlobalCommands_insert( "PhysicsPlacement_SettleSelection", makeCallbackF( PhysicsPlacement_settleSelection ), QKeySequence( "Ctrl+Shift+G" ) );
+	GlobalToggles_insert( "PhysicsPlacementOverlay", makeCallbackF( ShowPhysicsPlacementOverlayToggle ), BoolExportCaller( g_physicsPlacementOverlayEnabled ) );
 
 	Patch_registerCommands();
 	XYShow_registerCommands();

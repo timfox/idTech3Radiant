@@ -2413,6 +2413,8 @@ static bool Experimental_selectionHasModelScale(){
 	return !string_empty( vec ) || !string_empty( uni );
 }
 
+void Experimental_refreshTransform();
+
 static QString Experimental_selectedNodeShader(){
 	if ( GlobalSelectionSystem().countSelected() != 1 ) {
 		return {};
@@ -2657,6 +2659,116 @@ static void Experimental_pullShaderFromSelection(){
 	}
 
 	g_exp_shaderEdit->setText( shader );
+}
+
+static void Experimental_setTransformTranslation( const Vector3& target ){
+	if ( GlobalSelectionSystem().countSelected() == 0 ) {
+		return;
+	}
+	UndoableCommand undo( "translateSelected" );
+	Select_TranslateToPosition( target );
+	SceneChangeNotify();
+	Experimental_refreshTransform();
+}
+
+static void Experimental_setTransformRotation( const Vector3& eulerXYZ ){
+	if ( GlobalSelectionSystem().countSelected() == 0 ) {
+		return;
+	}
+	UndoableCommand undo( "rotateSelectedEulerXYZ" );
+	Select_RotateByEulerXYZ( eulerXYZ.x(), eulerXYZ.y(), eulerXYZ.z() );
+	SceneChangeNotify();
+	Experimental_refreshTransform();
+}
+
+static void Experimental_setTransformScale( const Vector3& target ){
+	if ( GlobalSelectionSystem().countSelected() == 0 ) {
+		return;
+	}
+	UndoableCommand undo( "scaleSelected" );
+	if ( Experimental_selectionHasModelScale() ) {
+		char buf[64];
+		if ( target.x() == target.y() && target.y() == target.z() ) {
+			sprintf( buf, "%g", target.x() );
+			Scene_EntitySetKeyValue_Selected( "modelscale", buf );
+			Scene_EntitySetKeyValue_Selected( "modelscale_vec", "" );
+		}
+		else{
+			sprintf( buf, "%g %g %g", target.x(), target.y(), target.z() );
+			Scene_EntitySetKeyValue_Selected( "modelscale", "" );
+			Scene_EntitySetKeyValue_Selected( "modelscale_vec", buf );
+		}
+		SceneChangeNotify();
+	}
+	else{
+		const Vector3 current = Experimental_getScaleFromSelection();
+		const float fx = ( current.x() > 0.0001f ) ? ( target.x() / current.x() ) : 1.f;
+		const float fy = ( current.y() > 0.0001f ) ? ( target.y() / current.y() ) : 1.f;
+		const float fz = ( current.z() > 0.0001f ) ? ( target.z() / current.z() ) : 1.f;
+		Select_Scale( fx, fy, fz );
+		SceneChangeNotify();
+	}
+	Experimental_refreshTransform();
+}
+
+static bool Experimental_jsonArrayToVector3( const QJsonValue& value, Vector3& out ){
+	if ( !value.isArray() ) {
+		return false;
+	}
+	const QJsonArray array = value.toArray();
+	if ( array.size() < 3 ) {
+		return false;
+	}
+	out = Vector3( array[0].toDouble(), array[1].toDouble(), array[2].toDouble() );
+	return true;
+}
+
+static void Experimental_copyTransformToClipboard(){
+	if ( g_exp_locX == nullptr || g_exp_rotX == nullptr || g_exp_scaleX == nullptr ) {
+		return;
+	}
+	QJsonObject root;
+	root.insert( "type", "radiant_transform" );
+	root.insert( "translation", QJsonArray{ g_exp_locX->value(), g_exp_locY->value(), g_exp_locZ->value() } );
+	root.insert( "rotation", QJsonArray{ g_exp_rotX->value(), g_exp_rotY->value(), g_exp_rotZ->value() } );
+	root.insert( "scale", QJsonArray{ g_exp_scaleX->value(), g_exp_scaleY->value(), g_exp_scaleZ->value() } );
+	QGuiApplication::clipboard()->setText( QString::fromUtf8( QJsonDocument( root ).toJson( QJsonDocument::Compact ) ) );
+	Sys_Status( "Transform copied to clipboard" );
+}
+
+static void Experimental_pasteTransformFromClipboard(){
+	if ( GlobalSelectionSystem().countSelected() == 0 ) {
+		return;
+	}
+	const QString text = QGuiApplication::clipboard()->text().trimmed();
+	if ( text.isEmpty() ) {
+		Sys_Status( "Clipboard has no transform data" );
+		return;
+	}
+	QJsonParseError error{};
+	const QJsonDocument doc = QJsonDocument::fromJson( text.toUtf8(), &error );
+	if ( error.error != QJsonParseError::NoError || !doc.isObject() ) {
+		Sys_Status( "Clipboard does not contain a valid transform payload" );
+		return;
+	}
+	const QJsonObject root = doc.object();
+	if ( root.value( "type" ).toString() != "radiant_transform" ) {
+		Sys_Status( "Clipboard does not contain a compatible transform payload" );
+		return;
+	}
+	Vector3 translation;
+	Vector3 rotation;
+	Vector3 scale;
+	if ( !Experimental_jsonArrayToVector3( root.value( "translation" ), translation )
+	  || !Experimental_jsonArrayToVector3( root.value( "rotation" ), rotation )
+	  || !Experimental_jsonArrayToVector3( root.value( "scale" ), scale ) ) {
+		Sys_Status( "Transform payload is incomplete" );
+		return;
+	}
+	Experimental_setTransformTranslation( translation );
+	Experimental_setTransformRotation( rotation );
+	Experimental_setTransformScale( scale );
+	Sys_Status( "Transform pasted from clipboard" );
 }
 
 void Experimental_refreshTransform(){
@@ -5229,6 +5341,15 @@ void Experimental_createDocks( QMainWindow* window ){
 			physicsForm->addRow( "Mass", g_exp_physicsMass );
 			physicsForm->addRow( "Material Id", g_exp_physicsMaterial );
 			physicsForm->addRow( "Slider Height", g_exp_physicsHeight );
+			auto* physicsActions = new QWidget( g_exp_physicsGroup );
+			auto* physicsActionsLayout = new QHBoxLayout( physicsActions );
+			physicsActionsLayout->setContentsMargins( 0, 0, 0, 0 );
+			physicsActionsLayout->setSpacing( 6 );
+			auto* physicsPreviewButton = new QPushButton( "Preview Drop", physicsActions );
+			auto* physicsSettleButton = new QPushButton( "Settle", physicsActions );
+			physicsActionsLayout->addWidget( physicsPreviewButton );
+			physicsActionsLayout->addWidget( physicsSettleButton );
+			physicsForm->addRow( "Placement", physicsActions );
 			QObject::connect( g_exp_physicsSize, &QDoubleSpinBox::editingFinished, [](){
 				if ( g_exp_physicsSize != nullptr && g_exp_physicsSize->isEnabled() ) {
 					Experimental_setSelectedEntityKeyValue( "_size", QString::number( g_exp_physicsSize->value(), 'f', 1 ) );
@@ -5249,6 +5370,8 @@ void Experimental_createDocks( QMainWindow* window ){
 					Experimental_setSelectedEntityKeyValue( "height", QString::number( g_exp_physicsHeight->value(), 'f', 1 ) );
 				}
 			} );
+			QObject::connect( physicsPreviewButton, &QPushButton::clicked, [](){ Experimental_triggerCommand( "PhysicsPlacementOverlay" ); } );
+			QObject::connect( physicsSettleButton, &QPushButton::clicked, [](){ Experimental_triggerCommand( "PhysicsPlacement_SettleSelection" ); Experimental_refreshSelection(); } );
 		}
 		vbox->addWidget( g_exp_physicsGroup );
 
@@ -5367,6 +5490,22 @@ void Experimental_createDocks( QMainWindow* window ){
 		g_exp_uniformScale = new QCheckBox( "Uniform scale", transformGroup );
 		g_exp_uniformScale->setChecked( QSettings().value( "Properties/Experimental/UniformScale", true ).toBool() );
 		transformGrid->addWidget( g_exp_uniformScale, 4, 0, 1, 4 );
+		auto* transformButtons = new QWidget( transformGroup );
+		auto* transformButtonsLayout = new QGridLayout( transformButtons );
+		transformButtonsLayout->setContentsMargins( 0, 0, 0, 0 );
+		auto* zeroMoveButton = new QPushButton( "Zero Move", transformButtons );
+		auto* zeroRotateButton = new QPushButton( "Zero Rotate", transformButtons );
+		auto* resetScaleButton = new QPushButton( "Reset Scale", transformButtons );
+		auto* copyTransformButton = new QPushButton( "Copy Transform", transformButtons );
+		auto* pasteTransformButton = new QPushButton( "Paste Transform", transformButtons );
+		auto* freezeTransformButton = new QPushButton( "Freeze", transformButtons );
+		transformButtonsLayout->addWidget( zeroMoveButton, 0, 0 );
+		transformButtonsLayout->addWidget( zeroRotateButton, 0, 1 );
+		transformButtonsLayout->addWidget( resetScaleButton, 0, 2 );
+		transformButtonsLayout->addWidget( copyTransformButton, 1, 0 );
+		transformButtonsLayout->addWidget( pasteTransformButton, 1, 1 );
+		transformButtonsLayout->addWidget( freezeTransformButton, 1, 2 );
+		transformGrid->addWidget( transformButtons, 5, 0, 1, 4 );
 		g_exp_locX->setEnabled( false );
 		g_exp_locY->setEnabled( false );
 		g_exp_locZ->setEnabled( false );
@@ -5377,46 +5516,13 @@ void Experimental_createDocks( QMainWindow* window ){
 		g_exp_scaleY->setEnabled( false );
 		g_exp_scaleZ->setEnabled( false );
 		auto applyLoc = [](){
-			if ( GlobalSelectionSystem().countSelected() == 0 ) return;
-			const Vector3 target( g_exp_locX->value(), g_exp_locY->value(), g_exp_locZ->value() );
-			UndoableCommand undo( "translateSelected" );
-			Select_TranslateToPosition( target );
-			SceneChangeNotify();
-			Experimental_refreshTransform();
+			Experimental_setTransformTranslation( Vector3( g_exp_locX->value(), g_exp_locY->value(), g_exp_locZ->value() ) );
 		};
 		auto applyRot = [](){
-			if ( GlobalSelectionSystem().countSelected() == 0 ) return;
-			UndoableCommand undo( "rotateSelectedEulerXYZ" );
-			Select_RotateByEulerXYZ( g_exp_rotX->value(), g_exp_rotY->value(), g_exp_rotZ->value() );
-			SceneChangeNotify();
+			Experimental_setTransformRotation( Vector3( g_exp_rotX->value(), g_exp_rotY->value(), g_exp_rotZ->value() ) );
 		};
 		auto applyScale = [](){
-			if ( GlobalSelectionSystem().countSelected() == 0 ) return;
-			UndoableCommand undo( "scaleSelected" );
-			const Vector3 target( g_exp_scaleX->value(), g_exp_scaleY->value(), g_exp_scaleZ->value() );
-			if ( Experimental_selectionHasModelScale() ) {
-				// misc_model: write directly to entity keyvalues so scale persists
-				char buf[64];
-				if ( target.x() == target.y() && target.y() == target.z() ) {
-					sprintf( buf, "%g", target.x() );
-					Scene_EntitySetKeyValue_Selected( "modelscale", buf );
-					Scene_EntitySetKeyValue_Selected( "modelscale_vec", "" );
-				} else {
-					sprintf( buf, "%g %g %g", target.x(), target.y(), target.z() );
-					Scene_EntitySetKeyValue_Selected( "modelscale", "" );
-					Scene_EntitySetKeyValue_Selected( "modelscale_vec", buf );
-				}
-				SceneChangeNotify();
-			} else {
-				// Brushes etc: Select_Scale expects a factor (target/current)
-				const Vector3 current = Experimental_getScaleFromSelection();
-				const float fx = ( current.x() > 0.0001f ) ? ( target.x() / current.x() ) : 1.f;
-				const float fy = ( current.y() > 0.0001f ) ? ( target.y() / current.y() ) : 1.f;
-				const float fz = ( current.z() > 0.0001f ) ? ( target.z() / current.z() ) : 1.f;
-				Select_Scale( fx, fy, fz );
-				SceneChangeNotify();
-			}
-			Experimental_refreshTransform();
+			Experimental_setTransformScale( Vector3( g_exp_scaleX->value(), g_exp_scaleY->value(), g_exp_scaleZ->value() ) );
 		};
 		QObject::connect( g_exp_locX, &QDoubleSpinBox::editingFinished, applyLoc );
 		QObject::connect( g_exp_locY, &QDoubleSpinBox::editingFinished, applyLoc );
@@ -5451,6 +5557,12 @@ void Experimental_createDocks( QMainWindow* window ){
 				syncUniformScale( g_exp_scaleX );
 			}
 		} );
+		QObject::connect( zeroMoveButton, &QPushButton::clicked, [](){ Experimental_setTransformTranslation( g_vector3_identity ); } );
+		QObject::connect( zeroRotateButton, &QPushButton::clicked, [](){ Experimental_setTransformRotation( g_vector3_identity ); } );
+		QObject::connect( resetScaleButton, &QPushButton::clicked, [](){ Experimental_setTransformScale( Vector3( 1, 1, 1 ) ); } );
+		QObject::connect( copyTransformButton, &QPushButton::clicked, Experimental_copyTransformToClipboard );
+		QObject::connect( pasteTransformButton, &QPushButton::clicked, Experimental_pasteTransformFromClipboard );
+		QObject::connect( freezeTransformButton, &QPushButton::clicked, [](){ Experimental_triggerCommand( "FreezeTransforms" ); Experimental_refreshSelection(); } );
 		vbox->addWidget( transformGroup );
 
 		g_exp_propertiesDock->setWidget( root );
@@ -6823,6 +6935,8 @@ void create_view_menu( QMenuBar *menubar, MainFrame::EViewStyle style ){
 		create_check_menu_item_with_mnemonic( submenu, "Show 2D Workzone", "ShowWorkzone2d" );
 		create_check_menu_item_with_mnemonic( submenu, "Show 3D Workzone", "ShowWorkzone3d" );
 		create_check_menu_item_with_mnemonic( submenu, "Show Renderer Stats", "ShowStats" );
+		submenu->addSeparator();
+		create_check_menu_item_with_mnemonic( submenu, "Show Physics Placement Preview", "PhysicsPlacementOverlay" );
 	}
 
 	{
@@ -6926,6 +7040,13 @@ void create_selection_menu( QMenuBar *menubar ){
 		create_menu_item_with_mnemonic( submenu, "Reset Pivot to Auto", "SelectionResetPivot" );
 		submenu->addSeparator();
 		create_menu_item_with_mnemonic( submenu, "Freeze Transforms", "FreezeTransforms" );
+	}
+	{
+		QMenu* submenu = menu->addMenu( "Physics Placement" );
+
+		submenu->setTearOffEnabled( g_Layout_enableDetachableMenus.m_value );
+		create_menu_item_with_mnemonic( submenu, "Settle Selected Props", "PhysicsPlacement_SettleSelection" );
+		create_check_menu_item_with_mnemonic( submenu, "Preview Landing", "PhysicsPlacementOverlay" );
 	}
 	menu->addSeparator();
 	{

@@ -852,6 +852,12 @@ QStringList commandSearchAliases( const char* name ){
 	if( string_equal( name, "AddPhysRagdoll" ) ){
 		return { "physics ragdoll", "ragdoll", "box3d ragdoll", "misc phys ragdoll" };
 	}
+	if( string_equal( name, "PhysicsPlacement_SettleSelection" ) ){
+		return { "settle physics props", "drop to floor", "rigid body placement", "simulate prop drop", "place props naturally" };
+	}
+	if( string_equal( name, "PhysicsPlacementOverlay" ) ){
+		return { "physics placement overlay", "rigid body preview", "landing preview", "drop preview", "settle preview" };
+	}
 	if( string_equal( name, "MakeDetail" ) ){
 		return { "detail", "convert to detail", "detail brush", "non structural" };
 	}
@@ -1000,6 +1006,9 @@ QString launcherCategoryForCommand( const char* name, int type ){
 	if( string_equal( name, "NavMesh_Rebuild" ) || string_equal( name, "NavMeshOverlay" ) ){
 		return "NavMesh";
 	}
+	if( string_equal( name, "PhysicsPlacement_SettleSelection" ) || string_equal( name, "PhysicsPlacementOverlay" ) ){
+		return "Physics";
+	}
 	return "Command";
 }
 
@@ -1063,6 +1072,12 @@ QString launcherDescriptionForCommand( const char* name ){
 	}
 	if( string_equal( name, "AddPhysRagdoll" ) ){
 		return "Create a ragdoll-ready physics entity with default simulation values.";
+	}
+	if( string_equal( name, "PhysicsPlacement_SettleSelection" ) ){
+		return "Drop the selected rigid-body props onto nearby support surfaces for faster dressing.";
+	}
+	if( string_equal( name, "PhysicsPlacementOverlay" ) ){
+		return "Preview where selected rigid-body props will settle before committing placement.";
 	}
 	return {};
 }

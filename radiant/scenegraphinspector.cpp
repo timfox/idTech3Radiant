@@ -24,10 +24,16 @@
 #include <QSortFilterProxyModel>
 #include <QItemSelectionModel>
 #include <QTimer>
+#include <QInputDialog>
+#include <QMenu>
+#include <QMessageBox>
+#include <QShortcut>
 
 #include "camwindow.h"
 #include "commands.h"
+#include "ientity.h"
 #include "iselection.h"
+#include "iundo.h"
 #include "mainframe.h"
 #include "scenelib.h"
 #include "select.h"
@@ -344,6 +350,71 @@ void ScenegraphInspector_selectParent(){
 	ScenegraphInspector_revealSelection();
 }
 
+scene::Instance* ScenegraphInspector_instanceForIndex( const QModelIndex& index ){
+	if ( !index.isValid() ) {
+		return nullptr;
+	}
+	return static_cast<scene::Instance*>( index.data( c_ItemDataRole_Instance ).value<void*>() );
+}
+
+scene::Instance* ScenegraphInspector_currentInstance(){
+	return g_scenegraphTreeView != nullptr
+		? ScenegraphInspector_instanceForIndex( g_scenegraphTreeView->currentIndex() )
+		: nullptr;
+}
+
+QString ScenegraphInspector_currentEntityLabel( Entity& entity ){
+	const char* name = entity.getKeyValue( "name" );
+	if ( name != nullptr && !string_empty( name ) ) {
+		return QString::fromLatin1( name );
+	}
+	const char* targetname = entity.getKeyValue( "targetname" );
+	if ( targetname != nullptr && !string_empty( targetname ) ) {
+		return QString::fromLatin1( targetname );
+	}
+	return QString::fromLatin1( entity.getClassName() );
+}
+
+void ScenegraphInspector_renameCurrent(){
+	scene::Instance* instance = ScenegraphInspector_currentInstance();
+	if ( instance == nullptr ) {
+		return;
+	}
+
+	scene::Node& node = instance->path().top();
+	Entity* entity = Node_getEntity( node );
+	if ( entity == nullptr ) {
+		QMessageBox::information( MainFrame_getWindow(), "Outliner Rename",
+			"Only entity nodes can be renamed from the outliner right now." );
+		return;
+	}
+
+	const bool useTargetname = entity->hasKeyValue( "targetname" ) && !string_empty( entity->getKeyValue( "targetname" ) );
+	const char* renameKey = useTargetname ? "targetname" : "name";
+	const QString initial = ScenegraphInspector_currentEntityLabel( *entity );
+	const QString text = QInputDialog::getText( g_scenegraphDock, "Rename Outliner Item",
+		QString( "Set %1:" ).arg( QString::fromLatin1( renameKey ) ),
+		QLineEdit::Normal, initial );
+	if ( text.isNull() ) {
+		return;
+	}
+
+	UndoableCommand undo( "outlinerRenameEntity" );
+	entity->setKeyValue( renameKey, text.trimmed().toUtf8().constData() );
+	SceneChangeNotify();
+	ScenegraphInspector_refreshStatus();
+}
+
+void ScenegraphInspector_moveSelectionToWorld(){
+	GlobalCommands_find( "EntityMovePrimitivesToFirst" ).m_callback();
+	ScenegraphInspector_revealSelection();
+}
+
+void ScenegraphInspector_ungroupSelection(){
+	GlobalCommands_find( "EntityUngroup" ).m_callback();
+	ScenegraphInspector_revealSelection();
+}
+
 }
 
 void ScenegraphInspector_createDock( QMainWindow* window ){
@@ -372,6 +443,9 @@ void ScenegraphInspector_createDock( QMainWindow* window ){
 	auto* collapseAllBtn = new QPushButton( "Collapse All", root );
 	auto* focusBtn = new QPushButton( "Frame", root );
 	auto* parentBtn = new QPushButton( "Parent", root );
+	auto* renameBtn = new QPushButton( "Rename", root );
+	auto* toWorldBtn = new QPushButton( "To World", root );
+	auto* ungroupBtn = new QPushButton( "Ungroup", root );
 	auto* duplicateBtn = new QPushButton( "Duplicate", root );
 	auto* deleteBtn = new QPushButton( "Delete", root );
 	auto* hideSelectedBtn = new QPushButton( "Hide Sel", root );
@@ -381,6 +455,9 @@ void ScenegraphInspector_createDock( QMainWindow* window ){
 	buttonRow->addWidget( collapseAllBtn );
 	buttonRow->addWidget( focusBtn );
 	buttonRow->addWidget( parentBtn );
+	buttonRow->addWidget( renameBtn );
+	buttonRow->addWidget( toWorldBtn );
+	buttonRow->addWidget( ungroupBtn );
 	buttonRow->addWidget( duplicateBtn );
 	buttonRow->addWidget( deleteBtn );
 	buttonRow->addWidget( hideSelectedBtn );
@@ -405,6 +482,7 @@ void ScenegraphInspector_createDock( QMainWindow* window ){
 	g_scenegraphTreeView->header()->setStretchLastSection( false );
 	g_scenegraphTreeView->header()->setSectionResizeMode( QHeaderView::ResizeMode::ResizeToContents );
 	g_scenegraphTreeView->setSelectionMode( QAbstractItemView::SelectionMode::ExtendedSelection );
+	g_scenegraphTreeView->setContextMenuPolicy( Qt::ContextMenuPolicy::CustomContextMenu );
 	layout->addWidget( g_scenegraphTreeView, 1 );
 
 	g_scenegraphStatusLabel = new QLabel( "0 shown / 0 total | 0 selected", root );
@@ -415,6 +493,9 @@ void ScenegraphInspector_createDock( QMainWindow* window ){
 	QObject::connect( collapseAllBtn, &QPushButton::clicked, ScenegraphInspector_collapseAll );
 	QObject::connect( focusBtn, &QPushButton::clicked, [](){ GlobalCamera_FocusOnSelected(); } );
 	QObject::connect( parentBtn, &QPushButton::clicked, ScenegraphInspector_selectParent );
+	QObject::connect( renameBtn, &QPushButton::clicked, ScenegraphInspector_renameCurrent );
+	QObject::connect( toWorldBtn, &QPushButton::clicked, ScenegraphInspector_moveSelectionToWorld );
+	QObject::connect( ungroupBtn, &QPushButton::clicked, ScenegraphInspector_ungroupSelection );
 	QObject::connect( duplicateBtn, &QPushButton::clicked, [](){ GlobalCommands_find( "CloneSelection" ).m_callback(); } );
 	QObject::connect( deleteBtn, &QPushButton::clicked, [](){ Select_Delete(); } );
 	QObject::connect( hideSelectedBtn, &QPushButton::clicked, [](){ HideSelected(); } );
@@ -443,6 +524,20 @@ void ScenegraphInspector_createDock( QMainWindow* window ){
 			GlobalCamera_FocusOnSelected();
 		}
 	} );
+	QObject::connect( g_scenegraphTreeView, &QWidget::customContextMenuRequested, []( const QPoint& pos ){
+		if ( g_scenegraphTreeView == nullptr ) {
+			return;
+		}
+		QMenu menu( g_scenegraphTreeView );
+		menu.addAction( "Rename", ScenegraphInspector_renameCurrent );
+		menu.addAction( "Frame Selection", [](){ GlobalCamera_FocusOnSelected(); } );
+		menu.addAction( "Select Parent", ScenegraphInspector_selectParent );
+		menu.addAction( "Move To World", ScenegraphInspector_moveSelectionToWorld );
+		menu.addAction( "Ungroup", ScenegraphInspector_ungroupSelection );
+		menu.addAction( "Duplicate", [](){ GlobalCommands_find( "CloneSelection" ).m_callback(); } );
+		menu.exec( g_scenegraphTreeView->viewport()->mapToGlobal( pos ) );
+	} );
+	new QShortcut( QKeySequence( "F2" ), g_scenegraphTreeView, [](){ ScenegraphInspector_renameCurrent(); } );
 	QObject::connect( g_scenegraphDock, &QDockWidget::visibilityChanged, []( bool visible ){
 		if ( visible )
 			ScenegraphInspector_attachModel();

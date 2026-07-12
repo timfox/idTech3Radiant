@@ -2003,6 +2003,12 @@ void ShowNavMeshToggle(){
 	g_show_navmesh.update();
 }
 
+ToggleItem g_show_physics_placement_overlay{ BoolExportCaller( g_physicsPlacementOverlayEnabled ) };
+void ShowPhysicsPlacementOverlayToggle(){
+	PhysicsPlacementOverlay_toggle();
+	g_show_physics_placement_overlay.update();
+}
+
 void CamWnd::Cam_Draw(){
 //		globalOutputStream() << "Cam_Draw()\n";
 
@@ -2119,6 +2125,7 @@ void CamWnd::Cam_Draw(){
 
 		Scene_Render( renderer, m_view );
 		NavMeshOverlay_render( renderer );
+		PhysicsPlacementOverlay_render( renderer );
 
 		if( g_camwindow_globals_private.m_bShowWorkzone && GlobalSelectionSystem().countSelected() != 0 && GlobalSelectionSystem().ManipulatorMode() != SelectionSystem::eUV ){
 			m_draw_workzone.render( renderer, m_state_workzone );
@@ -2654,6 +2661,7 @@ void CamWnd_Construct(){
 	GlobalPreferenceSystem().registerPreference( "ShowWorkzone3d", BoolImportStringCaller( g_camwindow_globals_private.m_bShowWorkzone ), BoolExportStringCaller( g_camwindow_globals_private.m_bShowWorkzone ) );
 	GlobalPreferenceSystem().registerPreference( "ShowSize3d", BoolImportStringCaller( g_camwindow_globals_private.m_bShowSize ), BoolExportStringCaller( g_camwindow_globals_private.m_bShowSize ) );
 	GlobalPreferenceSystem().registerPreference( "ShowNavMeshOverlay", BoolImportStringCaller( g_navmeshOverlayEnabled ), BoolExportStringCaller( g_navmeshOverlayEnabled ) );
+	GlobalPreferenceSystem().registerPreference( "ShowPhysicsPlacementOverlay", BoolImportStringCaller( g_physicsPlacementOverlayEnabled ), BoolExportStringCaller( g_physicsPlacementOverlayEnabled ) );
 	GlobalPreferenceSystem().registerPreference( "CamMoveSpeed", IntImportStringCaller( g_camwindow_globals_private.m_nMoveSpeed ), IntExportStringCaller( g_camwindow_globals_private.m_nMoveSpeed ) );
 	GlobalPreferenceSystem().registerPreference( "CamMoveTimeToMaxSpeed", IntImportStringCaller( g_camwindow_globals_private.m_time_toMaxSpeed ), IntExportStringCaller( g_camwindow_globals_private.m_time_toMaxSpeed ) );
 	GlobalPreferenceSystem().registerPreference( "ScrollMoveSpeed", IntImportStringCaller( g_camwindow_globals_private.m_nScrollMoveSpeed ), IntExportStringCaller( g_camwindow_globals_private.m_nScrollMoveSpeed ) );

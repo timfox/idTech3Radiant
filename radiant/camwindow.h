@@ -46,6 +46,7 @@ void CamWnd_registerShortcuts();
 
 void GlobalCamera_Benchmark();
 void ShowNavMeshToggle();
+void ShowPhysicsPlacementOverlayToggle();
 
 const Vector3& Camera_getOrigin( CamWnd& camwnd );
 void Camera_setOrigin( CamWnd& camwnd, const Vector3& origin );
