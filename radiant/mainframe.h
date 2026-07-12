@@ -321,6 +321,7 @@ void Experimental_toggleAssetsDock();
 void Experimental_toggleHistoryDock();
 void Experimental_toggleSyncDock();
 void Experimental_toggleUSDDock();
+void Experimental_toggleDistrictDock();
 void Experimental_toggleECSDock();
 void Experimental_importUSDStructure();
 void Experimental_exportToUSDA();

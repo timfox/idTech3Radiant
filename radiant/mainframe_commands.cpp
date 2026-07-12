@@ -111,6 +111,7 @@ void MainFrame_registerCommands(){
 	GlobalCommands_insert( "ToggleExperimentalHistory", makeCallbackF( Experimental_toggleHistoryDock ) );
 	GlobalCommands_insert( "ToggleExperimentalSync", makeCallbackF( Experimental_toggleSyncDock ) );
 	GlobalCommands_insert( "ToggleExperimentalUSD", makeCallbackF( Experimental_toggleUSDDock ) );
+	GlobalCommands_insert( "ToggleExperimentalDistricts", makeCallbackF( Experimental_toggleDistrictDock ) );
 	GlobalCommands_insert( "ToggleExperimentalECS", makeCallbackF( Experimental_toggleECSDock ) );
 	GlobalCommands_insert( "ImportUSDStructure", makeCallbackF( Experimental_importUSDStructure ) );
 	GlobalCommands_insert( "ExportToUSDA", makeCallbackF( Experimental_exportToUSDA ) );

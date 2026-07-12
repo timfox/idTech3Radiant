@@ -39,7 +39,10 @@
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QLabel>
 #include <QLineEdit>
+#include <QComboBox>
+#include <QPushButton>
 #include <QApplication>
 #include <QStyle>
 #include <QTreeView>
@@ -168,6 +171,9 @@ public:
 	QListWidget* m_tagsListWidget;
 	QMenu* m_tagsMenu;
 	QLineEdit* m_filter_entry;
+	QComboBox* m_recentFoldersCombo;
+	QLabel* m_locationLabel;
+	QLabel* m_selectionLabel;
 	QAction* m_filter_action;
 	CopiedString m_filter_string;
 
@@ -219,6 +225,9 @@ public:
 
 	TextureBrowser() :
 		m_texture_scroll( 0 ),
+		m_recentFoldersCombo( 0 ),
+		m_locationLabel( 0 ),
+		m_selectionLabel( 0 ),
 		m_hideunused_item( BoolExportCaller( m_hideUnused ) ),
 		m_showshaders_item( BoolExportCaller( m_showShaders ) ),
 		m_showtextures_item( BoolExportCaller( m_showTextures ) ),
@@ -253,6 +262,7 @@ public:
 		if ( m_gl_widget != nullptr )
 			widget_queue_draw( *m_gl_widget );
 	}
+	void updateInfoWidgets() const;
 	void draw();
 	void setOriginY( int originy ){
 		m_originy = originy;
@@ -373,6 +383,8 @@ const char* TextureBrowser_GetSelectedShader(){
 	return g_TexBro.m_shader.c_str();
 }
 
+extern CopiedString g_TextureBrowser_currentDirectory;
+
 void TextureBrowser_SetStatus( const char* name ){
 	IShader* shader = QERApp_Shader_ForName( name );
 	qtexture_t* q = shader->getTexture();
@@ -383,6 +395,67 @@ void TextureBrowser_SetStatus( const char* name ){
 	g_pParentWnd->SetStatusText( c_status_texture, strTex );
 }
 
+void TextureBrowser::updateInfoWidgets() const {
+	if ( m_locationLabel != nullptr ) {
+		const QString location = m_searchedTags
+			? QString( "Result Set: %1" ).arg( g_TextureBrowser_currentDirectory.c_str() )
+			: QString( "Folder: %1" ).arg( g_TextureBrowser_currentDirectory.empty() ? "all" : g_TextureBrowser_currentDirectory.c_str() );
+		m_locationLabel->setText( location );
+		m_locationLabel->setToolTip( location );
+	}
+
+	if ( m_selectionLabel != nullptr ) {
+		IShader* shader = QERApp_Shader_ForName( m_shader.c_str() );
+		const qtexture_t* texture = shader->getTexture();
+		const QString selection = QString( "%1  •  %2  •  %3 x %4" )
+			.arg( m_shader.empty() ? QString( "No texture selected" ) : QString::fromLatin1( m_shader.c_str() ) )
+			.arg( shader->IsDefault() ? "Image" : "Shader" )
+			.arg( texture != nullptr ? texture->width : 0 )
+			.arg( texture != nullptr ? texture->height : 0 );
+		m_selectionLabel->setText( selection );
+		m_selectionLabel->setToolTip( selection );
+		shader->DecRef();
+	}
+}
+
+static void TextureBrowser_refreshRecentFoldersUi(){
+	if ( g_TexBro.m_recentFoldersCombo == nullptr ) {
+		return;
+	}
+
+	g_TexBro.m_recentFoldersCombo->blockSignals( true );
+	g_TexBro.m_recentFoldersCombo->clear();
+	g_TexBro.m_recentFoldersCombo->addItem( "Recent folders" );
+	for ( auto it = g_TexBro.m_recent_folders.rbegin(); it != g_TexBro.m_recent_folders.rend(); ++it )
+	{
+		g_TexBro.m_recentFoldersCombo->addItem( it->c_str() );
+	}
+	g_TexBro.m_recentFoldersCombo->setCurrentIndex( 0 );
+	g_TexBro.m_recentFoldersCombo->blockSignals( false );
+}
+
+static void TextureBrowser_applySelectedShader(){
+	if ( string_empty( g_TexBro.m_shader.c_str() ) ) {
+		return;
+	}
+	Select_SetShader_Undo( g_TexBro.m_shader.c_str() );
+}
+
+static void TextureBrowser_copySelectedShaderName(){
+	if ( string_empty( g_TexBro.m_shader.c_str() ) ) {
+		return;
+	}
+	QApplication::clipboard()->setText( g_TexBro.m_shader.c_str() );
+}
+
+static void TextureBrowser_revealSelectedShaderFolder(){
+	if ( TextureBrowser::wads || string_empty( g_TexBro.m_shader.c_str() ) ) {
+		return;
+	}
+	TextureBrowser_ShowDirectoryOfShader( g_TexBro.m_shader.c_str() );
+	g_TexBro.queueDraw();
+}
+
 void TextureBrowser_Focus( TextureBrowser& textureBrowser, const char* name );
 void TextureBrowser_tagsSetCheckboxesForShader( const char *shader );
 void TextureBrowser_ShowDirectoryOfShader( TextureBrowser& texBro, const char* shader );
@@ -391,6 +464,7 @@ void TextureBrowser_SetSelectedShader( TextureBrowser& textureBrowser, const cha
 	textureBrowser.m_shader = shader;
 	TextureBrowser_SetStatus( shader );
 	TextureBrowser_Focus( textureBrowser, shader );
+	textureBrowser.updateInfoWidgets();
 
 	if ( FindTextureDialog_isOpen() ) {
 		FindTextureDialog_selectTexture( shader );
@@ -667,12 +741,14 @@ void TextureBrowser_trackRecentFolders( const char *folder ){
 			auto f = std::move( *i ); // note correct move is important here to not deallocate m_recent_folders string, it may be passed as input
 			fs.erase( i );
 			fs.push_back( std::move( f ) );
+			TextureBrowser_refreshRecentFoldersUi();
 			return;
 		}
 	}
 	if( fs.size() >= 25 )
 		fs.erase( fs.begin() );
 	fs.push_back( folder );
+	TextureBrowser_refreshRecentFoldersUi();
 }
 
 
@@ -763,6 +839,7 @@ void TextureBrowser_ShowDirectory( const char* directory ){
 	TextureBrowser_SetHideUnused( g_TexBro, false );
 	g_TexBro.setOriginY( 0 );
 	TextureBrowser_updateTitle();
+	g_TexBro.updateInfoWidgets();
 }
 /* loads directory, containing a shader + focuses on it */
 void TextureBrowser_ShowDirectoryOfShader( TextureBrowser& texBro, const char* shader ){
@@ -1469,6 +1546,7 @@ void TextureBrowser_searchTags(){
 		g_TexBro.heightChanged();
 		g_TexBro.m_originInvalid = true;
 		TextureBrowser_updateTitle();
+		g_TexBro.updateInfoWidgets();
 
 		//deactivate, so SPACE and RETURN wont be broken for 2d
 		g_TexBro.m_tagsListWidget->clearFocus();
@@ -1499,6 +1577,7 @@ void TextureBrowser_showUntagged(){
 		g_TexBro.heightChanged();
 		g_TexBro.m_originInvalid = true;
 		TextureBrowser_updateTitle();
+		g_TexBro.updateInfoWidgets();
 	}
 }
 
@@ -1845,6 +1924,54 @@ QWidget* TextureBrowser_constructWindow( QWidget* toplevel ){
 		} );
 		QObject::connect( action, &QAction::triggered, GlobalToggles_find( "SearchFromStart" ).m_command.m_callback );
 	}
+	{	// browser quick actions
+		auto *quickRow = new QWidget;
+		auto *quickLayout = new QHBoxLayout( quickRow );
+		quickLayout->setContentsMargins( 0, 0, 0, 0 );
+		quickLayout->setSpacing( 4 );
+
+		auto *applyButton = new QPushButton( "Apply", quickRow );
+		applyButton->setToolTip( "Apply the selected shader to the current selection." );
+		auto *copyButton = new QPushButton( "Copy Name", quickRow );
+		copyButton->setToolTip( "Copy the selected shader path." );
+		auto *revealButton = new QPushButton( "Reveal Folder", quickRow );
+		revealButton->setToolTip( "Jump the browser to the selected shader's folder." );
+		revealButton->setEnabled( !TextureBrowser::wads );
+		g_TexBro.m_recentFoldersCombo = new QComboBox( quickRow );
+		g_TexBro.m_recentFoldersCombo->setSizeAdjustPolicy( QComboBox::AdjustToContents );
+		g_TexBro.m_recentFoldersCombo->setMinimumContentsLength( 14 );
+
+		quickLayout->addWidget( applyButton );
+		quickLayout->addWidget( copyButton );
+		quickLayout->addWidget( revealButton );
+		quickLayout->addWidget( g_TexBro.m_recentFoldersCombo, 1 );
+		vbox->addWidget( quickRow );
+
+		QObject::connect( applyButton, &QPushButton::clicked, [](){ TextureBrowser_applySelectedShader(); } );
+		QObject::connect( copyButton, &QPushButton::clicked, [](){ TextureBrowser_copySelectedShaderName(); } );
+		QObject::connect( revealButton, &QPushButton::clicked, [](){ TextureBrowser_revealSelectedShaderFolder(); } );
+		QObject::connect( g_TexBro.m_recentFoldersCombo, QOverload<int>::of( &QComboBox::currentIndexChanged ), []( int index ){
+			if ( index <= 0 ) {
+				return;
+			}
+			const QString folder = g_TexBro.m_recentFoldersCombo->itemText( index );
+			const QByteArray folderUtf8 = folder.toLatin1();
+			ScopeDisableScreenUpdates disableScreenUpdates( folderUtf8.constData(), "Loading Textures" );
+			TextureBrowser_ShowDirectory( folderUtf8.constData() );
+			g_TexBro.queueDraw();
+		} );
+		TextureBrowser_refreshRecentFoldersUi();
+	}
+	{	// browser context labels
+		g_TexBro.m_locationLabel = new QLabel;
+		g_TexBro.m_locationLabel->setTextInteractionFlags( Qt::TextSelectableByMouse );
+		g_TexBro.m_selectionLabel = new QLabel;
+		g_TexBro.m_selectionLabel->setTextInteractionFlags( Qt::TextSelectableByMouse );
+		g_TexBro.m_selectionLabel->setWordWrap( true );
+		vbox->addWidget( g_TexBro.m_locationLabel );
+		vbox->addWidget( g_TexBro.m_selectionLabel );
+		g_TexBro.updateInfoWidgets();
+	}
 	{	// Texture TreeView
 		TextureBrowser_createTreeViewTree();
 	}
@@ -1935,6 +2062,7 @@ void RefreshShaders(){
 	GlobalShaderSystem().refresh();
 	TextureBrowser_constructTreeStore(); /* texturebrowser tree update on vfs restart */
 	UpdateAllWindows();
+	g_TexBro.updateInfoWidgets();
 }
 
 void TextureBrowser_ToggleShowShaders(){
@@ -1972,6 +2100,7 @@ void TextureBrowser_showAll(){
 //	TextureBrowser_SetHideUnused( g_TexBro, false );
 	TextureBrowser_ToggleHideUnused(); //toggle to show all used on the first hit and all on the second
 	TextureBrowser_updateTitle();
+	g_TexBro.updateInfoWidgets();
 }
 
 void TextureBrowser_FixedSize(){

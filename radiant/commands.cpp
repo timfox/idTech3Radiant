@@ -25,6 +25,16 @@
 
 #include <map>
 #include <vector>
+#include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QLabel>
+#include <QLineEdit>
+#include <QListWidget>
+#include <QPushButton>
+#include <QSettings>
+#include <QSplitter>
+#include <QTextBrowser>
 #include "string/string.h"
 #include "versionlib.h"
 #include "gtkutil/accelerator.h"
@@ -463,6 +473,14 @@ struct CommandLauncherEntry
 	int score{};
 };
 
+QString launcherHistoryKey( const CommandLauncherEntry& entry ){
+	return QString( "%1:%2" ).arg( entry.type ).arg( entry.id );
+}
+
+QString launcherHistoryKey( const QString& id, int type ){
+	return QString( "%1:%2" ).arg( type ).arg( id );
+}
+
 QString humanizeCommandName( const char* name ){
 	QString out;
 	const QString source = QString::fromLatin1( name );
@@ -610,6 +628,9 @@ QString commandLauncherTitle( const char* name ){
 	}
 	if( string_equal( name, "ToggleExperimentalUSD" ) ){
 		return "Toggle Outliner";
+	}
+	if( string_equal( name, "ToggleExperimentalDistricts" ) ){
+		return "Toggle Districts";
 	}
 	if( string_equal( name, "ToggleExperimentalECS" ) ){
 		return "Toggle Entity Palette";
@@ -761,6 +782,9 @@ QStringList commandSearchAliases( const char* name ){
 	}
 	if( string_equal( name, "ToggleExperimentalUSD" ) ){
 		return { "outliner", "scene hierarchy", "hierarchy" };
+	}
+	if( string_equal( name, "ToggleExperimentalDistricts" ) ){
+		return { "districts", "world partition", "proxy mesh", "district manifest", "streaming districts", "district browser" };
 	}
 	if( string_equal( name, "CloneSelection" ) ){
 		return { "duplicate" };
@@ -928,6 +952,9 @@ QString launcherCategoryForCommand( const char* name, int type ){
 	 || string_equal( name, "OpenCinematicPlayer" ) ){
 		return "Workbench";
 	}
+	if( string_equal( name, "ToggleExperimentalDistricts" ) ){
+		return "World";
+	}
 	if( string_equal( name, "NavMesh_Rebuild" ) || string_equal( name, "NavMeshOverlay" ) ){
 		return "NavMesh";
 	}
@@ -967,6 +994,9 @@ QString launcherDescriptionForCommand( const char* name ){
 	}
 	if( string_equal( name, "OpenAIMLEditor" ) ){
 		return "Open the AIML workspace for dialogue and behavior authoring.";
+	}
+	if( string_equal( name, "ToggleExperimentalDistricts" ) ){
+		return "Inspect district manifests, proxy/full USDA paths, and runtime district commands.";
 	}
 	if( string_equal( name, "AddCapturePointVolume" ) ){
 		return "Create a gameplay volume for capture-point objectives.";
@@ -1015,6 +1045,32 @@ int computeLauncherScore( const QString& query, const QString& searchText, const
 		score += best;
 	}
 	return score;
+}
+
+QStringList launcherRecentEntries(){
+	return QSettings().value( "CommandLauncher/RecentEntries" ).toStringList();
+}
+
+void launcherRememberEntry( const QString& id, int type ){
+	QStringList history = launcherRecentEntries();
+	const QString key = launcherHistoryKey( id, type );
+	history.removeAll( key );
+	history.prepend( key );
+	while( history.size() > 12 )
+		history.removeLast();
+	QSettings().setValue( "CommandLauncher/RecentEntries", history );
+}
+
+int launcherRecentBoost( const QStringList& history, const CommandLauncherEntry& entry ){
+	const int index = history.indexOf( launcherHistoryKey( entry ) );
+	if( index < 0 ){
+		return 0;
+	}
+	return std::max( 0, 180 - index * 14 );
+}
+
+bool launcherTypeMatchesFilter( const CommandLauncherEntry& entry, int filterType ){
+	return filterType <= 0 || entry.type == filterType;
 }
 
 template<typename Functor>
@@ -1116,11 +1172,20 @@ void executeLauncherEntry( const CommandLauncherEntry& entry ){
 	}
 }
 
-void refillLauncherList( QListWidget& list, const std::vector<CommandLauncherEntry>& sourceEntries, const QString& query ){
+void refillLauncherList( QListWidget& list, const std::vector<CommandLauncherEntry>& sourceEntries, const QString& query, int filterType, const QStringList& history ){
 	std::vector<CommandLauncherEntry> matches;
 	matches.reserve( sourceEntries.size() );
 	for( CommandLauncherEntry entry : sourceEntries ){
+		if( !launcherTypeMatchesFilter( entry, filterType ) ){
+			continue;
+		}
 		entry.score = computeLauncherScore( query, entry.search, entry.title, entry.id );
+		if( query.isEmpty() ){
+			entry.score += launcherRecentBoost( history, entry );
+		}
+		else if( normalizeText( entry.title ).contains( query ) || normalizeText( entry.id ).contains( query ) ){
+			entry.score += launcherRecentBoost( history, entry ) / 2;
+		}
 		if( entry.score > 0 ){
 			matches.emplace_back( std::move( entry ) );
 		}
@@ -1138,6 +1203,10 @@ void refillLauncherList( QListWidget& list, const std::vector<CommandLauncherEnt
 		auto *item = new QListWidgetItem( &list );
 		item->setData( Qt::UserRole, entry.id );
 		item->setData( Qt::UserRole + 1, entry.type );
+		item->setData( Qt::UserRole + 2, entry.title );
+		item->setData( Qt::UserRole + 3, entry.category );
+		item->setData( Qt::UserRole + 4, entry.subtitle );
+		item->setData( Qt::UserRole + 5, entry.detail );
 		QStringList secondary;
 		if( !entry.category.isEmpty() ){
 			secondary.push_back( entry.category );
@@ -1167,32 +1236,91 @@ void refillLauncherList( QListWidget& list, const std::vector<CommandLauncherEnt
 		list.setCurrentRow( 0 );
 	}
 }
+
+void updateLauncherDetails( QTextBrowser& details, QListWidget& list ){
+	if( QListWidgetItem *item = list.currentItem() ){
+		const QString title = item->data( Qt::UserRole + 2 ).toString();
+		const QString category = item->data( Qt::UserRole + 3 ).toString();
+		const QString subtitle = item->data( Qt::UserRole + 4 ).toString();
+		const QString detail = item->data( Qt::UserRole + 5 ).toString();
+		const QString id = item->data( Qt::UserRole ).toString();
+		QStringList meta;
+		if( !category.isEmpty() ){
+			meta.push_back( category );
+		}
+		if( !subtitle.isEmpty() ){
+			meta.push_back( subtitle );
+		}
+		details.setHtml(
+			QString(
+				"<h3>%1</h3>"
+				"<p><b>%2</b></p>"
+				"<p>%3</p>"
+				"<p><b>Internal ID:</b> <code>%4</code></p>"
+				"<p>Press <b>Enter</b> to run the selected result.</p>"
+			)
+			.arg( title.toHtmlEscaped() )
+			.arg( meta.isEmpty() ? QString( "Action" ) : meta.join( " • " ).toHtmlEscaped() )
+			.arg( ( detail.isEmpty() ? QString( "Run this editor action." ) : detail ).toHtmlEscaped() )
+			.arg( id.toHtmlEscaped() )
+		);
+		return;
+	}
+
+	details.setHtml( "<p>Select a tool, command, toggle, or entity class to see details.</p>" );
+}
 }
 
 void DoCommandLauncher(){
 	QDialog dialog( MainFrame_getWindow(), Qt::Dialog | Qt::WindowCloseButtonHint );
 	dialog.setWindowTitle( "Command Launcher" );
-	dialog.resize( 720, 520 );
+	dialog.resize( 940, 560 );
 
 	auto *layout = new QVBoxLayout( &dialog );
+	auto *toolbar = new QHBoxLayout();
 	auto *searchLine = new QLineEdit( &dialog );
 	searchLine->setClearButtonEnabled( true );
 	searchLine->setPlaceholderText( "Type a tool, action, or entity class" );
-	layout->addWidget( searchLine );
+	auto *filterCombo = new QComboBox( &dialog );
+	filterCombo->addItem( "All", 0 );
+	filterCombo->addItem( "Commands", 1 );
+	filterCombo->addItem( "Toggles", 2 );
+	filterCombo->addItem( "Entities", 3 );
+	toolbar->addWidget( searchLine, 1 );
+	toolbar->addWidget( filterCombo );
+	layout->addLayout( toolbar );
 
-	auto *hintLabel = new QLabel( "Enter runs the selected result. Search matches actions, fuzzy tool phrases, shortcuts, and entity classes.", &dialog );
+	auto *hintLabel = new QLabel( "Enter runs the selected result. Search matches actions, fuzzy tool phrases, shortcuts, and entity classes, with recent picks boosted.", &dialog );
 	layout->addWidget( hintLabel );
 
+	auto *splitter = new QSplitter( Qt::Horizontal, &dialog );
 	auto *list = new QListWidget( &dialog );
 	list->setAlternatingRowColors( true );
-	layout->addWidget( list );
+	splitter->addWidget( list );
+	auto *details = new QTextBrowser( &dialog );
+	details->setOpenExternalLinks( false );
+	details->setMinimumWidth( 280 );
+	splitter->addWidget( details );
+	splitter->setStretchFactor( 0, 3 );
+	splitter->setStretchFactor( 1, 2 );
+	layout->addWidget( splitter, 1 );
+
+	auto *statusLabel = new QLabel( &dialog );
+	layout->addWidget( statusLabel );
 
 	auto *buttons = new QDialogButtonBox( QDialogButtonBox::Close, &dialog );
 	auto *runButton = buttons->addButton( "Run", QDialogButtonBox::ButtonRole::AcceptRole );
 	layout->addWidget( buttons );
 
 	const std::vector<CommandLauncherEntry> entries = collectLauncherEntries();
-	const auto refill = [&](){ refillLauncherList( *list, entries, normalizeText( searchLine->text() ) ); };
+	const auto refill = [&](){
+		const QStringList history = launcherRecentEntries();
+		refillLauncherList( *list, entries, normalizeText( searchLine->text() ), filterCombo->currentData().toInt(), history );
+		updateLauncherDetails( *details, *list );
+		statusLabel->setText( QString( "%1 results  •  %2 recent actions remembered" )
+			.arg( list->count() )
+			.arg( history.size() ) );
+	};
 	refill();
 
 	const auto runSelected = [&](){
@@ -1201,13 +1329,16 @@ void DoCommandLauncher(){
 			entry.id = item->data( Qt::UserRole ).toString();
 			entry.type = item->data( Qt::UserRole + 1 ).toInt();
 			dialog.accept();
+			launcherRememberEntry( entry.id, entry.type );
 			executeLauncherEntry( entry );
 		}
 	};
 
 	QObject::connect( searchLine, &QLineEdit::textChanged, [&](){ refill(); } );
+	QObject::connect( filterCombo, QOverload<int>::of( &QComboBox::currentIndexChanged ), [&]( int ){ refill(); } );
 	QObject::connect( searchLine, &QLineEdit::returnPressed, runSelected );
 	QObject::connect( list, &QListWidget::itemActivated, [&]( QListWidgetItem* ){ runSelected(); } );
+	QObject::connect( list, &QListWidget::currentItemChanged, [&]( QListWidgetItem*, QListWidgetItem* ){ updateLauncherDetails( *details, *list ); } );
 	QObject::connect( runButton, &QPushButton::clicked, runSelected );
 	QObject::connect( buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject );
 

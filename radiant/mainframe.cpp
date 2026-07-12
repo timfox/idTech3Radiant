@@ -88,6 +88,7 @@
 #include <QHeaderView>
 #include <QProcess>
 #include <QUrl>
+#include <QDesktopServices>
 #include <QClipboard>
 #include <QCryptographicHash>
 #include <QTextStream>
@@ -106,6 +107,7 @@
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QVector>
+#include <QVector3D>
 #include <QComboBox>
 #include <QWindow>
 
@@ -1182,11 +1184,14 @@ QDockWidget* g_exp_assetsDock{};
 QDockWidget* g_exp_historyDock{};
 QDockWidget* g_exp_usdDock{};
 QDockWidget* g_exp_ecsDock{};
+QDockWidget* g_exp_districtDock{};
 QDockWidget* g_exp_syncDock{};
 QComboBox* g_exp_ecsCategoryCombo{};
 QListWidget* g_exp_ecsEntityList{};
 QLineEdit* g_exp_ecsSearchEdit{};
 QTextBrowser* g_exp_ecsDetails{};
+QPushButton* g_exp_ecsFavoriteButton{};
+QLabel* g_exp_ecsStatsLabel{};
 QLabel* g_exp_selectedCountLabel{};
 QLabel* g_exp_selectedComponentsLabel{};
 QLabel* g_exp_selectionTypeLabel{};
@@ -1233,6 +1238,18 @@ QListWidget* g_exp_assetsList{};
 QTextBrowser* g_exp_assetsDetails{};
 QListWidget* g_exp_historyList{};
 QTreeWidget* g_exp_usdTree{};
+QLineEdit* g_exp_districtManifestEdit{};
+QLineEdit* g_exp_districtNameEdit{};
+QListWidget* g_exp_districtList{};
+QTextBrowser* g_exp_districtDetails{};
+QLabel* g_exp_districtStatsLabel{};
+QLabel* g_exp_districtSelectionLabel{};
+QSpinBox* g_exp_districtSectorSize{};
+QSpinBox* g_exp_districtLoadRadius{};
+QCheckBox* g_exp_districtProxyToggle{};
+QCheckBox* g_exp_districtStreamToggle{};
+QCheckBox* g_exp_districtMasterToggle{};
+QCheckBox* g_exp_districtDrawToggle{};
 QLabel* g_exp_syncStateLabel{};
 QLabel* g_exp_syncClientsLabel{};
 QLabel* g_exp_syncRuntimeLabel{};
@@ -1255,6 +1272,8 @@ static void Experimental_refreshLiveSyncUi();
 static void Experimental_appendLiveSyncLog( const QString& message );
 static void Experimental_liveSyncPreviewBackendChanged();
 static void Experimental_refreshViewportQuickActions();
+static QString Experimental_districtSelectionSummary();
+static void Experimental_refreshDistrictList();
 static QJsonArray Experimental_buildCameraBookmarksArray();
 static void Experimental_restoreCameraBookmarks( const QJsonValue& value );
 
@@ -2681,6 +2700,9 @@ void Experimental_refreshSelection(){
 		const QString shader = Experimental_selectedNodeShader();
 		g_exp_selectionShaderLabel->setText( shader.isEmpty() ? "None" : shader );
 	}
+	if ( g_exp_districtSelectionLabel != nullptr ) {
+		g_exp_districtSelectionLabel->setText( Experimental_districtSelectionSummary() );
+	}
 	if ( g_exp_shaderEdit != nullptr ) {
 		g_exp_shaderEdit->setEnabled( hasSelection );
 		g_exp_shaderEdit->setPlaceholderText( hasSelection ? "textures/common/caulk" : "Select something to edit shader" );
@@ -2912,6 +2934,7 @@ static void OpenWysiwygWorkspace_impl(){
 	Experimental_showDock( g_exp_previewDock );
 	Experimental_showDock( g_exp_assetsDock );
 	Experimental_showDock( g_exp_usdDock );
+	Experimental_showDock( g_exp_districtDock );
 	Experimental_hideDock( g_exp_historyDock );
 	Experimental_hideDock( g_exp_syncDock );
 	Experimental_hideDock( g_exp_ecsDock );
@@ -2935,6 +2958,10 @@ void Experimental_toggleSyncDock_impl(){
 }
 void Experimental_toggleUSDDock_impl(){
 	Experimental_toggleDock( g_exp_usdDock );
+}
+
+void Experimental_toggleDistrictDock_impl(){
+	Experimental_toggleDock( g_exp_districtDock );
 }
 
 void Experimental_toggleECSDock_impl(){
@@ -3006,6 +3033,63 @@ static QString ECS_detailsForEntity( const EntityClass* eclass ){
 	return lines.join( "" );
 }
 
+static QStringList Experimental_ecsSettingList( const char* key ){
+	return QSettings().value( key ).toStringList();
+}
+
+static void Experimental_ecsSetSettingList( const char* key, QStringList values ){
+	values.removeDuplicates();
+	QSettings().setValue( key, values );
+}
+
+static QStringList Experimental_ecsFavorites(){
+	return Experimental_ecsSettingList( "Properties/Experimental/ECSFavorites" );
+}
+
+static QStringList Experimental_ecsRecents(){
+	return Experimental_ecsSettingList( "Properties/Experimental/ECSRecents" );
+}
+
+static bool Experimental_ecsIsFavorite( const QString& classname ){
+	return Experimental_ecsFavorites().contains( classname, Qt::CaseInsensitive );
+}
+
+static bool Experimental_ecsIsRecent( const QString& classname ){
+	return Experimental_ecsRecents().contains( classname, Qt::CaseInsensitive );
+}
+
+static void Experimental_ecsRememberRecent( const QString& classname ){
+	if ( classname.isEmpty() ) {
+		return;
+	}
+	QStringList recents = Experimental_ecsRecents();
+	recents.removeAll( classname );
+	recents.prepend( classname );
+	while ( recents.size() > 12 )
+		recents.removeLast();
+	Experimental_ecsSetSettingList( "Properties/Experimental/ECSRecents", recents );
+}
+
+static void Experimental_ecsSetFavorite( const QString& classname, bool favorite ){
+	if ( classname.isEmpty() ) {
+		return;
+	}
+	QStringList favorites = Experimental_ecsFavorites();
+	favorites.removeAll( classname );
+	if ( favorite ) {
+		favorites.prepend( classname );
+	}
+	Experimental_ecsSetSettingList( "Properties/Experimental/ECSFavorites", favorites );
+}
+
+static QString Experimental_ecsCurrentClassname(){
+	QListWidgetItem* item = g_exp_ecsEntityList != nullptr ? g_exp_ecsEntityList->currentItem() : nullptr;
+	return item != nullptr ? item->data( Qt::UserRole ).toString() : QString();
+}
+
+static void Experimental_refreshECSList();
+static void Experimental_refreshECSQuickState();
+
 static void Experimental_refreshECSDetails(){
 	if ( g_exp_ecsDetails == nullptr ) {
 		return;
@@ -3013,10 +3097,74 @@ static void Experimental_refreshECSDetails(){
 	QListWidgetItem* item = g_exp_ecsEntityList != nullptr ? g_exp_ecsEntityList->currentItem() : nullptr;
 	if ( item == nullptr ) {
 		g_exp_ecsDetails->setHtml( "<p>Select an entity to see its description and placement type.</p>" );
+		Experimental_refreshECSQuickState();
 		return;
 	}
-	EntityClass* eclass = GlobalEntityClassManager().findOrInsert( item->data( Qt::UserRole ).toString().toLatin1().constData(), true );
-	g_exp_ecsDetails->setHtml( ECS_detailsForEntity( eclass ) );
+	const QString classname = item->data( Qt::UserRole ).toString();
+	EntityClass* eclass = GlobalEntityClassManager().findOrInsert( classname.toLatin1().constData(), true );
+	QStringList flags;
+	if ( Experimental_ecsIsFavorite( classname ) ) {
+		flags.push_back( "Favorite" );
+	}
+	if ( Experimental_ecsIsRecent( classname ) ) {
+		flags.push_back( "Recent" );
+	}
+	QString html = ECS_detailsForEntity( eclass );
+	if ( !flags.isEmpty() ) {
+		html += StringStream( "<p><b>Quick Access:</b> ", flags.join( " • " ).toUtf8().constData(), "</p>" ).c_str();
+	}
+	html += "<p><b>Placement:</b> Add at camera with the button below, or double-click to place immediately.</p>";
+	g_exp_ecsDetails->setHtml( html );
+	Experimental_refreshECSQuickState();
+}
+
+static void Experimental_refreshECSQuickState(){
+	if ( g_exp_ecsFavoriteButton != nullptr ) {
+		const QString classname = Experimental_ecsCurrentClassname();
+		g_exp_ecsFavoriteButton->setEnabled( !classname.isEmpty() );
+		g_exp_ecsFavoriteButton->setText( Experimental_ecsIsFavorite( classname ) ? "Unfavorite" : "Favorite" );
+	}
+	if ( g_exp_ecsStatsLabel != nullptr && g_exp_ecsEntityList != nullptr ) {
+		g_exp_ecsStatsLabel->setText(
+			QString( "%1 shown  •  %2 favorites  •  %3 recent" )
+				.arg( g_exp_ecsEntityList->count() )
+				.arg( Experimental_ecsFavorites().size() )
+				.arg( Experimental_ecsRecents().size() )
+		);
+	}
+}
+
+static void Experimental_toggleECSFavorite(){
+	const QString classname = Experimental_ecsCurrentClassname();
+	if ( classname.isEmpty() ) {
+		return;
+	}
+	Experimental_ecsSetFavorite( classname, !Experimental_ecsIsFavorite( classname ) );
+	Experimental_refreshECSList();
+}
+
+static QIcon Experimental_ecsIconForEntityClass( const EntityClass* eclass ){
+	if ( classname_equal( eclass->name(), "light" ) || classname_equal( eclass->name(), "lightJunior" ) ) {
+		return new_local_icon( "ecs_light" );
+	}
+	if ( eclass->miscmodel_is ) {
+		return new_local_icon( "ecs_model" );
+	}
+	if ( string_compare_nocase_n( eclass->name(), "trigger_", 8 ) == 0 ) {
+		return new_local_icon( "ecs_trigger" );
+	}
+	if ( classname_equal( eclass->name(), "info_player_start" )
+	  || classname_equal( eclass->name(), "info_player_deathmatch" )
+	  || classname_equal( eclass->name(), "team_ctf_redplayer" )
+	  || classname_equal( eclass->name(), "team_ctf_blueplayer" )
+	  || classname_equal( eclass->name(), "team_ctf_redspawn" )
+	  || classname_equal( eclass->name(), "team_ctf_bluespawn" ) ) {
+		return new_local_icon( "ecs_spawn" );
+	}
+	if ( eclass->fixedsize ) {
+		return new_local_icon( "ecs_pointentity" );
+	}
+	return new_local_icon( "ecs_brushentity" );
 }
 
 static void Experimental_refreshECSList(){
@@ -3027,57 +3175,90 @@ static void Experimental_refreshECSList(){
 	const QString filter = g_exp_ecsSearchEdit != nullptr ? g_exp_ecsSearchEdit->text().trimmed() : QString();
 	const QString selectedClassname = g_exp_ecsEntityList->currentItem() != nullptr ? g_exp_ecsEntityList->currentItem()->data( Qt::UserRole ).toString() : QString();
 	g_exp_ecsEntityList->clear();
+	const QStringList favorites = Experimental_ecsFavorites();
+	const QStringList recents = Experimental_ecsRecents();
+
+	struct ECSListEntry
+	{
+		QString classname;
+		QString category;
+		QString comments;
+		QIcon icon;
+		bool favorite{};
+		int recentIndex{ 9999 };
+	};
 
 	class ECSCollector final : public EntityClassVisitor
 	{
-		QListWidget* m_list;
+		std::vector<ECSListEntry>& m_entries;
 		QString m_cat;
 		QString m_filter;
-		static QIcon iconForEntityClass( const EntityClass* eclass ){
-			if ( classname_equal( eclass->name(), "light" ) || classname_equal( eclass->name(), "lightJunior" ) ) {
-				return new_local_icon( "ecs_light" );
-			}
-			if ( eclass->miscmodel_is ) {
-				return new_local_icon( "ecs_model" );
-			}
-			if ( string_compare_nocase_n( eclass->name(), "trigger_", 8 ) == 0 ) {
-				return new_local_icon( "ecs_trigger" );
-			}
-			if ( classname_equal( eclass->name(), "info_player_start" )
-			  || classname_equal( eclass->name(), "info_player_deathmatch" )
-			  || classname_equal( eclass->name(), "team_ctf_redplayer" )
-			  || classname_equal( eclass->name(), "team_ctf_blueplayer" )
-			  || classname_equal( eclass->name(), "team_ctf_redspawn" )
-			  || classname_equal( eclass->name(), "team_ctf_bluespawn" ) ) {
-				return new_local_icon( "ecs_spawn" );
-			}
-			if ( eclass->fixedsize ) {
-				return new_local_icon( "ecs_pointentity" );
-			}
-			return new_local_icon( "ecs_brushentity" );
-		}
+		QStringList m_favorites;
+		QStringList m_recents;
 	public:
-		ECSCollector( QListWidget* list, const QString& cat, const QString& filter ) : m_list( list ), m_cat( cat ), m_filter( filter ){}
+		ECSCollector( std::vector<ECSListEntry>& entries, const QString& cat, const QString& filter, const QStringList& favorites, const QStringList& recents )
+			: m_entries( entries ), m_cat( cat ), m_filter( filter ), m_favorites( favorites ), m_recents( recents ){}
 		void visit( EntityClass* eclass ) override {
 			if ( !ECS_isAdvancedEntity( eclass->name() ) ) {
 				return;
 			}
+			const QString classname = eclass->name();
 			const QString category = ECS_categoryForEntity( eclass->name() );
-			if ( !m_cat.isEmpty() && m_cat != "All" && category != m_cat ) {
+			const bool favorite = m_favorites.contains( classname, Qt::CaseInsensitive );
+			const int recentIndex = m_recents.indexOf( classname );
+			if ( !m_cat.isEmpty() && m_cat != "All" && m_cat != "Favorites" && m_cat != "Recent" && category != m_cat ) {
+				return;
+			}
+			if ( m_cat == "Favorites" && !favorite ) {
+				return;
+			}
+			if ( m_cat == "Recent" && recentIndex < 0 ) {
 				return;
 			}
 			const QString searchText = StringStream( eclass->name(), " ", category.toUtf8().constData(), " ", eclass->comments(), " ", eclass->modelpath() ).c_str();
 			if ( !m_filter.isEmpty() && !searchText.contains( m_filter, Qt::CaseInsensitive ) ) {
 				return;
 			}
-			auto* item = new QListWidgetItem( iconForEntityClass( eclass ), eclass->name() );
-			item->setData( Qt::UserRole, eclass->name() );
-			item->setToolTip( StringStream( category.toUtf8().constData(), "\n", eclass->comments() ).c_str() );
-			m_list->addItem( item );
+			ECSListEntry entry;
+			entry.classname = classname;
+			entry.category = category;
+			entry.comments = eclass->comments();
+			entry.icon = Experimental_ecsIconForEntityClass( eclass );
+			entry.favorite = favorite;
+			entry.recentIndex = recentIndex >= 0 ? recentIndex : 9999;
+			m_entries.emplace_back( std::move( entry ) );
 		}
-	} collector( g_exp_ecsEntityList, cat, filter );
+	};
+	std::vector<ECSListEntry> entries;
+	entries.reserve( 256 );
+	ECSCollector collector( entries, cat, filter, favorites, recents );
 	GlobalEntityClassManager().forEach( collector );
-	g_exp_ecsEntityList->sortItems();
+
+	std::sort( entries.begin(), entries.end(), []( const ECSListEntry& a, const ECSListEntry& b ){
+		if ( a.favorite != b.favorite ) {
+			return a.favorite > b.favorite;
+		}
+		if ( a.recentIndex != b.recentIndex ) {
+			return a.recentIndex < b.recentIndex;
+		}
+		return QString::compare( a.classname, b.classname, Qt::CaseInsensitive ) < 0;
+	} );
+
+	for ( const ECSListEntry& entry : entries )
+	{
+		QString label = entry.classname;
+		if ( entry.favorite ) {
+			label.prepend( "[Fav] " );
+		}
+		else if ( entry.recentIndex < 9999 ) {
+			label.prepend( "[Recent] " );
+		}
+		auto* item = new QListWidgetItem( entry.icon, label );
+		item->setData( Qt::UserRole, entry.classname );
+		item->setToolTip( StringStream( entry.category.toUtf8().constData(), "\n", entry.comments.toUtf8().constData() ).c_str() );
+		g_exp_ecsEntityList->addItem( item );
+	}
+
 	for ( int i = 0; i < g_exp_ecsEntityList->count(); ++i )
 	{
 		if ( g_exp_ecsEntityList->item( i )->data( Qt::UserRole ).toString() == selectedClassname ) {
@@ -3093,7 +3274,465 @@ static void Experimental_refreshECSList(){
 
 static void Experimental_ecsAddEntity( const char* classname ){
 	Entity_createFromSelection( classname, Add_entitySpawnOrigin() );
+	Experimental_ecsRememberRecent( classname );
+	Experimental_refreshECSList();
 	SceneChangeNotify();
+}
+
+struct ExperimentalDistrictEntry
+{
+	QString name;
+	QString slug;
+	QString proxyPath;
+	QString fullPath;
+	QVector3D origin;
+};
+
+static QVector<ExperimentalDistrictEntry> g_exp_districtEntries;
+
+static QString Experimental_districtManifestPath(){
+	return g_exp_districtManifestEdit != nullptr ? g_exp_districtManifestEdit->text().trimmed() : QString();
+}
+
+static QString Experimental_districtSettingsValue( const char* key, const QString& fallback = QString() ){
+	return QSettings().value( key, fallback ).toString();
+}
+
+static QString Experimental_districtSlugForName( const QString& name ){
+	QString slug = name;
+	if ( slug.startsWith( "District_", Qt::CaseInsensitive ) ) {
+		slug.remove( 0, 9 );
+	}
+	slug = slug.toLower();
+	QString cleaned;
+	for ( const QChar c : slug )
+	{
+		if ( c.isLetterOrNumber() ) {
+			cleaned += c;
+		}
+		else if ( cleaned.isEmpty() || cleaned.back() != '_' ) {
+			cleaned += '_';
+		}
+	}
+	return cleaned.trimmed().remove( QRegularExpression( "^_+|_+$" ) );
+}
+
+static ExperimentalDistrictEntry* Experimental_currentDistrictEntry(){
+	if ( g_exp_districtList == nullptr || g_exp_districtList->currentRow() < 0 || g_exp_districtList->currentRow() >= g_exp_districtEntries.size() ) {
+		return nullptr;
+	}
+	return &g_exp_districtEntries[g_exp_districtList->currentRow()];
+}
+
+static QString Experimental_districtRuntimePreset(){
+	const int sectorSize = g_exp_districtSectorSize != nullptr ? g_exp_districtSectorSize->value() : 4096;
+	const int loadRadius = g_exp_districtLoadRadius != nullptr ? g_exp_districtLoadRadius->value() : 8192;
+	const int master = g_exp_districtMasterToggle != nullptr && g_exp_districtMasterToggle->isChecked() ? 1 : 0;
+	const int proxy = g_exp_districtProxyToggle != nullptr && g_exp_districtProxyToggle->isChecked() ? 1 : 0;
+	const int stream = g_exp_districtStreamToggle != nullptr && g_exp_districtStreamToggle->isChecked() ? 1 : 0;
+	const int draw = g_exp_districtDrawToggle != nullptr && g_exp_districtDrawToggle->isChecked() ? 1 : 0;
+	return QString( "set r_district %1\nset r_districtProxy %2\nset cm_districtStream %3\nset r_districtSectorSize %4\nset r_districtLoadRadius %5\nset r_districtDraw %6" )
+		.arg( master )
+		.arg( proxy )
+		.arg( stream )
+		.arg( sectorSize )
+		.arg( loadRadius )
+		.arg( draw );
+}
+
+static QString Experimental_districtNameValue(){
+	if ( g_exp_districtNameEdit == nullptr ) {
+		return QString();
+	}
+	return g_exp_districtNameEdit->text().trimmed();
+}
+
+static bool Experimental_districtSelectionBounds( AABB& bounds ){
+	if ( GlobalSelectionSystem().countSelected() == 0 ) {
+		return false;
+	}
+	bounds = GlobalSelectionSystem().getBoundsSelected();
+	return aabb_valid( bounds );
+}
+
+static QString Experimental_districtSelectionSummary(){
+	AABB bounds;
+	if ( !Experimental_districtSelectionBounds( bounds ) ) {
+		return "Select brushes, patches, or entities to derive district bounds.";
+	}
+
+	const Vector3 size = bounds.extents * 2.f;
+	return QString( "Selection bounds: %1 x %2 x %3  •  Center: %4, %5, %6" )
+		.arg( size.x(), 0, 'f', 0 )
+		.arg( size.y(), 0, 'f', 0 )
+		.arg( size.z(), 0, 'f', 0 )
+		.arg( bounds.origin.x(), 0, 'f', 0 )
+		.arg( bounds.origin.y(), 0, 'f', 0 )
+		.arg( bounds.origin.z(), 0, 'f', 0 );
+}
+
+static QString Experimental_districtResolvedName(){
+	QString name = Experimental_districtNameValue();
+	if ( name.isEmpty() ) {
+		if ( ExperimentalDistrictEntry* entry = Experimental_currentDistrictEntry(); entry != nullptr ) {
+			name = entry->name;
+		}
+	}
+	if ( name.isEmpty() ) {
+		return QString();
+	}
+	if ( !name.startsWith( "District_", Qt::CaseInsensitive ) ) {
+		name.prepend( "District_" );
+	}
+	return name;
+}
+
+static QString Experimental_districtManifestSnippet( const QString& districtName ){
+	AABB bounds;
+	if ( districtName.isEmpty() || !Experimental_districtSelectionBounds( bounds ) ) {
+		return QString();
+	}
+
+	return QString(
+		"def Xform \"%1\" (\n"
+		"    kind = \"assembly\"\n"
+		")\n"
+		"{\n"
+		"    double3 xformOp:translate = (%2, %3, %4)\n"
+		"    uniform token[] xformOpOrder = [\"xformOp:translate\"]\n"
+		"}\n"
+		"\n"
+		"def Xform \"%1_Proxy\" (\n"
+		"    purpose = \"proxy\"\n"
+		")\n"
+		"{\n"
+		"    double3 xformOp:translate = (%2, %3, %4)\n"
+		"    uniform token[] xformOpOrder = [\"xformOp:translate\"]\n"
+		"}\n"
+	)
+		.arg( districtName )
+		.arg( bounds.origin.x(), 0, 'f', 0 )
+		.arg( bounds.origin.y(), 0, 'f', 0 )
+		.arg( bounds.origin.z(), 0, 'f', 0 );
+}
+
+static bool Experimental_writeTextFile( const QString& path, const QString& text ){
+	QFile file( path );
+	if ( !file.open( QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate ) ) {
+		return false;
+	}
+	QTextStream stream( &file );
+	stream << text;
+	return stream.status() == QTextStream::Ok;
+}
+
+static bool Experimental_writeDistrictScaffold(){
+	const QString manifestPath = Experimental_districtManifestPath();
+	const QString districtName = Experimental_districtResolvedName();
+	AABB bounds;
+	if ( manifestPath.isEmpty() ) {
+		Sys_Status( "Choose a district manifest before writing district assets" );
+		return false;
+	}
+	if ( districtName.isEmpty() ) {
+		Sys_Status( "Enter a district name before writing district assets" );
+		return false;
+	}
+	if ( !Experimental_districtSelectionBounds( bounds ) ) {
+		Sys_Status( "Select geometry to derive district bounds" );
+		return false;
+	}
+
+	const QString slug = Experimental_districtSlugForName( districtName );
+	if ( slug.isEmpty() ) {
+		Sys_Status( "District name did not produce a valid slug" );
+		return false;
+	}
+
+	const QFileInfo manifestInfo( manifestPath );
+	const QDir rootDir = manifestInfo.absoluteDir();
+	const QString proxyDir = rootDir.filePath( "world/proxies" );
+	const QString fullDir = rootDir.filePath( "world/districts" );
+	if ( !QDir().mkpath( proxyDir ) || !QDir().mkpath( fullDir ) ) {
+		Sys_Status( "Unable to create district asset folders" );
+		return false;
+	}
+
+	const Vector3 extents = bounds.extents;
+	const float minX = -extents.x();
+	const float minY = -extents.y();
+	const float minZ = -extents.z();
+	const float maxX = extents.x();
+	const float maxY = extents.y();
+	const float maxZ = extents.z();
+	const QString proxyPath = rootDir.filePath( QString( "world/proxies/%1_proxy.usda" ).arg( slug ) );
+	const QString fullPath = rootDir.filePath( QString( "world/districts/%1.usda" ).arg( slug ) );
+
+	const QString proxyText = QString(
+		"#usda 1.0\n"
+		"(\n"
+		"    defaultPrim = \"Proxy\"\n"
+		"    doc = \"District proxy scaffold generated from editor selection.\"\n"
+		")\n"
+		"\n"
+		"def Xform \"Proxy\"\n"
+		"{\n"
+		"    def Mesh \"BoundsBox\"\n"
+		"    {\n"
+		"        purpose = \"proxy\"\n"
+		"        point3f[] points = [\n"
+		"            (%1, %2, %3), (%4, %2, %3), (%4, %5, %3), (%1, %5, %3),\n"
+		"            (%1, %2, %6), (%4, %2, %6), (%4, %5, %6), (%1, %5, %6)\n"
+		"        ]\n"
+		"        int[] faceVertexCounts = [4, 4, 4, 4, 4, 4]\n"
+		"        int[] faceVertexIndices = [\n"
+		"            0, 1, 2, 3,\n"
+		"            4, 7, 6, 5,\n"
+		"            0, 4, 5, 1,\n"
+		"            1, 5, 6, 2,\n"
+		"            2, 6, 7, 3,\n"
+		"            3, 7, 4, 0\n"
+		"        ]\n"
+		"        color3f[] primvars:displayColor = [(0.2, 0.5, 0.9)]\n"
+		"    }\n"
+		"}\n"
+	)
+		.arg( minX, 0, 'f', 0 )
+		.arg( minY, 0, 'f', 0 )
+		.arg( minZ, 0, 'f', 0 )
+		.arg( maxX, 0, 'f', 0 )
+		.arg( maxY, 0, 'f', 0 )
+		.arg( maxZ, 0, 'f', 0 );
+
+	const QString fullText = QString(
+		"#usda 1.0\n"
+		"(\n"
+		"    defaultPrim = \"District\"\n"
+		"    doc = \"District full payload scaffold generated from editor selection.\"\n"
+		")\n"
+		"\n"
+		"def Xform \"District\"\n"
+		"{\n"
+		"    def Mesh \"Footprint\"\n"
+		"    {\n"
+		"        point3f[] points = [(%1, %2, %3), (%4, %2, %3), (%4, %5, %3), (%1, %5, %3)]\n"
+		"        int[] faceVertexCounts = [4]\n"
+		"        int[] faceVertexIndices = [0, 1, 2, 3]\n"
+		"        color3f[] primvars:displayColor = [(0.5, 0.5, 0.55)]\n"
+		"    }\n"
+		"}\n"
+	)
+		.arg( minX, 0, 'f', 0 )
+		.arg( minY, 0, 'f', 0 )
+		.arg( minZ, 0, 'f', 0 )
+		.arg( maxX, 0, 'f', 0 )
+		.arg( maxY, 0, 'f', 0 );
+
+	if ( !Experimental_writeTextFile( proxyPath, proxyText ) || !Experimental_writeTextFile( fullPath, fullText ) ) {
+		Sys_Status( "Unable to write district proxy/full USDA files" );
+		return false;
+	}
+
+	Experimental_refreshDistrictList();
+	for ( int i = 0; g_exp_districtList != nullptr && i < g_exp_districtList->count(); ++i )
+	{
+		if ( g_exp_districtList->item( i )->text() == districtName ) {
+			g_exp_districtList->setCurrentRow( i );
+			break;
+		}
+	}
+	Sys_Status( "District proxy/full USDA scaffold written" );
+	return true;
+}
+
+static void Experimental_refreshDistrictDetails();
+
+static void Experimental_refreshDistrictList(){
+	if ( g_exp_districtList == nullptr ) {
+		return;
+	}
+
+	const QString previousSelection = Experimental_currentDistrictEntry() != nullptr ? Experimental_currentDistrictEntry()->name : QString();
+	g_exp_districtEntries.clear();
+	g_exp_districtList->clear();
+
+	const QString manifestPath = Experimental_districtManifestPath();
+	if ( manifestPath.isEmpty() ) {
+		Experimental_refreshDistrictDetails();
+		return;
+	}
+
+	QFile file( manifestPath );
+	if ( !file.open( QIODevice::ReadOnly | QIODevice::Text ) ) {
+		Experimental_refreshDistrictDetails();
+		if ( g_exp_districtStatsLabel != nullptr ) {
+			g_exp_districtStatsLabel->setText( "Manifest not readable" );
+		}
+		return;
+	}
+
+	const QFileInfo info( manifestPath );
+	const QString directory = info.absoluteDir().absolutePath();
+	const QRegularExpression districtDefRegex( "^def\\s+Xform\\s+\"(District_[^\"]+)\"" );
+	const QRegularExpression translateRegex( "xformOp:translate\\s*=\\s*\\(([-\\d\\.]+),\\s*([-\\d\\.]+),\\s*([-\\d\\.]+)\\)" );
+
+	QTextStream stream( &file );
+	bool inDistrictEntry = false;
+	int braceDepth = 0;
+	ExperimentalDistrictEntry current;
+
+	while ( !stream.atEnd() )
+	{
+		const QString rawLine = stream.readLine();
+		const QString line = rawLine.trimmed();
+
+		if ( !inDistrictEntry ) {
+			const auto defMatch = districtDefRegex.match( line );
+			if ( defMatch.hasMatch() ) {
+				current = ExperimentalDistrictEntry{};
+				current.name = defMatch.captured( 1 );
+				current.slug = Experimental_districtSlugForName( current.name );
+				current.proxyPath = QDir( directory ).filePath( QString( "world/proxies/%1_proxy.usda" ).arg( current.slug ) );
+				current.fullPath = QDir( directory ).filePath( QString( "world/districts/%1.usda" ).arg( current.slug ) );
+				inDistrictEntry = true;
+				braceDepth = 0;
+			}
+		}
+
+		if ( inDistrictEntry ) {
+			const auto translateMatch = translateRegex.match( line );
+			if ( translateMatch.hasMatch() ) {
+				current.origin = QVector3D(
+					translateMatch.captured( 1 ).toFloat(),
+					translateMatch.captured( 2 ).toFloat(),
+					translateMatch.captured( 3 ).toFloat()
+				);
+			}
+
+			braceDepth += rawLine.count( '{' );
+			braceDepth -= rawLine.count( '}' );
+			if ( braceDepth <= 0 && line == "}" ) {
+				g_exp_districtEntries.push_back( current );
+				inDistrictEntry = false;
+			}
+		}
+	}
+
+	for ( const ExperimentalDistrictEntry& entry : g_exp_districtEntries )
+	{
+		auto* item = new QListWidgetItem( entry.name, g_exp_districtList );
+		item->setToolTip( QString( "%1\nProxy: %2\nFull: %3" ).arg( entry.name, entry.proxyPath, entry.fullPath ) );
+	}
+
+	if ( !previousSelection.isEmpty() ) {
+		for ( int i = 0; i < g_exp_districtList->count(); ++i )
+		{
+			if ( g_exp_districtList->item( i )->text() == previousSelection ) {
+				g_exp_districtList->setCurrentRow( i );
+				break;
+			}
+		}
+	}
+	if ( g_exp_districtList->currentRow() < 0 && g_exp_districtList->count() > 0 ) {
+		g_exp_districtList->setCurrentRow( 0 );
+	}
+	if ( g_exp_districtStatsLabel != nullptr ) {
+		g_exp_districtStatsLabel->setText( QString( "%1 districts  •  %2" ).arg( g_exp_districtEntries.size() ).arg( QFileInfo( manifestPath ).fileName() ) );
+	}
+	Experimental_refreshDistrictDetails();
+}
+
+static void Experimental_refreshDistrictDetails(){
+	if ( g_exp_districtDetails == nullptr ) {
+		return;
+	}
+
+	ExperimentalDistrictEntry* entry = Experimental_currentDistrictEntry();
+	if ( entry == nullptr ) {
+		const QString manifest = Experimental_districtManifestPath();
+		g_exp_districtDetails->setHtml(
+			manifest.isEmpty()
+				? "<p>Choose a district manifest to inspect runtime district assets, proxy/full paths, and suggested commands.</p>"
+				: "<p>No districts found in the selected manifest.</p>"
+		);
+		return;
+	}
+
+	const QString manifestCommand = QString( "district_load %1" ).arg( Experimental_districtManifestPath() );
+	const QString proxyCommand = QString( "district_proxy %1" ).arg( entry->name );
+	const QString fullCommand = QString( "district_load_full %1" ).arg( entry->name );
+	const QString unloadCommand = QString( "district_unload %1" ).arg( entry->name );
+	const QString selectionSummary = Experimental_districtSelectionSummary();
+
+	g_exp_districtDetails->setHtml(
+		QString(
+			"<h3>%1</h3>"
+			"<p><b>Slug:</b> <code>%2</code><br>"
+			"<b>Origin:</b> %3, %4, %5</p>"
+			"<p><b>Proxy USDA:</b> <code>%6</code><br>"
+			"<b>Full USDA:</b> <code>%7</code></p>"
+			"<p><b>Selection authoring:</b><br>%13</p>"
+			"<p><b>Runtime load:</b><br><code>%8</code><br>"
+			"<code>%9</code><br><code>%10</code><br><code>%11</code></p>"
+			"<p><b>Runtime preset:</b><br><code>%12</code></p>"
+		)
+		.arg( entry->name.toHtmlEscaped() )
+		.arg( entry->slug.toHtmlEscaped() )
+		.arg( entry->origin.x(), 0, 'f', 0 )
+		.arg( entry->origin.y(), 0, 'f', 0 )
+		.arg( entry->origin.z(), 0, 'f', 0 )
+		.arg( entry->proxyPath.toHtmlEscaped() )
+		.arg( entry->fullPath.toHtmlEscaped() )
+		.arg( manifestCommand.toHtmlEscaped() )
+		.arg( proxyCommand.toHtmlEscaped() )
+		.arg( fullCommand.toHtmlEscaped() )
+		.arg( unloadCommand.toHtmlEscaped() )
+		.arg( Experimental_districtRuntimePreset().toHtmlEscaped().replace( "\n", "<br>" ) )
+		.arg( selectionSummary.toHtmlEscaped() )
+	);
+}
+
+static void Experimental_copyDistrictText( const QString& text, const char* status ){
+	QApplication::clipboard()->setText( text );
+	Sys_Status( status );
+}
+
+static void Experimental_browseDistrictManifest(){
+	const QString start = Experimental_districtManifestPath().isEmpty()
+		? QDir( QString::fromLatin1( GameToolsPath_get() ) ).absolutePath()
+		: Experimental_districtManifestPath();
+	const QString path = QFileDialog::getOpenFileName( MainFrame_getWindow(), "Open District Manifest", start, "USD Files (*.usd *.usda *.usdc)" );
+	if ( path.isEmpty() ) {
+		return;
+	}
+	if ( g_exp_districtManifestEdit != nullptr ) {
+		g_exp_districtManifestEdit->setText( path );
+	}
+	QSettings().setValue( "Properties/Experimental/DistrictManifest", path );
+	Experimental_refreshDistrictList();
+}
+
+static void Experimental_openDistrictPath( bool proxy ){
+	ExperimentalDistrictEntry* entry = Experimental_currentDistrictEntry();
+	if ( entry == nullptr ) {
+		return;
+	}
+	const QString path = proxy ? entry->proxyPath : entry->fullPath;
+	if ( !QFileInfo::exists( path ) ) {
+		Sys_Status( proxy ? "Proxy district USDA not found" : "Full district USDA not found" );
+		return;
+	}
+	QDesktopServices::openUrl( QUrl::fromLocalFile( path ) );
+}
+
+static void Experimental_storeDistrictRuntimePreset(){
+	QSettings().setValue( "Properties/Experimental/DistrictSectorSize", g_exp_districtSectorSize != nullptr ? g_exp_districtSectorSize->value() : 4096 );
+	QSettings().setValue( "Properties/Experimental/DistrictLoadRadius", g_exp_districtLoadRadius != nullptr ? g_exp_districtLoadRadius->value() : 8192 );
+	QSettings().setValue( "Properties/Experimental/DistrictMaster", g_exp_districtMasterToggle != nullptr && g_exp_districtMasterToggle->isChecked() );
+	QSettings().setValue( "Properties/Experimental/DistrictProxy", g_exp_districtProxyToggle != nullptr && g_exp_districtProxyToggle->isChecked() );
+	QSettings().setValue( "Properties/Experimental/DistrictStream", g_exp_districtStreamToggle != nullptr && g_exp_districtStreamToggle->isChecked() );
+	QSettings().setValue( "Properties/Experimental/DistrictDraw", g_exp_districtDrawToggle != nullptr && g_exp_districtDrawToggle->isChecked() );
+	Experimental_refreshDistrictDetails();
 }
 
 void Experimental_importUSDStructure_impl(){
@@ -4836,6 +5475,160 @@ void Experimental_createDocks( QMainWindow* window ){
 	}
 	window->addDockWidget( Qt::LeftDockWidgetArea, g_exp_usdDock );
 
+	g_exp_districtDock = new QDockWidget( "Districts", window );
+	g_exp_districtDock->setObjectName( "dock_experimental_districts" );
+	{
+		auto* root = new QWidget( g_exp_districtDock );
+		auto* vbox = new QVBoxLayout( root );
+		auto* manifestRow = new QHBoxLayout;
+		g_exp_districtManifestEdit = new QLineEdit( root );
+		g_exp_districtManifestEdit->setClearButtonEnabled( true );
+		g_exp_districtManifestEdit->setPlaceholderText( "world/playfield.usda" );
+		g_exp_districtManifestEdit->setText( QSettings().value( "Properties/Experimental/DistrictManifest" ).toString() );
+		auto* browseManifestButton = new QPushButton( "Browse", root );
+		auto* refreshManifestButton = new QPushButton( "Reload", root );
+		manifestRow->addWidget( g_exp_districtManifestEdit, 1 );
+		manifestRow->addWidget( browseManifestButton );
+		manifestRow->addWidget( refreshManifestButton );
+
+		auto* authoringGroup = new QGroupBox( "Authoring", root );
+		auto* authoringForm = new QFormLayout( authoringGroup );
+		g_exp_districtNameEdit = new QLineEdit( authoringGroup );
+		g_exp_districtNameEdit->setClearButtonEnabled( true );
+		g_exp_districtNameEdit->setPlaceholderText( "District_North" );
+		auto* authoringButtons = new QWidget( authoringGroup );
+		auto* authoringButtonsLayout = new QHBoxLayout( authoringButtons );
+		authoringButtonsLayout->setContentsMargins( 0, 0, 0, 0 );
+		auto* copySnippetButton = new QPushButton( "Copy Manifest Snippet", authoringButtons );
+		auto* writeScaffoldButton = new QPushButton( "Write Proxy+Full", authoringButtons );
+		authoringButtonsLayout->addWidget( copySnippetButton );
+		authoringButtonsLayout->addWidget( writeScaffoldButton );
+		g_exp_districtSelectionLabel = new QLabel( Experimental_districtSelectionSummary(), authoringGroup );
+		g_exp_districtSelectionLabel->setWordWrap( true );
+		authoringForm->addRow( "District Name", g_exp_districtNameEdit );
+		authoringForm->addRow( "Selection", g_exp_districtSelectionLabel );
+		authoringForm->addRow( authoringButtons );
+
+		auto* runtimeGroup = new QGroupBox( "Runtime Preset", root );
+		auto* runtimeForm = new QFormLayout( runtimeGroup );
+		g_exp_districtMasterToggle = new QCheckBox( "Enable districts", runtimeGroup );
+		g_exp_districtMasterToggle->setChecked( QSettings().value( "Properties/Experimental/DistrictMaster", true ).toBool() );
+		g_exp_districtProxyToggle = new QCheckBox( "Load proxy meshes first", runtimeGroup );
+		g_exp_districtProxyToggle->setChecked( QSettings().value( "Properties/Experimental/DistrictProxy", true ).toBool() );
+		g_exp_districtStreamToggle = new QCheckBox( "Stream sectors on full load", runtimeGroup );
+		g_exp_districtStreamToggle->setChecked( QSettings().value( "Properties/Experimental/DistrictStream", true ).toBool() );
+		g_exp_districtDrawToggle = new QCheckBox( "Draw district residency meshes", runtimeGroup );
+		g_exp_districtDrawToggle->setChecked( QSettings().value( "Properties/Experimental/DistrictDraw", true ).toBool() );
+		g_exp_districtSectorSize = new QSpinBox( runtimeGroup );
+		g_exp_districtSectorSize->setRange( 256, 65536 );
+		g_exp_districtSectorSize->setSingleStep( 256 );
+		g_exp_districtSectorSize->setValue( QSettings().value( "Properties/Experimental/DistrictSectorSize", 4096 ).toInt() );
+		g_exp_districtLoadRadius = new QSpinBox( runtimeGroup );
+		g_exp_districtLoadRadius->setRange( 512, 131072 );
+		g_exp_districtLoadRadius->setSingleStep( 512 );
+		g_exp_districtLoadRadius->setValue( QSettings().value( "Properties/Experimental/DistrictLoadRadius", 8192 ).toInt() );
+		runtimeForm->addRow( g_exp_districtMasterToggle );
+		runtimeForm->addRow( g_exp_districtProxyToggle );
+		runtimeForm->addRow( g_exp_districtStreamToggle );
+		runtimeForm->addRow( g_exp_districtDrawToggle );
+		runtimeForm->addRow( "Sector Size", g_exp_districtSectorSize );
+		runtimeForm->addRow( "Load Radius", g_exp_districtLoadRadius );
+
+		g_exp_districtStatsLabel = new QLabel( "0 districts", root );
+		g_exp_districtList = new QListWidget( root );
+		g_exp_districtList->setAlternatingRowColors( true );
+		g_exp_districtDetails = new QTextBrowser( root );
+		g_exp_districtDetails->setOpenExternalLinks( false );
+
+		auto* actionsRow = new QWidget( root );
+		auto* actionsLayout = new QGridLayout( actionsRow );
+		actionsLayout->setContentsMargins( 0, 0, 0, 0 );
+		auto* copyLoadButton = new QPushButton( "Copy Load Cmd", actionsRow );
+		auto* copyProxyButton = new QPushButton( "Copy Proxy Cmd", actionsRow );
+		auto* copyFullButton = new QPushButton( "Copy Full Cmd", actionsRow );
+		auto* copyPresetButton = new QPushButton( "Copy Preset", actionsRow );
+		auto* openProxyButton = new QPushButton( "Open Proxy USDA", actionsRow );
+		auto* openFullButton = new QPushButton( "Open Full USDA", actionsRow );
+		actionsLayout->addWidget( copyLoadButton, 0, 0 );
+		actionsLayout->addWidget( copyProxyButton, 0, 1 );
+		actionsLayout->addWidget( copyFullButton, 0, 2 );
+		actionsLayout->addWidget( copyPresetButton, 1, 0 );
+		actionsLayout->addWidget( openProxyButton, 1, 1 );
+		actionsLayout->addWidget( openFullButton, 1, 2 );
+
+		vbox->addWidget( new QLabel( "Manifest", root ) );
+		vbox->addLayout( manifestRow );
+		vbox->addWidget( authoringGroup );
+		vbox->addWidget( runtimeGroup );
+		vbox->addWidget( g_exp_districtStatsLabel );
+		vbox->addWidget( new QLabel( "Districts", root ) );
+		vbox->addWidget( g_exp_districtList );
+		vbox->addWidget( new QLabel( "Details", root ) );
+		vbox->addWidget( g_exp_districtDetails, 1 );
+		vbox->addWidget( actionsRow );
+
+		QObject::connect( browseManifestButton, &QPushButton::clicked, [](){ Experimental_browseDistrictManifest(); } );
+		QObject::connect( refreshManifestButton, &QPushButton::clicked, [](){
+			QSettings().setValue( "Properties/Experimental/DistrictManifest", Experimental_districtManifestPath() );
+			Experimental_refreshDistrictList();
+		} );
+		QObject::connect( g_exp_districtManifestEdit, &QLineEdit::editingFinished, [](){
+			QSettings().setValue( "Properties/Experimental/DistrictManifest", Experimental_districtManifestPath() );
+			Experimental_refreshDistrictList();
+		} );
+		QObject::connect( g_exp_districtNameEdit, &QLineEdit::editingFinished, [](){ Experimental_refreshDistrictDetails(); } );
+		QObject::connect( g_exp_districtList, &QListWidget::currentItemChanged, []( QListWidgetItem*, QListWidgetItem* ){ Experimental_refreshDistrictDetails(); } );
+		QObject::connect( copySnippetButton, &QPushButton::clicked, [](){
+			const QString districtName = Experimental_districtResolvedName();
+			const QString snippet = Experimental_districtManifestSnippet( districtName );
+			if ( snippet.isEmpty() ) {
+				Sys_Status( "Enter a district name and select geometry to copy a manifest snippet" );
+				return;
+			}
+			if ( g_exp_districtNameEdit != nullptr ) {
+				g_exp_districtNameEdit->setText( districtName );
+			}
+			Experimental_copyDistrictText( snippet, "Copied district manifest snippet" );
+			Experimental_refreshDistrictDetails();
+		} );
+		QObject::connect( writeScaffoldButton, &QPushButton::clicked, [](){
+			if ( g_exp_districtNameEdit != nullptr ) {
+				g_exp_districtNameEdit->setText( Experimental_districtResolvedName() );
+			}
+			Experimental_writeDistrictScaffold();
+		} );
+		QObject::connect( copyLoadButton, &QPushButton::clicked, [](){
+			if ( !Experimental_districtManifestPath().isEmpty() ) {
+				Experimental_copyDistrictText( QString( "district_load %1" ).arg( Experimental_districtManifestPath() ), "Copied district load command" );
+			}
+		} );
+		QObject::connect( copyProxyButton, &QPushButton::clicked, [](){
+			if ( ExperimentalDistrictEntry* entry = Experimental_currentDistrictEntry(); entry != nullptr ) {
+				Experimental_copyDistrictText( QString( "district_proxy %1" ).arg( entry->name ), "Copied district proxy command" );
+			}
+		} );
+		QObject::connect( copyFullButton, &QPushButton::clicked, [](){
+			if ( ExperimentalDistrictEntry* entry = Experimental_currentDistrictEntry(); entry != nullptr ) {
+				Experimental_copyDistrictText( QString( "district_load_full %1" ).arg( entry->name ), "Copied district full-load command" );
+			}
+		} );
+		QObject::connect( copyPresetButton, &QPushButton::clicked, [](){
+			Experimental_copyDistrictText( Experimental_districtRuntimePreset(), "Copied district runtime preset" );
+		} );
+		QObject::connect( openProxyButton, &QPushButton::clicked, [](){ Experimental_openDistrictPath( true ); } );
+		QObject::connect( openFullButton, &QPushButton::clicked, [](){ Experimental_openDistrictPath( false ); } );
+		QObject::connect( g_exp_districtMasterToggle, &QCheckBox::toggled, []( bool ){ Experimental_storeDistrictRuntimePreset(); } );
+		QObject::connect( g_exp_districtProxyToggle, &QCheckBox::toggled, []( bool ){ Experimental_storeDistrictRuntimePreset(); } );
+		QObject::connect( g_exp_districtStreamToggle, &QCheckBox::toggled, []( bool ){ Experimental_storeDistrictRuntimePreset(); } );
+		QObject::connect( g_exp_districtDrawToggle, &QCheckBox::toggled, []( bool ){ Experimental_storeDistrictRuntimePreset(); } );
+		QObject::connect( g_exp_districtSectorSize, QOverload<int>::of( &QSpinBox::valueChanged ), []( int ){ Experimental_storeDistrictRuntimePreset(); } );
+		QObject::connect( g_exp_districtLoadRadius, QOverload<int>::of( &QSpinBox::valueChanged ), []( int ){ Experimental_storeDistrictRuntimePreset(); } );
+
+		g_exp_districtDock->setWidget( root );
+	}
+	window->addDockWidget( Qt::LeftDockWidgetArea, g_exp_districtDock );
+	Experimental_refreshDistrictList();
+
 	g_exp_ecsDock = new QDockWidget( "Entity Palette", window );
 	g_exp_ecsDock->setObjectName( "dock_experimental_ecs_authoring" );
 	{
@@ -4844,6 +5637,8 @@ void Experimental_createDocks( QMainWindow* window ){
 		g_exp_ecsCategoryCombo = new QComboBox( root );
 		g_exp_ecsCategoryCombo->addItems( QStringList()
 			<< "All"
+			<< "Favorites"
+			<< "Recent"
 			<< "Lights"
 			<< "Player Starts"
 			<< "Triggers & Volumes"
@@ -4861,21 +5656,39 @@ void Experimental_createDocks( QMainWindow* window ){
 		g_exp_ecsSearchEdit = new QLineEdit( root );
 		g_exp_ecsSearchEdit->setPlaceholderText( "Search entity classes" );
 		QObject::connect( g_exp_ecsSearchEdit, &QLineEdit::textChanged, []( const QString& ){ Experimental_refreshECSList(); } );
+		g_exp_ecsStatsLabel = new QLabel( "0 shown  •  0 favorites  •  0 recent", root );
 		g_exp_ecsEntityList = new QListWidget( root );
 		g_exp_ecsEntityList->setAlternatingRowColors( true );
 		g_exp_ecsDetails = new QTextBrowser( root );
 		g_exp_ecsDetails->setOpenExternalLinks( false );
 		auto* addButton = new QPushButton( "Add Entity at Camera", root );
+		g_exp_ecsFavoriteButton = new QPushButton( "Favorite", root );
+		g_exp_ecsFavoriteButton->setEnabled( false );
+		auto* placeFromSelectionButton = new QPushButton( "Create from Selection", root );
+		auto* actionRow = new QWidget( root );
+		auto* actionLayout = new QHBoxLayout( actionRow );
+		actionLayout->setContentsMargins( 0, 0, 0, 0 );
+		actionLayout->addWidget( g_exp_ecsFavoriteButton );
+		actionLayout->addWidget( addButton );
+		actionLayout->addWidget( placeFromSelectionButton );
 		vbox->addWidget( new QLabel( "Category", root ) );
 		vbox->addWidget( g_exp_ecsCategoryCombo );
 		vbox->addWidget( new QLabel( "Search", root ) );
 		vbox->addWidget( g_exp_ecsSearchEdit );
+		vbox->addWidget( g_exp_ecsStatsLabel );
 		vbox->addWidget( new QLabel( "Entities", root ) );
 		vbox->addWidget( g_exp_ecsEntityList );
 		vbox->addWidget( new QLabel( "Details", root ) );
 		vbox->addWidget( g_exp_ecsDetails, 1 );
-		vbox->addWidget( addButton );
+		vbox->addWidget( actionRow );
+		QObject::connect( g_exp_ecsFavoriteButton, &QPushButton::clicked, [](){ Experimental_toggleECSFavorite(); } );
 		QObject::connect( addButton, &QPushButton::clicked, [](){
+			QListWidgetItem* item = g_exp_ecsEntityList != nullptr ? g_exp_ecsEntityList->currentItem() : nullptr;
+			if ( item != nullptr ) {
+				Experimental_ecsAddEntity( item->data( Qt::UserRole ).toString().toLatin1().constData() );
+			}
+		} );
+		QObject::connect( placeFromSelectionButton, &QPushButton::clicked, [](){
 			QListWidgetItem* item = g_exp_ecsEntityList != nullptr ? g_exp_ecsEntityList->currentItem() : nullptr;
 			if ( item != nullptr ) {
 				Experimental_ecsAddEntity( item->data( Qt::UserRole ).toString().toLatin1().constData() );
@@ -4894,6 +5707,7 @@ void Experimental_createDocks( QMainWindow* window ){
 
 	window->splitDockWidget( g_exp_propertiesDock, g_exp_previewDock, Qt::Vertical );
 	window->splitDockWidget( g_exp_assetsDock, g_exp_usdDock, Qt::Vertical );
+	window->tabifyDockWidget( g_exp_usdDock, g_exp_districtDock );
 	window->tabifyDockWidget( g_exp_usdDock, g_exp_historyDock );
 	window->tabifyDockWidget( g_exp_historyDock, g_exp_syncDock );
 	window->tabifyDockWidget( g_exp_syncDock, g_exp_ecsDock );
@@ -4923,12 +5737,15 @@ void Experimental_destroyDocks(){
 	g_exp_historyDock = nullptr;
 	g_exp_usdDock = nullptr;
 	g_exp_ecsDock = nullptr;
+	g_exp_districtDock = nullptr;
 	g_exp_syncDock = nullptr;
 	g_exp_previewHost = nullptr;
 	g_exp_ecsCategoryCombo = nullptr;
 	g_exp_ecsEntityList = nullptr;
 	g_exp_ecsSearchEdit = nullptr;
 	g_exp_ecsDetails = nullptr;
+	g_exp_ecsFavoriteButton = nullptr;
+	g_exp_ecsStatsLabel = nullptr;
 	g_exp_selectedCountLabel = nullptr;
 	g_exp_selectedComponentsLabel = nullptr;
 	g_exp_selectionTypeLabel = nullptr;
@@ -4973,6 +5790,18 @@ void Experimental_destroyDocks(){
 	g_exp_assetsDetails = nullptr;
 	g_exp_historyList = nullptr;
 	g_exp_usdTree = nullptr;
+	g_exp_districtManifestEdit = nullptr;
+	g_exp_districtNameEdit = nullptr;
+	g_exp_districtList = nullptr;
+	g_exp_districtDetails = nullptr;
+	g_exp_districtStatsLabel = nullptr;
+	g_exp_districtSelectionLabel = nullptr;
+	g_exp_districtSectorSize = nullptr;
+	g_exp_districtLoadRadius = nullptr;
+	g_exp_districtProxyToggle = nullptr;
+	g_exp_districtStreamToggle = nullptr;
+	g_exp_districtMasterToggle = nullptr;
+	g_exp_districtDrawToggle = nullptr;
 	g_exp_syncStateLabel = nullptr;
 	g_exp_syncClientsLabel = nullptr;
 	g_exp_syncRuntimeLabel = nullptr;
@@ -5432,6 +6261,9 @@ void Experimental_toggleSyncDock(){
 void Experimental_toggleUSDDock(){
 	Experimental_toggleUSDDock_impl();
 }
+void Experimental_toggleDistrictDock(){
+	Experimental_toggleDistrictDock_impl();
+}
 void Experimental_toggleECSDock(){
 	Experimental_toggleECSDock_impl();
 }
@@ -5705,6 +6537,7 @@ void create_view_menu( QMenuBar *menubar, MainFrame::EViewStyle style ){
 	create_menu_item_with_mnemonic( menu, "Viewport Preview", "ToggleExperimentalPreview" );
 	create_menu_item_with_mnemonic( menu, "Asset Browser", "ToggleExperimentalAssets" );
 	create_menu_item_with_mnemonic( menu, "Outliner", "ToggleExperimentalUSD" );
+	create_menu_item_with_mnemonic( menu, "Districts", "ToggleExperimentalDistricts" );
 	create_menu_item_with_mnemonic( menu, "History", "ToggleExperimentalHistory" );
 	create_menu_item_with_mnemonic( menu, "Live Sync", "ToggleExperimentalSync" );
 	create_menu_item_with_mnemonic( menu, "Entity Palette", "ToggleExperimentalECS" );
