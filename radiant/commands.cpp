@@ -554,6 +554,24 @@ QString commandLauncherTitle( const char* name ){
 	if( string_equal( name, "AddPVESpawnPoint" ) ){
 		return "Create PvE Spawn Point";
 	}
+	if( string_equal( name, "AddPhysBox" ) ){
+		return "Create Physics Box";
+	}
+	if( string_equal( name, "AddPhysSphere" ) ){
+		return "Create Physics Sphere";
+	}
+	if( string_equal( name, "AddPhysStatic" ) ){
+		return "Create Physics Static Collider";
+	}
+	if( string_equal( name, "AddPhysSensor" ) ){
+		return "Create Physics Sensor";
+	}
+	if( string_equal( name, "AddPhysSlider" ) ){
+		return "Create Physics Slider";
+	}
+	if( string_equal( name, "AddPhysRagdoll" ) ){
+		return "Create Physics Ragdoll";
+	}
 	if( string_equal( name, "MakeDetail" ) ){
 		return "Make Detail";
 	}
@@ -816,6 +834,24 @@ QStringList commandSearchAliases( const char* name ){
 	if( string_equal( name, "AddPVESpawnPoint" ) ){
 		return { "pve spawn", "ai spawn", "npc spawn", "enemy spawn", "monster spawn", "spawn point" };
 	}
+	if( string_equal( name, "AddPhysBox" ) ){
+		return { "physics box", "box3d", "rigid body", "dynamic box", "collision box", "misc phys box" };
+	}
+	if( string_equal( name, "AddPhysSphere" ) ){
+		return { "physics sphere", "box3d sphere", "rigid sphere", "collision sphere", "misc phys sphere" };
+	}
+	if( string_equal( name, "AddPhysStatic" ) ){
+		return { "physics static", "static collider", "box3d static", "world collider", "misc phys static" };
+	}
+	if( string_equal( name, "AddPhysSensor" ) ){
+		return { "physics sensor", "trigger sensor", "box3d sensor", "overlap volume", "misc phys sensor" };
+	}
+	if( string_equal( name, "AddPhysSlider" ) ){
+		return { "physics slider", "slider joint", "moving platform physics", "box3d slider", "misc phys slider" };
+	}
+	if( string_equal( name, "AddPhysRagdoll" ) ){
+		return { "physics ragdoll", "ragdoll", "box3d ragdoll", "misc phys ragdoll" };
+	}
 	if( string_equal( name, "MakeDetail" ) ){
 		return { "detail", "convert to detail", "detail brush", "non structural" };
 	}
@@ -912,6 +948,12 @@ QString launcherCategoryForCommand( const char* name, int type ){
 	 || string_equal( name, "AddInfoPlayerDeathmatch" )
 	 || string_equal( name, "AddCapturePointVolume" )
 	 || string_equal( name, "AddPVESpawnPoint" )
+	 || string_equal( name, "AddPhysBox" )
+	 || string_equal( name, "AddPhysSphere" )
+	 || string_equal( name, "AddPhysStatic" )
+	 || string_equal( name, "AddPhysSensor" )
+	 || string_equal( name, "AddPhysSlider" )
+	 || string_equal( name, "AddPhysRagdoll" )
 	 || string_equal( name, "AddMiscModel" )
 	 || string_equal( name, "AddSpline" ) ){
 		return "Create";
@@ -1003,6 +1045,24 @@ QString launcherDescriptionForCommand( const char* name ){
 	}
 	if( string_equal( name, "AddPVESpawnPoint" ) ){
 		return "Create an AI or PvE spawn point entity.";
+	}
+	if( string_equal( name, "AddPhysBox" ) ){
+		return "Create a dynamic box physics entity with sensible default size and mass.";
+	}
+	if( string_equal( name, "AddPhysSphere" ) ){
+		return "Create a dynamic sphere physics entity with a default collision radius.";
+	}
+	if( string_equal( name, "AddPhysStatic" ) ){
+		return "Create a static physics collider volume for level collision authoring.";
+	}
+	if( string_equal( name, "AddPhysSensor" ) ){
+		return "Create a non-solid physics sensor volume for overlap-driven gameplay.";
+	}
+	if( string_equal( name, "AddPhysSlider" ) ){
+		return "Create a slider physics entity with default travel height and body size.";
+	}
+	if( string_equal( name, "AddPhysRagdoll" ) ){
+		return "Create a ragdoll-ready physics entity with default simulation values.";
 	}
 	return {};
 }

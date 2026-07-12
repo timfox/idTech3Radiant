@@ -2973,6 +2973,7 @@ static bool ECS_isAdvancedEntity( const char* name ){
 	    && ( string_equal_nocase( name, "light" )
 	      || string_equal_nocase( name, "lightJunior" )
 	      || string_equal_prefix_nocase( name, "info_" )
+	      || string_equal_prefix_nocase( name, "misc_phys_" )
 	      || string_equal_prefix_nocase( name, "trigger_" )
 	      || string_equal_prefix_nocase( name, "func_" )
 	      || string_equal_prefix_nocase( name, "env_" )
@@ -2995,6 +2996,8 @@ static const char* ECS_categoryForEntity( const char* name ){
 		return "Player Starts";
 	if ( string_equal_prefix_nocase( name, "trigger_" ) )
 		return "Triggers & Volumes";
+	if ( string_equal_prefix_nocase( name, "misc_phys_" ) )
+		return "Physics & Simulation";
 	if ( string_equal_prefix_nocase( name, "func_vehicle" ) || string_equal_prefix_nocase( name, "info_vehicle" ) )
 		return "Vehicles";
 	if ( string_equal_prefix_nocase( name, "func_" ) )
@@ -3151,6 +3154,9 @@ static QIcon Experimental_ecsIconForEntityClass( const EntityClass* eclass ){
 		return new_local_icon( "ecs_model" );
 	}
 	if ( string_compare_nocase_n( eclass->name(), "trigger_", 8 ) == 0 ) {
+		return new_local_icon( "ecs_trigger" );
+	}
+	if ( classname_equal( eclass->name(), "misc_phys_sensor" ) ) {
 		return new_local_icon( "ecs_trigger" );
 	}
 	if ( classname_equal( eclass->name(), "info_player_start" )
@@ -5642,6 +5648,7 @@ void Experimental_createDocks( QMainWindow* window ){
 			<< "Lights"
 			<< "Player Starts"
 			<< "Triggers & Volumes"
+			<< "Physics & Simulation"
 			<< "Brush Entities"
 			<< "Environment"
 			<< "Props & Models"
@@ -5980,6 +5987,30 @@ void Add_createCapturePointVolume(){
 
 void Add_createPVESpawnPoint(){
 	Add_createEntity( "info_pve_spawn" );
+}
+
+void Add_createPhysBox(){
+	Add_createEntity( "misc_phys_box" );
+}
+
+void Add_createPhysSphere(){
+	Add_createEntity( "misc_phys_sphere" );
+}
+
+void Add_createPhysStatic(){
+	Add_createEntity( "misc_phys_static" );
+}
+
+void Add_createPhysSensor(){
+	Add_createEntity( "misc_phys_sensor" );
+}
+
+void Add_createPhysSlider(){
+	Add_createEntity( "misc_phys_slider" );
+}
+
+void Add_createPhysRagdoll(){
+	Add_createEntity( "misc_phys_ragdoll" );
 }
 
 void Add_createSpline(){
@@ -6494,8 +6525,15 @@ void create_add_menu( QMenuBar *menubar ){
 	create_menu_item_with_mnemonic( menu, "Player Deathmatch", "AddInfoPlayerDeathmatch" );
 	create_menu_item_with_mnemonic( menu, "Capture Point Volume", "AddCapturePointVolume" );
 	create_menu_item_with_mnemonic( menu, "PvE Spawn Point", "AddPVESpawnPoint" );
-		create_menu_item_with_mnemonic( menu, "Model", "AddMiscModel" );
 	menu->addSeparator();
+	create_menu_item_with_mnemonic( menu, "Physics Box", "AddPhysBox" );
+	create_menu_item_with_mnemonic( menu, "Physics Sphere", "AddPhysSphere" );
+	create_menu_item_with_mnemonic( menu, "Physics Static Collider", "AddPhysStatic" );
+	create_menu_item_with_mnemonic( menu, "Physics Sensor", "AddPhysSensor" );
+	create_menu_item_with_mnemonic( menu, "Physics Slider", "AddPhysSlider" );
+	create_menu_item_with_mnemonic( menu, "Physics Ragdoll", "AddPhysRagdoll" );
+	menu->addSeparator();
+		create_menu_item_with_mnemonic( menu, "Model", "AddMiscModel" );
 
 	QMenu* brushMenu = menu->addMenu( "Brush Primitive" );
 	brushMenu->setTearOffEnabled( g_Layout_enableDetachableMenus.m_value );

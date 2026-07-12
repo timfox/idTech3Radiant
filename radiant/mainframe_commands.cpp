@@ -46,6 +46,12 @@ void MainFrame_registerCommands(){
 	GlobalCommands_insert( "AddInfoPlayerDeathmatch", makeCallbackF( Add_createInfoPlayerDeathmatch ) );
 	GlobalCommands_insert( "AddCapturePointVolume", makeCallbackF( Add_createCapturePointVolume ) );
 	GlobalCommands_insert( "AddPVESpawnPoint", makeCallbackF( Add_createPVESpawnPoint ) );
+	GlobalCommands_insert( "AddPhysBox", makeCallbackF( Add_createPhysBox ) );
+	GlobalCommands_insert( "AddPhysSphere", makeCallbackF( Add_createPhysSphere ) );
+	GlobalCommands_insert( "AddPhysStatic", makeCallbackF( Add_createPhysStatic ) );
+	GlobalCommands_insert( "AddPhysSensor", makeCallbackF( Add_createPhysSensor ) );
+	GlobalCommands_insert( "AddPhysSlider", makeCallbackF( Add_createPhysSlider ) );
+	GlobalCommands_insert( "AddPhysRagdoll", makeCallbackF( Add_createPhysRagdoll ) );
 	GlobalCommands_insert( "AddMiscModel", makeCallbackF( Add_createMiscModel ) );
 	GlobalCommands_insert( "AddSpline", makeCallbackF( Add_createSpline ) );
 	GlobalCommands_insert( "LayoutRegular", makeCallbackF( Layout_setRegular ) );

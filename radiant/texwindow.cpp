@@ -48,6 +48,7 @@
 #include <QTreeView>
 #include <QHeaderView>
 #include <QStandardItemModel>
+#include <QSortFilterProxyModel>
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QItemDelegate>
@@ -168,9 +169,11 @@ public:
 	QTabWidget* m_tabs;
 	QTreeView* m_treeView;
 	QStandardItemModel* m_treeViewModel;
+	QSortFilterProxyModel* m_treeFilterModel;
 	QListWidget* m_tagsListWidget;
 	QMenu* m_tagsMenu;
 	QLineEdit* m_filter_entry;
+	QLineEdit* m_folderFilterEntry;
 	QComboBox* m_recentFoldersCombo;
 	QLabel* m_locationLabel;
 	QLabel* m_selectionLabel;
@@ -225,6 +228,9 @@ public:
 
 	TextureBrowser() :
 		m_texture_scroll( 0 ),
+		m_treeViewModel( 0 ),
+		m_treeFilterModel( 0 ),
+		m_folderFilterEntry( 0 ),
 		m_recentFoldersCombo( 0 ),
 		m_locationLabel( 0 ),
 		m_selectionLabel( 0 ),
@@ -395,11 +401,27 @@ void TextureBrowser_SetStatus( const char* name ){
 	g_pParentWnd->SetStatusText( c_status_texture, strTex );
 }
 
+bool Texture_IsShown( IShader* shader, const TextureBrowser& textureBrowser );
+
 void TextureBrowser::updateInfoWidgets() const {
 	if ( m_locationLabel != nullptr ) {
+		int visibleCount = 0;
+		int visibleInUseCount = 0;
+		for ( QERApp_ActiveShaders_IteratorBegin(); !QERApp_ActiveShaders_IteratorAtEnd(); QERApp_ActiveShaders_IteratorIncrement() )
+		{
+			IShader* shader = QERApp_ActiveShaders_IteratorCurrent();
+			if ( !Texture_IsShown( shader, *this ) ) {
+				continue;
+			}
+			++visibleCount;
+			if ( shader->IsInUse() ) {
+				++visibleInUseCount;
+			}
+		}
+
 		const QString location = m_searchedTags
-			? QString( "Result Set: %1" ).arg( g_TextureBrowser_currentDirectory.c_str() )
-			: QString( "Folder: %1" ).arg( g_TextureBrowser_currentDirectory.empty() ? "all" : g_TextureBrowser_currentDirectory.c_str() );
+			? QString( "Result Set: %1  •  %2 visible  •  %3 in use" ).arg( g_TextureBrowser_currentDirectory.c_str() ).arg( visibleCount ).arg( visibleInUseCount )
+			: QString( "Folder: %1  •  %2 visible  •  %3 in use" ).arg( g_TextureBrowser_currentDirectory.empty() ? "all" : g_TextureBrowser_currentDirectory.c_str() ).arg( visibleCount ).arg( visibleInUseCount );
 		m_locationLabel->setText( location );
 		m_locationLabel->setToolTip( location );
 	}
@@ -416,6 +438,45 @@ void TextureBrowser::updateInfoWidgets() const {
 		m_selectionLabel->setToolTip( selection );
 		shader->DecRef();
 	}
+}
+
+bool Texture_IsShown( IShader* shader, const TextureBrowser& textureBrowser );
+
+static bool TextureBrowser_selectVisibleShaderOffset( int offset ){
+	std::vector<CopiedString> visibleShaders;
+	for ( QERApp_ActiveShaders_IteratorBegin(); !QERApp_ActiveShaders_IteratorAtEnd(); QERApp_ActiveShaders_IteratorIncrement() )
+	{
+		IShader* shader = QERApp_ActiveShaders_IteratorCurrent();
+		if ( Texture_IsShown( shader, g_TexBro ) ) {
+			visibleShaders.emplace_back( shader->getName() );
+		}
+	}
+
+	if ( visibleShaders.empty() ) {
+		return false;
+	}
+
+	int currentIndex = -1;
+	for ( std::size_t i = 0; i < visibleShaders.size(); ++i )
+	{
+		if ( shader_equal( visibleShaders[i].c_str(), g_TexBro.m_shader.c_str() ) ) {
+			currentIndex = static_cast<int>( i );
+			break;
+		}
+	}
+	if ( currentIndex < 0 ) {
+		currentIndex = 0;
+	}
+
+	const int count = static_cast<int>( visibleShaders.size() );
+	int nextIndex = ( currentIndex + offset ) % count;
+	if ( nextIndex < 0 ) {
+		nextIndex += count;
+	}
+
+	TextureBrowser_SetSelectedShader( visibleShaders[static_cast<std::size_t>( nextIndex )].c_str() );
+	g_TexBro.queueDraw();
+	return true;
 }
 
 static void TextureBrowser_refreshRecentFoldersUi(){
@@ -446,6 +507,45 @@ static void TextureBrowser_copySelectedShaderName(){
 		return;
 	}
 	QApplication::clipboard()->setText( g_TexBro.m_shader.c_str() );
+}
+
+static QModelIndex TextureBrowser_findTreeIndexByPath( const QAbstractItemModel& model, const QString& path, const QModelIndex& parent = QModelIndex() ){
+	for ( int row = 0; row < model.rowCount( parent ); ++row )
+	{
+		const QModelIndex index = model.index( row, 0, parent );
+		if ( index.data( Qt::ItemDataRole::ToolTipRole ).toString() == path ) {
+			return index;
+		}
+		if ( const QModelIndex child = TextureBrowser_findTreeIndexByPath( model, path, index ); child.isValid() ) {
+			return child;
+		}
+	}
+	return QModelIndex();
+}
+
+static void TextureBrowser_syncTreeSelection(){
+	if ( g_TexBro.m_treeView == nullptr || g_TexBro.m_treeFilterModel == nullptr || g_TexBro.m_treeViewModel == nullptr || g_TextureBrowser_currentDirectory.empty() ) {
+		return;
+	}
+
+	QString path = g_TextureBrowser_currentDirectory.c_str();
+	if ( !TextureBrowser::wads && !path.endsWith( '/' ) ) {
+		path += '/';
+	}
+
+	const QModelIndex sourceIndex = TextureBrowser_findTreeIndexByPath( *g_TexBro.m_treeViewModel, path );
+	if ( !sourceIndex.isValid() ) {
+		return;
+	}
+
+	const QModelIndex proxyIndex = g_TexBro.m_treeFilterModel->mapFromSource( sourceIndex );
+	if ( !proxyIndex.isValid() ) {
+		return;
+	}
+
+	g_TexBro.m_treeView->expand( proxyIndex.parent() );
+	g_TexBro.m_treeView->setCurrentIndex( proxyIndex );
+	g_TexBro.m_treeView->scrollTo( proxyIndex, QAbstractItemView::PositionAtCenter );
 }
 
 static void TextureBrowser_revealSelectedShaderFolder(){
@@ -840,6 +940,7 @@ void TextureBrowser_ShowDirectory( const char* directory ){
 	g_TexBro.setOriginY( 0 );
 	TextureBrowser_updateTitle();
 	g_TexBro.updateInfoWidgets();
+	TextureBrowser_syncTreeSelection();
 }
 /* loads directory, containing a shader + focuses on it */
 void TextureBrowser_ShowDirectoryOfShader( TextureBrowser& texBro, const char* shader ){
@@ -1290,7 +1391,16 @@ void TextureBrowser_constructTreeStore(){
 	else
 		TextureGroups_constructTreeModel_childless( groups, model );
 
-	g_TexBro.m_treeView->setModel( model );
+	g_TexBro.m_treeViewModel = model;
+	if ( g_TexBro.m_treeFilterModel == nullptr ) {
+		g_TexBro.m_treeFilterModel = new QSortFilterProxyModel( g_TexBro.m_treeView );
+		g_TexBro.m_treeFilterModel->setFilterCaseSensitivity( Qt::CaseInsensitive );
+		g_TexBro.m_treeFilterModel->setRecursiveFilteringEnabled( true );
+		g_TexBro.m_treeFilterModel->setFilterRole( Qt::DisplayRole );
+	}
+	g_TexBro.m_treeFilterModel->setSourceModel( model );
+	g_TexBro.m_treeView->setModel( g_TexBro.m_treeFilterModel );
+	TextureBrowser_syncTreeSelection();
 }
 
 void TreeView_onRowActivated( const QModelIndex& index ){
@@ -1716,6 +1826,14 @@ void TextureBrowser_ContextMenu( TextureBrowser& texBro, qreal deviceScale ){
 
 	menu->addSeparator();
 
+	menu->addAction( "Apply to Selection", [&](){
+		Select_SetShader_Undo( shader->getName() );
+	} );
+	menu->addAction( "Copy Shader Name", [&](){
+		QApplication::clipboard()->setText( shader->getName() );
+	} );
+	menu->addSeparator();
+
 	menu->addAction( "Select Textured Objects", [&](){
 		Scene_BrushPatchSelectByShader( shader->getName() );
 	} );
@@ -1864,6 +1982,63 @@ protected:
 		const int originy = m_texBro.getOriginY() + std::copysign( m_texBro.m_mouseWheelScrollIncrement, event->angleDelta().y() );
 		m_texBro.setOriginY( originy );
 	}
+	void keyPressEvent( QKeyEvent *event ) override {
+		switch ( event->key() )
+		{
+		case Qt::Key_Left:
+		case Qt::Key_Up:
+			if ( TextureBrowser_selectVisibleShaderOffset( -1 ) ) {
+				event->accept();
+				return;
+			}
+			break;
+		case Qt::Key_Right:
+		case Qt::Key_Down:
+			if ( TextureBrowser_selectVisibleShaderOffset( 1 ) ) {
+				event->accept();
+				return;
+			}
+			break;
+		case Qt::Key_Return:
+		case Qt::Key_Enter:
+			TextureBrowser_applySelectedShader();
+			event->accept();
+			return;
+		case Qt::Key_C:
+			if ( event->modifiers().testFlag( Qt::ControlModifier ) ) {
+				TextureBrowser_copySelectedShaderName();
+				event->accept();
+				return;
+			}
+			break;
+		case Qt::Key_F:
+			if ( event->modifiers().testFlag( Qt::ControlModifier ) && m_texBro.m_filter_entry != nullptr ) {
+				m_texBro.m_filter_entry->setFocus();
+				m_texBro.m_filter_entry->selectAll();
+				event->accept();
+				return;
+			}
+			break;
+		case Qt::Key_L:
+			if ( event->modifiers().testFlag( Qt::ControlModifier ) && m_texBro.m_folderFilterEntry != nullptr ) {
+				m_texBro.m_folderFilterEntry->setFocus();
+				m_texBro.m_folderFilterEntry->selectAll();
+				event->accept();
+				return;
+			}
+			break;
+		case Qt::Key_Slash:
+			if ( m_texBro.m_filter_entry != nullptr ) {
+				m_texBro.m_filter_entry->setFocus();
+				m_texBro.m_filter_entry->selectAll();
+				event->accept();
+				return;
+			}
+			break;
+		}
+
+		QOpenGLWidget::keyPressEvent( event );
+	}
 };
 
 
@@ -1922,6 +2097,7 @@ QWidget* TextureBrowser_constructWindow( QWidget* toplevel ){
 			g_TexBro.heightChanged();
 			g_TexBro.m_originInvalid = true;
 		} );
+		QObject::connect( entry, &QLineEdit::returnPressed, [](){ TextureBrowser_applySelectedShader(); } );
 		QObject::connect( action, &QAction::triggered, GlobalToggles_find( "SearchFromStart" ).m_command.m_callback );
 	}
 	{	// browser quick actions
@@ -1974,6 +2150,22 @@ QWidget* TextureBrowser_constructWindow( QWidget* toplevel ){
 	}
 	{	// Texture TreeView
 		TextureBrowser_createTreeViewTree();
+		g_TexBro.m_folderFilterEntry = new Filter_QLineEdit;
+		g_TexBro.m_folderFilterEntry->setClearButtonEnabled( true );
+		g_TexBro.m_folderFilterEntry->setPlaceholderText( "Filter folders" );
+		vbox->addWidget( g_TexBro.m_folderFilterEntry );
+		QObject::connect( g_TexBro.m_folderFilterEntry, &QLineEdit::textChanged, []( const QString& text ){
+			if ( g_TexBro.m_treeFilterModel == nullptr ) {
+				return;
+			}
+			g_TexBro.m_treeFilterModel->setFilterFixedString( text );
+			if ( text.isEmpty() ) {
+				TextureBrowser_syncTreeSelection();
+			}
+			else{
+				g_TexBro.m_treeView->expandAll();
+			}
+		} );
 	}
 	{	// gl_widget
 		g_TexBro.m_gl_widget = new TexWndGLWidget( g_TexBro );

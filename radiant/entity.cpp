@@ -390,8 +390,16 @@ namespace
 			|| classname_equal( name, "team_ctf_bluespawn" );
 	}
 
+	bool Entity_isPhysicsClass( const char* name ){
+		return string_equal_prefix_nocase( name, "misc_phys_" );
+	}
+
+	bool Entity_isPhysicsTriggerClass( const char* name ){
+		return classname_equal( name, "misc_phys_sensor" );
+	}
+
 	const char* Entity_defaultPlaceholderShader( const char* name ){
-		if ( string_compare_nocase_n( name, "trigger_", 8 ) == 0 ) {
+		if ( string_compare_nocase_n( name, "trigger_", 8 ) == 0 || Entity_isPhysicsTriggerClass( name ) ) {
 			return "textures/common/editor_trigger";
 		}
 		if ( Entity_isPlayerStartClass( name ) ) {
@@ -405,6 +413,15 @@ namespace
 			return aabb_for_minmax( origin + Vector3( -16, -16, 0 ), origin + Vector3( 16, 16, 72 ) );
 		}
 		if ( string_compare_nocase_n( name, "trigger_", 8 ) == 0 ) {
+			return AABB( origin, Vector3( 32, 32, 32 ) );
+		}
+		if ( classname_equal( name, "misc_phys_static" ) || classname_equal( name, "misc_phys_sensor" ) ) {
+			return AABB( origin, Vector3( 64, 64, 64 ) );
+		}
+		if ( classname_equal( name, "misc_phys_slider" ) ) {
+			return AABB( origin, Vector3( 24, 24, 48 ) );
+		}
+		if ( Entity_isPhysicsClass( name ) ) {
 			return AABB( origin, Vector3( 32, 32, 32 ) );
 		}
 		return AABB( origin, Vector3( 16, 16, 16 ) );
@@ -422,6 +439,34 @@ namespace
 			entity.setKeyValue( "spawn_group", "default" );
 			entity.setKeyValue( "spawn_count", "1" );
 			entity.setKeyValue( "spawn_class", "grunt" );
+		}
+		else if ( classname_equal( name, "misc_phys_box" ) ) {
+			entity.setKeyValue( "_size", "64" );
+			entity.setKeyValue( "mass", "20" );
+			entity.setKeyValue( "material", "0" );
+		}
+		else if ( classname_equal( name, "misc_phys_sphere" ) ) {
+			entity.setKeyValue( "_size", "64" );
+			entity.setKeyValue( "mass", "20" );
+			entity.setKeyValue( "material", "0" );
+		}
+		else if ( classname_equal( name, "misc_phys_static" ) ) {
+			entity.setKeyValue( "_size", "128" );
+			entity.setKeyValue( "material", "0" );
+		}
+		else if ( classname_equal( name, "misc_phys_sensor" ) ) {
+			entity.setKeyValue( "_size", "128" );
+			entity.setKeyValue( "material", "0" );
+		}
+		else if ( classname_equal( name, "misc_phys_slider" ) ) {
+			entity.setKeyValue( "_size", "48" );
+			entity.setKeyValue( "mass", "20" );
+			entity.setKeyValue( "material", "0" );
+			entity.setKeyValue( "height", "96" );
+		}
+		else if ( classname_equal( name, "misc_phys_ragdoll" ) ) {
+			entity.setKeyValue( "mass", "20" );
+			entity.setKeyValue( "material", "0" );
 		}
 	}
 }
