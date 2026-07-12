@@ -30,6 +30,7 @@
 #include "generic/callback.h"
 
 #include "debugging/debugging.h"
+#include "entity.h"
 #include "version.h"
 
 #include "ifilesystem.h"
@@ -42,6 +43,7 @@
 #include "irender.h"
 #include "igl.h"
 #include "moduleobserver.h"
+#include "navmesh_ui.h"
 
 #include <cstdio>
 #include <ctime>
@@ -1222,6 +1224,12 @@ QDoubleSpinBox* g_exp_physicsSize{};
 QDoubleSpinBox* g_exp_physicsMass{};
 QSpinBox* g_exp_physicsMaterial{};
 QDoubleSpinBox* g_exp_physicsHeight{};
+QDoubleSpinBox* g_exp_physicsFriction{};
+QDoubleSpinBox* g_exp_physicsRestitution{};
+QDoubleSpinBox* g_exp_physicsLinearDamping{};
+QDoubleSpinBox* g_exp_physicsAngularDamping{};
+QDoubleSpinBox* g_exp_physicsGravityScale{};
+QComboBox* g_exp_physicsPresetCombo{};
 QLineEdit* g_exp_shaderEdit{};
 QLineEdit* g_exp_skyboxHDREdit{};
 QLineEdit* g_exp_pbrAlbedo{};
@@ -2494,8 +2502,125 @@ static void Experimental_setSpinValue( QSpinBox* spin, int value ){
 	spin->blockSignals( false );
 }
 
+static void Experimental_setSelectedEntityKeyValue( const char* key, const QString& value );
+void Experimental_refreshSelection();
+
 static bool Experimental_selectedEntityIsPhysics(){
 	return Experimental_selectedEntityClassPrefix( "misc_phys_" );
+}
+
+static bool Experimental_selectedEntityIsDynamicPhysics(){
+	Entity* entity = Experimental_selectedEntityForInspector();
+	if ( entity == nullptr ) {
+		return false;
+	}
+
+	const char* classname = entity->getClassName();
+	return classname_equal( classname, "misc_phys_box" )
+		|| classname_equal( classname, "misc_phys_sphere" )
+		|| classname_equal( classname, "misc_phys_slider" )
+		|| classname_equal( classname, "misc_phys_ragdoll" );
+}
+
+static void Experimental_applyPhysicsPreset( const QString& preset ){
+	if ( preset.isEmpty() || preset == "Custom" ) {
+		return;
+	}
+
+	if ( preset == "Crate" ) {
+		Experimental_setSelectedEntityKeyValue( "mass", "20.0" );
+		Experimental_setSelectedEntityKeyValue( "friction", "0.550" );
+		Experimental_setSelectedEntityKeyValue( "restitution", "0.030" );
+		Experimental_setSelectedEntityKeyValue( "linearDamping", "0.080" );
+		Experimental_setSelectedEntityKeyValue( "angularDamping", "0.140" );
+		Experimental_setSelectedEntityKeyValue( "gravityScale", "1.000" );
+	}
+	else if ( preset == "Heavy Prop" ) {
+		Experimental_setSelectedEntityKeyValue( "mass", "80.0" );
+		Experimental_setSelectedEntityKeyValue( "friction", "0.700" );
+		Experimental_setSelectedEntityKeyValue( "restitution", "0.010" );
+		Experimental_setSelectedEntityKeyValue( "linearDamping", "0.120" );
+		Experimental_setSelectedEntityKeyValue( "angularDamping", "0.220" );
+		Experimental_setSelectedEntityKeyValue( "gravityScale", "1.000" );
+	}
+	else if ( preset == "Bouncy" ) {
+		Experimental_setSelectedEntityKeyValue( "mass", "12.0" );
+		Experimental_setSelectedEntityKeyValue( "friction", "0.250" );
+		Experimental_setSelectedEntityKeyValue( "restitution", "0.700" );
+		Experimental_setSelectedEntityKeyValue( "linearDamping", "0.030" );
+		Experimental_setSelectedEntityKeyValue( "angularDamping", "0.050" );
+		Experimental_setSelectedEntityKeyValue( "gravityScale", "1.000" );
+	}
+	else if ( preset == "Debris" ) {
+		Experimental_setSelectedEntityKeyValue( "mass", "6.0" );
+		Experimental_setSelectedEntityKeyValue( "friction", "0.350" );
+		Experimental_setSelectedEntityKeyValue( "restitution", "0.180" );
+		Experimental_setSelectedEntityKeyValue( "linearDamping", "0.020" );
+		Experimental_setSelectedEntityKeyValue( "angularDamping", "0.030" );
+		Experimental_setSelectedEntityKeyValue( "gravityScale", "1.000" );
+	}
+	else if ( preset == "Low Gravity" ) {
+		Experimental_setSelectedEntityKeyValue( "mass", "12.0" );
+		Experimental_setSelectedEntityKeyValue( "friction", "0.300" );
+		Experimental_setSelectedEntityKeyValue( "restitution", "0.120" );
+		Experimental_setSelectedEntityKeyValue( "linearDamping", "0.020" );
+		Experimental_setSelectedEntityKeyValue( "angularDamping", "0.020" );
+		Experimental_setSelectedEntityKeyValue( "gravityScale", "0.350" );
+	}
+	Experimental_refreshSelection();
+}
+
+static void Experimental_convertSelectedPhysicsClass( const char* classname ){
+	if ( classname == nullptr || GlobalSelectionSystem().countSelected() == 0 ) {
+		return;
+	}
+	Scene_EntitySetClassname_Selected( classname );
+	SceneChangeNotify();
+	Experimental_refreshSelection();
+}
+
+void Experimental_applyPhysicsPresetCrate(){
+	Experimental_applyPhysicsPreset( "Crate" );
+}
+
+void Experimental_applyPhysicsPresetHeavyProp(){
+	Experimental_applyPhysicsPreset( "Heavy Prop" );
+}
+
+void Experimental_applyPhysicsPresetBouncy(){
+	Experimental_applyPhysicsPreset( "Bouncy" );
+}
+
+void Experimental_applyPhysicsPresetDebris(){
+	Experimental_applyPhysicsPreset( "Debris" );
+}
+
+void Experimental_applyPhysicsPresetLowGravity(){
+	Experimental_applyPhysicsPreset( "Low Gravity" );
+}
+
+void Experimental_convertSelectionToPhysBox(){
+	Experimental_convertSelectedPhysicsClass( "misc_phys_box" );
+}
+
+void Experimental_convertSelectionToPhysSphere(){
+	Experimental_convertSelectedPhysicsClass( "misc_phys_sphere" );
+}
+
+void Experimental_convertSelectionToPhysStatic(){
+	Experimental_convertSelectedPhysicsClass( "misc_phys_static" );
+}
+
+void Experimental_convertSelectionToPhysSensor(){
+	Experimental_convertSelectedPhysicsClass( "misc_phys_sensor" );
+}
+
+void Experimental_convertSelectionToPhysSlider(){
+	Experimental_convertSelectedPhysicsClass( "misc_phys_slider" );
+}
+
+void Experimental_convertSelectionToPhysRagdoll(){
+	Experimental_convertSelectedPhysicsClass( "misc_phys_ragdoll" );
 }
 
 static bool Experimental_selectedEntityClassnameEquals( const char* classname ){
@@ -2621,13 +2746,29 @@ static void Experimental_refreshEntityPanels(){
 			|| Experimental_selectedEntityClassnameEquals( "misc_phys_slider" )
 			|| Experimental_selectedEntityClassnameEquals( "misc_phys_ragdoll" );
 		const bool usesHeight = Experimental_selectedEntityClassnameEquals( "misc_phys_slider" );
+		const bool usesDynamicBodySettings = Experimental_selectedEntityIsDynamicPhysics();
 
 		float size = 0;
 		float mass = 0;
 		float height = 0;
+		float friction = 0;
+		float restitution = 0;
+		float linearDamping = 0;
+		float angularDamping = 0;
+		float gravityScale = 0;
+		const bool hasFriction = !string_empty( entity->getKeyValue( "friction" ) );
+		const bool hasRestitution = !string_empty( entity->getKeyValue( "restitution" ) );
+		const bool hasLinearDamping = !string_empty( entity->getKeyValue( "linearDamping" ) );
+		const bool hasAngularDamping = !string_empty( entity->getKeyValue( "angularDamping" ) );
+		const bool hasGravityScale = !string_empty( entity->getKeyValue( "gravityScale" ) );
 		string_parse_float( entity->getKeyValue( "_size" ), size );
 		string_parse_float( entity->getKeyValue( "mass" ), mass );
 		string_parse_float( entity->getKeyValue( "height" ), height );
+		string_parse_float( entity->getKeyValue( "friction" ), friction );
+		string_parse_float( entity->getKeyValue( "restitution" ), restitution );
+		string_parse_float( entity->getKeyValue( "linearDamping" ), linearDamping );
+		string_parse_float( entity->getKeyValue( "angularDamping" ), angularDamping );
+		string_parse_float( entity->getKeyValue( "gravityScale" ), gravityScale );
 
 		if ( g_exp_physicsSize != nullptr ) {
 			g_exp_physicsSize->setEnabled( usesSize );
@@ -2643,6 +2784,27 @@ static void Experimental_refreshEntityPanels(){
 		if ( g_exp_physicsHeight != nullptr ) {
 			g_exp_physicsHeight->setEnabled( usesHeight );
 			Experimental_setSpinValue( g_exp_physicsHeight, height > 0 ? height : 96 );
+		}
+		if ( g_exp_physicsFriction != nullptr ) {
+			Experimental_setSpinValue( g_exp_physicsFriction, hasFriction ? friction : 0.5 );
+		}
+		if ( g_exp_physicsRestitution != nullptr ) {
+			Experimental_setSpinValue( g_exp_physicsRestitution, hasRestitution ? restitution : 0.05 );
+		}
+		if ( g_exp_physicsLinearDamping != nullptr ) {
+			g_exp_physicsLinearDamping->setEnabled( usesDynamicBodySettings );
+			Experimental_setSpinValue( g_exp_physicsLinearDamping, hasLinearDamping ? linearDamping : 0.08 );
+		}
+		if ( g_exp_physicsAngularDamping != nullptr ) {
+			g_exp_physicsAngularDamping->setEnabled( usesDynamicBodySettings );
+			Experimental_setSpinValue( g_exp_physicsAngularDamping, hasAngularDamping ? angularDamping : 0.12 );
+		}
+		if ( g_exp_physicsGravityScale != nullptr ) {
+			g_exp_physicsGravityScale->setEnabled( usesDynamicBodySettings );
+			Experimental_setSpinValue( g_exp_physicsGravityScale, hasGravityScale ? gravityScale : 1.0 );
+		}
+		if ( g_exp_physicsPresetCombo != nullptr ) {
+			g_exp_physicsPresetCombo->setCurrentIndex( 0 );
 		}
 	}
 }
@@ -5324,6 +5486,12 @@ void Experimental_createDocks( QMainWindow* window ){
 			g_exp_physicsMass = new QDoubleSpinBox( g_exp_physicsGroup );
 			g_exp_physicsMaterial = new QSpinBox( g_exp_physicsGroup );
 			g_exp_physicsHeight = new QDoubleSpinBox( g_exp_physicsGroup );
+			g_exp_physicsFriction = new QDoubleSpinBox( g_exp_physicsGroup );
+			g_exp_physicsRestitution = new QDoubleSpinBox( g_exp_physicsGroup );
+			g_exp_physicsLinearDamping = new QDoubleSpinBox( g_exp_physicsGroup );
+			g_exp_physicsAngularDamping = new QDoubleSpinBox( g_exp_physicsGroup );
+			g_exp_physicsGravityScale = new QDoubleSpinBox( g_exp_physicsGroup );
+			g_exp_physicsPresetCombo = new QComboBox( g_exp_physicsGroup );
 			g_exp_physicsSize->setRange( 1, 8192 );
 			g_exp_physicsSize->setDecimals( 1 );
 			g_exp_physicsSize->setSingleStep( 8 );
@@ -5334,13 +5502,60 @@ void Experimental_createDocks( QMainWindow* window ){
 			g_exp_physicsHeight->setRange( 0, 8192 );
 			g_exp_physicsHeight->setDecimals( 1 );
 			g_exp_physicsHeight->setSingleStep( 8 );
+			g_exp_physicsFriction->setRange( 0, 4 );
+			g_exp_physicsFriction->setDecimals( 3 );
+			g_exp_physicsFriction->setSingleStep( 0.05 );
+			g_exp_physicsRestitution->setRange( 0, 1 );
+			g_exp_physicsRestitution->setDecimals( 3 );
+			g_exp_physicsRestitution->setSingleStep( 0.05 );
+			g_exp_physicsLinearDamping->setRange( 0, 10 );
+			g_exp_physicsLinearDamping->setDecimals( 3 );
+			g_exp_physicsLinearDamping->setSingleStep( 0.05 );
+			g_exp_physicsAngularDamping->setRange( 0, 10 );
+			g_exp_physicsAngularDamping->setDecimals( 3 );
+			g_exp_physicsAngularDamping->setSingleStep( 0.05 );
+			g_exp_physicsGravityScale->setRange( -4, 4 );
+			g_exp_physicsGravityScale->setDecimals( 3 );
+			g_exp_physicsGravityScale->setSingleStep( 0.1 );
+			g_exp_physicsPresetCombo->addItems( { "Custom", "Crate", "Heavy Prop", "Bouncy", "Debris", "Low Gravity" } );
 			auto* physicsHint = new QLabel( "Authors engine-backed rigid bodies, sensors, and sliders.", g_exp_physicsGroup );
 			physicsHint->setWordWrap( true );
+			auto* physicsPresetRow = new QWidget( g_exp_physicsGroup );
+			auto* physicsPresetLayout = new QHBoxLayout( physicsPresetRow );
+			physicsPresetLayout->setContentsMargins( 0, 0, 0, 0 );
+			physicsPresetLayout->setSpacing( 6 );
+			auto* physicsPresetApplyButton = new QPushButton( "Apply", physicsPresetRow );
+			physicsPresetLayout->addWidget( g_exp_physicsPresetCombo );
+			physicsPresetLayout->addWidget( physicsPresetApplyButton );
+			auto* physicsTypeRow = new QWidget( g_exp_physicsGroup );
+			auto* physicsTypeLayout = new QGridLayout( physicsTypeRow );
+			physicsTypeLayout->setContentsMargins( 0, 0, 0, 0 );
+			physicsTypeLayout->setHorizontalSpacing( 6 );
+			physicsTypeLayout->setVerticalSpacing( 6 );
+			auto* physicsDynamicButton = new QPushButton( "Dynamic Box", physicsTypeRow );
+			auto* physicsSphereButton = new QPushButton( "Sphere", physicsTypeRow );
+			auto* physicsStaticButton = new QPushButton( "Static", physicsTypeRow );
+			auto* physicsSensorButton = new QPushButton( "Sensor", physicsTypeRow );
+			auto* physicsSliderButton = new QPushButton( "Slider", physicsTypeRow );
+			auto* physicsRagdollButton = new QPushButton( "Ragdoll", physicsTypeRow );
+			physicsTypeLayout->addWidget( physicsDynamicButton, 0, 0 );
+			physicsTypeLayout->addWidget( physicsSphereButton, 0, 1 );
+			physicsTypeLayout->addWidget( physicsStaticButton, 0, 2 );
+			physicsTypeLayout->addWidget( physicsSensorButton, 1, 0 );
+			physicsTypeLayout->addWidget( physicsSliderButton, 1, 1 );
+			physicsTypeLayout->addWidget( physicsRagdollButton, 1, 2 );
 			physicsForm->addRow( physicsHint );
+			physicsForm->addRow( "Preset", physicsPresetRow );
+			physicsForm->addRow( "Body Type", physicsTypeRow );
 			physicsForm->addRow( "Size", g_exp_physicsSize );
 			physicsForm->addRow( "Mass", g_exp_physicsMass );
 			physicsForm->addRow( "Material Id", g_exp_physicsMaterial );
+			physicsForm->addRow( "Friction", g_exp_physicsFriction );
+			physicsForm->addRow( "Restitution", g_exp_physicsRestitution );
 			physicsForm->addRow( "Slider Height", g_exp_physicsHeight );
+			physicsForm->addRow( "Linear Damping", g_exp_physicsLinearDamping );
+			physicsForm->addRow( "Angular Damping", g_exp_physicsAngularDamping );
+			physicsForm->addRow( "Gravity Scale", g_exp_physicsGravityScale );
 			auto* physicsActions = new QWidget( g_exp_physicsGroup );
 			auto* physicsActionsLayout = new QHBoxLayout( physicsActions );
 			physicsActionsLayout->setContentsMargins( 0, 0, 0, 0 );
@@ -5370,6 +5585,42 @@ void Experimental_createDocks( QMainWindow* window ){
 					Experimental_setSelectedEntityKeyValue( "height", QString::number( g_exp_physicsHeight->value(), 'f', 1 ) );
 				}
 			} );
+			QObject::connect( g_exp_physicsFriction, &QDoubleSpinBox::editingFinished, [](){
+				if ( g_exp_physicsFriction != nullptr ) {
+					Experimental_setSelectedEntityKeyValue( "friction", QString::number( g_exp_physicsFriction->value(), 'f', 3 ) );
+				}
+			} );
+			QObject::connect( g_exp_physicsRestitution, &QDoubleSpinBox::editingFinished, [](){
+				if ( g_exp_physicsRestitution != nullptr ) {
+					Experimental_setSelectedEntityKeyValue( "restitution", QString::number( g_exp_physicsRestitution->value(), 'f', 3 ) );
+				}
+			} );
+			QObject::connect( g_exp_physicsLinearDamping, &QDoubleSpinBox::editingFinished, [](){
+				if ( g_exp_physicsLinearDamping != nullptr && g_exp_physicsLinearDamping->isEnabled() ) {
+					Experimental_setSelectedEntityKeyValue( "linearDamping", QString::number( g_exp_physicsLinearDamping->value(), 'f', 3 ) );
+				}
+			} );
+			QObject::connect( g_exp_physicsAngularDamping, &QDoubleSpinBox::editingFinished, [](){
+				if ( g_exp_physicsAngularDamping != nullptr && g_exp_physicsAngularDamping->isEnabled() ) {
+					Experimental_setSelectedEntityKeyValue( "angularDamping", QString::number( g_exp_physicsAngularDamping->value(), 'f', 3 ) );
+				}
+			} );
+			QObject::connect( g_exp_physicsGravityScale, &QDoubleSpinBox::editingFinished, [](){
+				if ( g_exp_physicsGravityScale != nullptr && g_exp_physicsGravityScale->isEnabled() ) {
+					Experimental_setSelectedEntityKeyValue( "gravityScale", QString::number( g_exp_physicsGravityScale->value(), 'f', 3 ) );
+				}
+			} );
+			QObject::connect( physicsPresetApplyButton, &QPushButton::clicked, [](){
+				if ( g_exp_physicsPresetCombo != nullptr ) {
+					Experimental_applyPhysicsPreset( g_exp_physicsPresetCombo->currentText() );
+				}
+			} );
+			QObject::connect( physicsDynamicButton, &QPushButton::clicked, Experimental_convertSelectionToPhysBox );
+			QObject::connect( physicsSphereButton, &QPushButton::clicked, Experimental_convertSelectionToPhysSphere );
+			QObject::connect( physicsStaticButton, &QPushButton::clicked, Experimental_convertSelectionToPhysStatic );
+			QObject::connect( physicsSensorButton, &QPushButton::clicked, Experimental_convertSelectionToPhysSensor );
+			QObject::connect( physicsSliderButton, &QPushButton::clicked, Experimental_convertSelectionToPhysSlider );
+			QObject::connect( physicsRagdollButton, &QPushButton::clicked, Experimental_convertSelectionToPhysRagdoll );
 			QObject::connect( physicsPreviewButton, &QPushButton::clicked, [](){ Experimental_triggerCommand( "PhysicsPlacementOverlay" ); } );
 			QObject::connect( physicsSettleButton, &QPushButton::clicked, [](){ Experimental_triggerCommand( "PhysicsPlacement_SettleSelection" ); Experimental_refreshSelection(); } );
 		}
@@ -6046,6 +6297,12 @@ void Experimental_destroyDocks(){
 	g_exp_physicsMass = nullptr;
 	g_exp_physicsMaterial = nullptr;
 	g_exp_physicsHeight = nullptr;
+	g_exp_physicsFriction = nullptr;
+	g_exp_physicsRestitution = nullptr;
+	g_exp_physicsLinearDamping = nullptr;
+	g_exp_physicsAngularDamping = nullptr;
+	g_exp_physicsGravityScale = nullptr;
+	g_exp_physicsPresetCombo = nullptr;
 	g_exp_shaderEdit = nullptr;
 	g_exp_pbrAlbedo = nullptr;
 	g_exp_pbrNormal = nullptr;
@@ -6231,12 +6488,22 @@ Vector3 Add_entitySpawnOrigin(){
 
 void Add_createMiscModel();
 
+static bool Add_isDynamicPhysicsClassname( const char* classname ){
+	return classname_equal( classname, "misc_phys_box" )
+		|| classname_equal( classname, "misc_phys_sphere" )
+		|| classname_equal( classname, "misc_phys_slider" )
+		|| classname_equal( classname, "misc_phys_ragdoll" );
+}
+
 void Add_createEntity( const char* classname ){
 	if ( classname_equal( classname, "misc_model" ) ) {
 		Add_createMiscModel();
 		return;
 	}
 	Entity_createFromSelection( classname, Add_entitySpawnOrigin() );
+	if ( Add_isDynamicPhysicsClassname( classname ) ) {
+		PhysicsPlacement_settleSelection();
+	}
 }
 
 void Add_createLight(){
@@ -6507,6 +6774,81 @@ void Layout_setStyleAndRequestRestart( MainFrame::EViewStyle style, const char* 
 void Layout_setRegular(){
 	Layout_setStyleAndRequestRestart( MainFrame::eRegular, "Regular" );
 }
+
+namespace
+{
+void Experimental_applyPhysicsPresetValues( const char* label, const char* mass, const char* friction, const char* restitution, const char* linearDamping, const char* angularDamping, const char* gravityScale ){
+	if ( GlobalSelectionSystem().countSelected() == 0 ) {
+		return;
+	}
+
+	const auto command = StringStream( "physicsPreset ", Quoted( label ) );
+	UndoableCommand undo( command );
+	Scene_EntitySetKeyValue_Selected( "mass", mass );
+	Scene_EntitySetKeyValue_Selected( "friction", friction );
+	Scene_EntitySetKeyValue_Selected( "restitution", restitution );
+	Scene_EntitySetKeyValue_Selected( "linearDamping", linearDamping );
+	Scene_EntitySetKeyValue_Selected( "angularDamping", angularDamping );
+	Scene_EntitySetKeyValue_Selected( "gravityScale", gravityScale );
+	SceneChangeNotify();
+	Experimental_refreshSelection();
+}
+
+void Experimental_convertSelectionToPhysicsClass( const char* classname ){
+	if ( classname == nullptr || GlobalSelectionSystem().countSelected() == 0 ) {
+		return;
+	}
+
+	Scene_EntitySetClassname_Selected( classname );
+	SceneChangeNotify();
+	Experimental_refreshSelection();
+}
+}
+
+void Experimental_applyPhysicsPresetCrate(){
+	Experimental_applyPhysicsPresetValues( "Crate", "20.0", "0.550", "0.030", "0.080", "0.140", "1.000" );
+}
+
+void Experimental_applyPhysicsPresetHeavyProp(){
+	Experimental_applyPhysicsPresetValues( "Heavy Prop", "80.0", "0.700", "0.010", "0.120", "0.220", "1.000" );
+}
+
+void Experimental_applyPhysicsPresetBouncy(){
+	Experimental_applyPhysicsPresetValues( "Bouncy", "12.0", "0.250", "0.700", "0.030", "0.050", "1.000" );
+}
+
+void Experimental_applyPhysicsPresetDebris(){
+	Experimental_applyPhysicsPresetValues( "Debris", "6.0", "0.350", "0.180", "0.020", "0.030", "1.000" );
+}
+
+void Experimental_applyPhysicsPresetLowGravity(){
+	Experimental_applyPhysicsPresetValues( "Low Gravity", "12.0", "0.300", "0.120", "0.020", "0.020", "0.350" );
+}
+
+void Experimental_convertSelectionToPhysBox(){
+	Experimental_convertSelectionToPhysicsClass( "misc_phys_box" );
+}
+
+void Experimental_convertSelectionToPhysSphere(){
+	Experimental_convertSelectionToPhysicsClass( "misc_phys_sphere" );
+}
+
+void Experimental_convertSelectionToPhysStatic(){
+	Experimental_convertSelectionToPhysicsClass( "misc_phys_static" );
+}
+
+void Experimental_convertSelectionToPhysSensor(){
+	Experimental_convertSelectionToPhysicsClass( "misc_phys_sensor" );
+}
+
+void Experimental_convertSelectionToPhysSlider(){
+	Experimental_convertSelectionToPhysicsClass( "misc_phys_slider" );
+}
+
+void Experimental_convertSelectionToPhysRagdoll(){
+	Experimental_convertSelectionToPhysicsClass( "misc_phys_ragdoll" );
+}
+
 void Layout_setRegularLeft(){
 	Layout_setStyleAndRequestRestart( MainFrame::eRegularLeft, "Regular Left" );
 }

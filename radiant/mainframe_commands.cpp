@@ -52,6 +52,17 @@ void MainFrame_registerCommands(){
 	GlobalCommands_insert( "AddPhysSensor", makeCallbackF( Add_createPhysSensor ) );
 	GlobalCommands_insert( "AddPhysSlider", makeCallbackF( Add_createPhysSlider ) );
 	GlobalCommands_insert( "AddPhysRagdoll", makeCallbackF( Add_createPhysRagdoll ) );
+	GlobalCommands_insert( "PhysicsPresetCrate", makeCallbackF( Experimental_applyPhysicsPresetCrate ) );
+	GlobalCommands_insert( "PhysicsPresetHeavyProp", makeCallbackF( Experimental_applyPhysicsPresetHeavyProp ) );
+	GlobalCommands_insert( "PhysicsPresetBouncy", makeCallbackF( Experimental_applyPhysicsPresetBouncy ) );
+	GlobalCommands_insert( "PhysicsPresetDebris", makeCallbackF( Experimental_applyPhysicsPresetDebris ) );
+	GlobalCommands_insert( "PhysicsPresetLowGravity", makeCallbackF( Experimental_applyPhysicsPresetLowGravity ) );
+	GlobalCommands_insert( "PhysicsConvertToBox", makeCallbackF( Experimental_convertSelectionToPhysBox ) );
+	GlobalCommands_insert( "PhysicsConvertToSphere", makeCallbackF( Experimental_convertSelectionToPhysSphere ) );
+	GlobalCommands_insert( "PhysicsConvertToStatic", makeCallbackF( Experimental_convertSelectionToPhysStatic ) );
+	GlobalCommands_insert( "PhysicsConvertToSensor", makeCallbackF( Experimental_convertSelectionToPhysSensor ) );
+	GlobalCommands_insert( "PhysicsConvertToSlider", makeCallbackF( Experimental_convertSelectionToPhysSlider ) );
+	GlobalCommands_insert( "PhysicsConvertToRagdoll", makeCallbackF( Experimental_convertSelectionToPhysRagdoll ) );
 	GlobalCommands_insert( "AddMiscModel", makeCallbackF( Add_createMiscModel ) );
 	GlobalCommands_insert( "AddSpline", makeCallbackF( Add_createSpline ) );
 	GlobalCommands_insert( "LayoutRegular", makeCallbackF( Layout_setRegular ) );

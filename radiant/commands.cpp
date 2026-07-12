@@ -572,6 +572,39 @@ QString commandLauncherTitle( const char* name ){
 	if( string_equal( name, "AddPhysRagdoll" ) ){
 		return "Create Physics Ragdoll";
 	}
+	if( string_equal( name, "PhysicsPresetCrate" ) ){
+		return "Apply Physics Preset: Crate";
+	}
+	if( string_equal( name, "PhysicsPresetHeavyProp" ) ){
+		return "Apply Physics Preset: Heavy Prop";
+	}
+	if( string_equal( name, "PhysicsPresetBouncy" ) ){
+		return "Apply Physics Preset: Bouncy";
+	}
+	if( string_equal( name, "PhysicsPresetDebris" ) ){
+		return "Apply Physics Preset: Debris";
+	}
+	if( string_equal( name, "PhysicsPresetLowGravity" ) ){
+		return "Apply Physics Preset: Low Gravity";
+	}
+	if( string_equal( name, "PhysicsConvertToBox" ) ){
+		return "Convert Physics Selection to Dynamic Box";
+	}
+	if( string_equal( name, "PhysicsConvertToSphere" ) ){
+		return "Convert Physics Selection to Sphere";
+	}
+	if( string_equal( name, "PhysicsConvertToStatic" ) ){
+		return "Convert Physics Selection to Static Collider";
+	}
+	if( string_equal( name, "PhysicsConvertToSensor" ) ){
+		return "Convert Physics Selection to Sensor";
+	}
+	if( string_equal( name, "PhysicsConvertToSlider" ) ){
+		return "Convert Physics Selection to Slider";
+	}
+	if( string_equal( name, "PhysicsConvertToRagdoll" ) ){
+		return "Convert Physics Selection to Ragdoll";
+	}
 	if( string_equal( name, "MakeDetail" ) ){
 		return "Make Detail";
 	}
@@ -852,6 +885,39 @@ QStringList commandSearchAliases( const char* name ){
 	if( string_equal( name, "AddPhysRagdoll" ) ){
 		return { "physics ragdoll", "ragdoll", "box3d ragdoll", "misc phys ragdoll" };
 	}
+	if( string_equal( name, "PhysicsPresetCrate" ) ){
+		return { "crate preset", "wood crate", "physics crate", "prop preset crate" };
+	}
+	if( string_equal( name, "PhysicsPresetHeavyProp" ) ){
+		return { "heavy prop preset", "heavy object", "dense prop", "large prop preset" };
+	}
+	if( string_equal( name, "PhysicsPresetBouncy" ) ){
+		return { "bouncy preset", "bounce prop", "rubber prop", "high restitution" };
+	}
+	if( string_equal( name, "PhysicsPresetDebris" ) ){
+		return { "debris preset", "small prop preset", "light clutter", "scatter prop" };
+	}
+	if( string_equal( name, "PhysicsPresetLowGravity" ) ){
+		return { "low gravity preset", "floaty prop", "moon gravity", "reduced gravity" };
+	}
+	if( string_equal( name, "PhysicsConvertToBox" ) ){
+		return { "convert to dynamic box", "box rigid body", "dynamic physics box", "physics body type box" };
+	}
+	if( string_equal( name, "PhysicsConvertToSphere" ) ){
+		return { "convert to sphere", "sphere rigid body", "physics body type sphere" };
+	}
+	if( string_equal( name, "PhysicsConvertToStatic" ) ){
+		return { "convert to static collider", "static body", "world collider body type", "physics body type static" };
+	}
+	if( string_equal( name, "PhysicsConvertToSensor" ) ){
+		return { "convert to sensor", "trigger volume body type", "physics overlap sensor" };
+	}
+	if( string_equal( name, "PhysicsConvertToSlider" ) ){
+		return { "convert to slider", "slider joint body", "moving platform body type", "physics body type slider" };
+	}
+	if( string_equal( name, "PhysicsConvertToRagdoll" ) ){
+		return { "convert to ragdoll", "ragdoll body type", "physics body type ragdoll" };
+	}
 	if( string_equal( name, "PhysicsPlacement_SettleSelection" ) ){
 		return { "settle physics props", "drop to floor", "rigid body placement", "simulate prop drop", "place props naturally" };
 	}
@@ -1006,7 +1072,19 @@ QString launcherCategoryForCommand( const char* name, int type ){
 	if( string_equal( name, "NavMesh_Rebuild" ) || string_equal( name, "NavMeshOverlay" ) ){
 		return "NavMesh";
 	}
-	if( string_equal( name, "PhysicsPlacement_SettleSelection" ) || string_equal( name, "PhysicsPlacementOverlay" ) ){
+	if( string_equal( name, "PhysicsPresetCrate" )
+	 || string_equal( name, "PhysicsPresetHeavyProp" )
+	 || string_equal( name, "PhysicsPresetBouncy" )
+	 || string_equal( name, "PhysicsPresetDebris" )
+	 || string_equal( name, "PhysicsPresetLowGravity" )
+	 || string_equal( name, "PhysicsConvertToBox" )
+	 || string_equal( name, "PhysicsConvertToSphere" )
+	 || string_equal( name, "PhysicsConvertToStatic" )
+	 || string_equal( name, "PhysicsConvertToSensor" )
+	 || string_equal( name, "PhysicsConvertToSlider" )
+	 || string_equal( name, "PhysicsConvertToRagdoll" )
+	 || string_equal( name, "PhysicsPlacement_SettleSelection" )
+	 || string_equal( name, "PhysicsPlacementOverlay" ) ){
 		return "Physics";
 	}
 	return "Command";
@@ -1072,6 +1150,39 @@ QString launcherDescriptionForCommand( const char* name ){
 	}
 	if( string_equal( name, "AddPhysRagdoll" ) ){
 		return "Create a ragdoll-ready physics entity with default simulation values.";
+	}
+	if( string_equal( name, "PhysicsPresetCrate" ) ){
+		return "Apply a heavier wood-crate style rigid-body preset to the selected physics entity.";
+	}
+	if( string_equal( name, "PhysicsPresetHeavyProp" ) ){
+		return "Apply a dense, low-bounce rigid-body preset for large props and set dressing.";
+	}
+	if( string_equal( name, "PhysicsPresetBouncy" ) ){
+		return "Apply a high-restitution preset for playful or reactive rigid-body props.";
+	}
+	if( string_equal( name, "PhysicsPresetDebris" ) ){
+		return "Apply a light debris preset for clutter, fragments, and small throwables.";
+	}
+	if( string_equal( name, "PhysicsPresetLowGravity" ) ){
+		return "Apply a reduced-gravity preset so selected rigid bodies feel floaty in motion.";
+	}
+	if( string_equal( name, "PhysicsConvertToBox" ) ){
+		return "Convert the selected physics entity to a dynamic box body while keeping its authored keys.";
+	}
+	if( string_equal( name, "PhysicsConvertToSphere" ) ){
+		return "Convert the selected physics entity to a sphere rigid body.";
+	}
+	if( string_equal( name, "PhysicsConvertToStatic" ) ){
+		return "Convert the selected physics entity to a static collider volume.";
+	}
+	if( string_equal( name, "PhysicsConvertToSensor" ) ){
+		return "Convert the selected physics entity to a non-solid overlap sensor.";
+	}
+	if( string_equal( name, "PhysicsConvertToSlider" ) ){
+		return "Convert the selected physics entity to a slider body for guided motion setups.";
+	}
+	if( string_equal( name, "PhysicsConvertToRagdoll" ) ){
+		return "Convert the selected physics entity to a ragdoll-ready simulation body.";
 	}
 	if( string_equal( name, "PhysicsPlacement_SettleSelection" ) ){
 		return "Drop the selected rigid-body props onto nearby support surfaces for faster dressing.";

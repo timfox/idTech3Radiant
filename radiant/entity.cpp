@@ -428,6 +428,16 @@ namespace
 	}
 
 	void Entity_applyDefaultKeyValues( Entity& entity, const char* name ){
+		const auto applyPhysicsSurfaceDefaults = [&entity](){
+			entity.setKeyValue( "friction", "0.500" );
+			entity.setKeyValue( "restitution", "0.050" );
+		};
+		const auto applyPhysicsBodyDefaults = [&entity](){
+			entity.setKeyValue( "linearDamping", "0.080" );
+			entity.setKeyValue( "angularDamping", "0.120" );
+			entity.setKeyValue( "gravityScale", "1.000" );
+		};
+
 		if ( classname_equal( name, "trigger_capture_point" ) ) {
 			entity.setKeyValue( "gametype", "cp" );
 			entity.setKeyValue( "team", "neutral" );
@@ -444,29 +454,39 @@ namespace
 			entity.setKeyValue( "_size", "64" );
 			entity.setKeyValue( "mass", "20" );
 			entity.setKeyValue( "material", "0" );
+			applyPhysicsSurfaceDefaults();
+			applyPhysicsBodyDefaults();
 		}
 		else if ( classname_equal( name, "misc_phys_sphere" ) ) {
 			entity.setKeyValue( "_size", "64" );
 			entity.setKeyValue( "mass", "20" );
 			entity.setKeyValue( "material", "0" );
+			applyPhysicsSurfaceDefaults();
+			applyPhysicsBodyDefaults();
 		}
 		else if ( classname_equal( name, "misc_phys_static" ) ) {
 			entity.setKeyValue( "_size", "128" );
 			entity.setKeyValue( "material", "0" );
+			applyPhysicsSurfaceDefaults();
 		}
 		else if ( classname_equal( name, "misc_phys_sensor" ) ) {
 			entity.setKeyValue( "_size", "128" );
 			entity.setKeyValue( "material", "0" );
+			applyPhysicsSurfaceDefaults();
 		}
 		else if ( classname_equal( name, "misc_phys_slider" ) ) {
 			entity.setKeyValue( "_size", "48" );
 			entity.setKeyValue( "mass", "20" );
 			entity.setKeyValue( "material", "0" );
 			entity.setKeyValue( "height", "96" );
+			applyPhysicsSurfaceDefaults();
+			applyPhysicsBodyDefaults();
 		}
 		else if ( classname_equal( name, "misc_phys_ragdoll" ) ) {
 			entity.setKeyValue( "mass", "20" );
 			entity.setKeyValue( "material", "0" );
+			applyPhysicsSurfaceDefaults();
+			applyPhysicsBodyDefaults();
 		}
 	}
 }
