@@ -2450,7 +2450,7 @@ void TextureBrowser_Construct(){
 	GlobalCommands_insert( "RefreshShaders", makeCallbackF( RefreshShaders ) );
 	GlobalToggles_insert( "ShowInUse", makeCallbackF( TextureBrowser_ToggleHideUnused ), ToggleItem::AddCallbackCaller( g_TexBro.m_hideunused_item ), QKeySequence( "U" ) );
 	GlobalCommands_insert( "ShowAllTextures", makeCallbackF( TextureBrowser_showAll ), QKeySequence( "Ctrl+A" ) );
-	GlobalCommands_insert( "ToggleTextures", makeCallbackF( TextureBrowser_toggleShow ), QKeySequence( "T" ) );
+	GlobalCommands_insert( "ToggleTextures", makeCallbackF( TextureBrowser_toggleShow ), QKeySequence( "Alt+T" ) );
 	GlobalToggles_insert( "ToggleShowShaders", makeCallbackF( TextureBrowser_ToggleShowShaders ), ToggleItem::AddCallbackCaller( g_TexBro.m_showshaders_item ) );
 	GlobalToggles_insert( "ToggleShowTextures", makeCallbackF( TextureBrowser_ToggleShowTextures ), ToggleItem::AddCallbackCaller( g_TexBro.m_showtextures_item ) );
 	GlobalToggles_insert( "ToggleShowShaderlistOnly", makeCallbackF( TextureBrowser_ToggleShowShaderListOnly ), ToggleItem::AddCallbackCaller( g_TexBro.m_showshaderlistonly_item ) );

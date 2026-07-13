@@ -2024,8 +2024,8 @@ void Select_registerCommands(){
 	GlobalCommands_insert( "ShowHidden", makeCallbackF( Select_ShowAllHidden ), QKeySequence( "Shift+H" ) );
 	GlobalCommands_insert( "ShowHiddenAlt", makeCallbackF( Select_ShowAllHidden ), QKeySequence( "Ctrl+Shift+H" ) );
 	GlobalToggles_insert( "HideSelected", makeCallbackF( HideSelected ), ToggleItem::AddCallbackCaller( g_hidden_item ), QKeySequence( "Ctrl+H" ) );
-	GlobalCommands_insert( "HideUnselected", makeCallbackF( Select_HideUnselected ) );
-	GlobalCommands_insert( "IsolateSelection", makeCallbackF( Select_IsolateSelection ) );
+	GlobalCommands_insert( "HideUnselected", makeCallbackF( Select_HideUnselected ), QKeySequence( "Alt+H" ) );
+	GlobalCommands_insert( "IsolateSelection", makeCallbackF( Select_IsolateSelection ), QKeySequence( "Ctrl+1" ) );
 
 	GlobalCommands_insert( "MirrorSelectionX", makeCallbackF( Selection_Flipx ) );
 	GlobalCommands_insert( "RotateSelectionX", makeCallbackF( Selection_Rotatex ) );

@@ -93,16 +93,16 @@ void MainFrame_registerCommands(){
 	GlobalCommands_insert( "LuaEditItemsExternal", makeCallbackF( Lua_editItemsExternal ) );
 	GlobalCommands_insert( "LuaEditMainExternal", makeCallbackF( Lua_editMainExternal ) );
 	GlobalCommands_insert( "LuaEditObjectivesExternal", makeCallbackF( Lua_editObjectivesExternal ) );
-	GlobalCommands_insert( "CameraStoreBookmark1", makeCallbackF( +[](){ CameraBookmark_store( 0 ); } ), QKeySequence( "Ctrl+1" ) );
-	GlobalCommands_insert( "CameraStoreBookmark2", makeCallbackF( +[](){ CameraBookmark_store( 1 ); } ), QKeySequence( "Ctrl+2" ) );
-	GlobalCommands_insert( "CameraStoreBookmark3", makeCallbackF( +[](){ CameraBookmark_store( 2 ); } ), QKeySequence( "Ctrl+3" ) );
-	GlobalCommands_insert( "CameraStoreBookmark4", makeCallbackF( +[](){ CameraBookmark_store( 3 ); } ), QKeySequence( "Ctrl+4" ) );
-	GlobalCommands_insert( "CameraStoreBookmark5", makeCallbackF( +[](){ CameraBookmark_store( 4 ); } ), QKeySequence( "Ctrl+5" ) );
-	GlobalCommands_insert( "CameraRecallBookmark1", makeCallbackF( +[](){ CameraBookmark_recall( 0 ); } ), QKeySequence( "Shift+1" ) );
-	GlobalCommands_insert( "CameraRecallBookmark2", makeCallbackF( +[](){ CameraBookmark_recall( 1 ); } ), QKeySequence( "Shift+2" ) );
-	GlobalCommands_insert( "CameraRecallBookmark3", makeCallbackF( +[](){ CameraBookmark_recall( 2 ); } ), QKeySequence( "Shift+3" ) );
-	GlobalCommands_insert( "CameraRecallBookmark4", makeCallbackF( +[](){ CameraBookmark_recall( 3 ); } ), QKeySequence( "Shift+4" ) );
-	GlobalCommands_insert( "CameraRecallBookmark5", makeCallbackF( +[](){ CameraBookmark_recall( 4 ); } ), QKeySequence( "Shift+5" ) );
+	GlobalCommands_insert( "CameraStoreBookmark1", makeCallbackF( +[](){ CameraBookmark_store( 0 ); } ), QKeySequence( "Ctrl+Alt+1" ) );
+	GlobalCommands_insert( "CameraStoreBookmark2", makeCallbackF( +[](){ CameraBookmark_store( 1 ); } ), QKeySequence( "Ctrl+Alt+2" ) );
+	GlobalCommands_insert( "CameraStoreBookmark3", makeCallbackF( +[](){ CameraBookmark_store( 2 ); } ), QKeySequence( "Ctrl+Alt+3" ) );
+	GlobalCommands_insert( "CameraStoreBookmark4", makeCallbackF( +[](){ CameraBookmark_store( 3 ); } ), QKeySequence( "Ctrl+Alt+4" ) );
+	GlobalCommands_insert( "CameraStoreBookmark5", makeCallbackF( +[](){ CameraBookmark_store( 4 ); } ), QKeySequence( "Ctrl+Alt+5" ) );
+	GlobalCommands_insert( "CameraRecallBookmark1", makeCallbackF( +[](){ CameraBookmark_recall( 0 ); } ), QKeySequence( "Shift+Alt+1" ) );
+	GlobalCommands_insert( "CameraRecallBookmark2", makeCallbackF( +[](){ CameraBookmark_recall( 1 ); } ), QKeySequence( "Shift+Alt+2" ) );
+	GlobalCommands_insert( "CameraRecallBookmark3", makeCallbackF( +[](){ CameraBookmark_recall( 2 ); } ), QKeySequence( "Shift+Alt+3" ) );
+	GlobalCommands_insert( "CameraRecallBookmark4", makeCallbackF( +[](){ CameraBookmark_recall( 3 ); } ), QKeySequence( "Shift+Alt+4" ) );
+	GlobalCommands_insert( "CameraRecallBookmark5", makeCallbackF( +[](){ CameraBookmark_recall( 4 ); } ), QKeySequence( "Shift+Alt+5" ) );
 
 	GlobalCommands_insert( "CommandLauncher", makeCallbackF( DoCommandLauncher ), QKeySequence( "Ctrl+Shift+P" ) );
 	GlobalCommands_insert( "Shortcuts", makeCallbackF( DoCommandListDlg ), QKeySequence( "Ctrl+Alt+P" ) );
@@ -139,6 +139,8 @@ void MainFrame_registerCommands(){
 	Layers_registerCommands();
 
 	Tools_registerCommands();
+	GlobalCommands_insert( "MayaUniversalManipulator", makeCallbackF( SkewMode ), QKeySequence( "Ctrl+T" ) );
+	GlobalCommands_insert( "MayaSelectionMode", makeCallbackF( SelectPrimitiveMode ), QKeySequence( "F8" ) );
 
 	GlobalCommands_insert( "BuildMenuCustomize", makeCallbackF( DoBuildMenu ),
 	                       g_Layout_experimentalFeatures.m_value ? QKeySequence( "Ctrl+Shift+P" ) : QKeySequence() );
